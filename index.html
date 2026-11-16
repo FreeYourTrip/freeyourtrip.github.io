@@ -49,8 +49,21 @@
           <span class="brand-name"><span class="brand-free">Free</span> Your Trip</span>
         </h1>
         <div class="trip-line">
-          <button type="button" class="trip-name" id="trip-name-btn" aria-label="行程名称，点一下可以改">我的行程</button>
-          <input type="text" class="trip-name-input" id="trip-name-input" maxlength="40" hidden aria-label="行程名称">
+          <!-- v5.2 行程名胶囊：现在点一下改名；v6 多行程时同一个胶囊改成切换行程（换 data-role 和右侧图标即可） -->
+          <div class="trip-pill" id="trip-pill" data-role="rename">
+            <button type="button" class="trip-name" id="trip-name-btn" aria-label="行程名称，点一下可以改"><span class="trip-name-text" id="trip-name-text">我的行程</span><svg class="trip-pill-ico" id="trip-pill-ico" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="#8A9099" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.5 2.5l3 3L6 13H3v-3z"/><path d="M9 4l3 3"/></svg></button>
+            <span class="trip-rename-box" id="trip-rename-box" hidden>
+              <input type="text" class="trip-name-input" id="trip-name-input" maxlength="40" aria-label="行程名称" enterkeyhint="done">
+              <button type="button" class="trip-name-done" id="trip-name-done">完成</button>
+            </span>
+            <div class="name-pop" id="name-pop" role="dialog" aria-labelledby="name-pop-text" hidden>
+              <p class="name-pop-text" id="name-pop-text"></p>
+              <div class="name-pop-actions">
+                <button type="button" class="name-pop-yes" id="name-pop-yes">就用这个</button>
+                <button type="button" class="name-pop-self" id="name-pop-self">我自己改</button>
+              </div>
+            </div>
+          </div>
           <p class="trip-dates" id="trip-dates" hidden></p>
         </div>
       </div>
@@ -102,33 +115,64 @@
         <h2 id="add-sheet-title">添加</h2>
         <button type="button" class="icon-btn sheet-close" data-close="add-sheet" aria-label="关闭"></button>
       </div>
+      <!-- v5.2 AI 向导：添加页最上面的大按钮，点开是 1-2-3 三步（文案见 timeline.js AI_WIZARD_COPY） -->
+      <button type="button" class="ai-big-btn add-only" id="ai-big-btn" aria-expanded="false" aria-controls="ai-help">
+        <span class="ai-big-ico" aria-hidden="true"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.8 4.6L18 9.4l-4.2 1.8L12 16l-1.8-4.8L6 9.4l4.2-1.8z"/><path d="M18 15l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8z"/></svg></span>
+        <span class="ai-big-text"><span class="ai-big-label">用 AI 帮我整理</span><span class="ai-big-sub" id="ai-big-sub"></span></span>
+      </button>
+
       <div class="add-only" id="add-search-block">
+      <!-- v5.2 补地址：从卡片上的「补地址」进来时才显示 -->
+      <p class="fix-head" id="fix-head" hidden></p>
       <label class="sr-only" for="place-search">输入地名</label>
       <input type="search" id="place-search" placeholder="输入地名，比如 大英博物馆" autocomplete="off" enterkeyhint="search" spellcheck="false">
       <div class="search-status" id="search-status" role="status"></div>
       <ul class="search-results" id="search-results" hidden></ul>
-      <button type="button" class="search-fallback" id="search-fallback" hidden>找不到？直接用这个名字添加</button>
+      <button type="button" class="search-fallback" id="search-fallback" hidden><span class="sf-main" id="sf-main">＋ 直接添加</span><span class="sf-sub">没有地图位置，也能放进行程</span></button>
+      <!-- v5.2 直接添加的第二步：选图标（可不选） -->
+      <div class="direct-add" id="direct-add" hidden>
+        <p class="direct-add-title" id="direct-add-title"></p>
+        <div class="icon-picker" id="direct-icon-picker" role="radiogroup" aria-labelledby="direct-add-title"></div>
+        <div class="direct-add-actions">
+          <button type="button" class="direct-add-back" id="direct-add-back">返回</button>
+          <button type="button" class="direct-add-go" id="direct-add-go">添加</button>
+        </div>
+      </div>
+      <button type="button" class="fix-manual" id="fix-manual" hidden>手动填地址</button>
       </div>
 
-      <details class="fold add-only" id="ai-help">
-        <summary>用 AI 帮我整理（截图也行）</summary>
-        <div class="fold-body">
-          <ol class="fold-steps">
-            <li>点「复制给 AI 的话」</li>
-            <li>打开任意 AI（豆包、Kimi、ChatGPT 等），粘贴提示词，再发机票/酒店/餐厅截图或文字</li>
-            <li>复制 AI 回复的内容，粘贴到下面的框里点「添加」</li>
-          </ol>
-          <button type="button" class="primary-btn copy-btn" id="ai-copy-btn">复制给 AI 的话</button>
-          <button type="button" class="text-link-btn" id="ai-preview-toggle">查看提示词</button>
-          <pre class="prompt-view" id="ai-prompt-view" hidden></pre>
-          <p class="fold-tip">发截图之前，可以先把护照号、电话这些用不上的信息裁掉。</p>
-          <label class="sr-only" for="add-text">粘贴 AI 整理的行程</label>
-          <textarea id="add-text" rows="5" spellcheck="false" placeholder="把 AI 回复的内容粘贴到这里"></textarea>
-          <button type="button" class="primary-btn" id="add-go">添加</button>
-          <div class="add-status" id="add-status" role="status"></div>
-          <div class="add-pick" id="add-pick" hidden></div>
+      <section class="ai-wizard add-only" id="ai-help" hidden>
+        <h3 class="ai-wiz-title" id="ai-wiz-title"></h3>
+        <div class="ai-progress" id="ai-progress" role="progressbar" aria-valuemin="1" aria-valuemax="3" aria-valuenow="1">
+          <span class="ai-prog-seg is-on" data-step="1">1</span><span class="ai-prog-seg" data-step="2">2</span><span class="ai-prog-seg" data-step="3">3</span>
         </div>
-      </details>
+        <ol class="ai-steps">
+          <li class="ai-step is-current" data-step="1">
+            <p class="ai-step-text" id="ai-step1-text"></p>
+            <button type="button" class="primary-btn copy-btn" id="ai-copy-btn">复制给 AI 的话</button>
+            <button type="button" class="text-link-btn" id="ai-preview-toggle">查看提示词</button>
+            <pre class="prompt-view" id="ai-prompt-view" hidden></pre>
+          </li>
+          <li class="ai-step" data-step="2">
+            <p class="ai-step-text" id="ai-step2-text"></p>
+            <p class="ai-small" id="ai-step2-small"></p>
+            <p class="ai-small ai-privacy" id="ai-step2-privacy"></p>
+            <button type="button" class="text-link-btn" id="ai-step2-next">发好了，下一步</button>
+          </li>
+          <li class="ai-step" data-step="3">
+            <p class="ai-step-text" id="ai-step3-text"></p>
+            <p class="ai-small" id="ai-step3-small"></p>
+            <button type="button" class="primary-btn" id="ai-paste-btn">粘贴并导入</button>
+            <div class="ai-fallback" id="ai-fallback" hidden>
+              <label class="sr-only" for="add-text">粘贴 AI 整理的行程</label>
+              <textarea id="add-text" rows="5" spellcheck="false" placeholder="长按这里，选『粘贴』，再点『添加』"></textarea>
+              <button type="button" class="primary-btn" id="add-go">添加</button>
+            </div>
+            <div class="add-status" id="add-status" role="status"></div>
+            <div class="add-pick" id="add-pick" hidden></div>
+          </li>
+        </ol>
+      </section>
 
       <details class="fold" id="manual-fold">
         <summary>手动填写</summary>
@@ -144,6 +188,10 @@
           </select>
           <label for="manual-name">名称</label>
           <input type="text" id="manual-name" placeholder="比如「大英博物馆」" autocomplete="off">
+          <div class="icon-pick-row" id="icon-pick-row">
+            <span class="icon-pick-label" id="icon-pick-label">图标（可不选）</span>
+            <div class="icon-picker" id="icon-picker" role="radiogroup" aria-labelledby="icon-pick-label"></div>
+          </div>
           <div class="edit-only" id="edit-fields" hidden>
             <div id="edit-address-row">
               <label for="edit-address">地址</label>
@@ -190,7 +238,7 @@
       </div>
       <div class="more-actions">
         <button type="button" class="more-btn" id="help-open-btn">使用说明</button>
-        <button type="button" class="more-btn" id="install-btn">添加到桌面</button>
+        <button type="button" class="more-btn more-btn-sub" id="install-btn" data-sub="像 App 一样，点图标就打开">放到手机桌面</button>
         <button type="button" class="more-btn more-btn-sub" id="backup-export-share" data-sub="发给同行的人，对方导入就能看到">分享我的行程</button>
         <button type="button" class="more-btn more-btn-sub" id="recommend-btn" data-sub="只发网址，不含你的行程">推荐这个工具</button>
         <button type="button" class="more-btn" id="backup-import">导入</button>
@@ -198,7 +246,7 @@
         <button type="button" class="more-btn" id="backup-export-full" title="含确认号和座位，仅自己保存">完整备份</button>
         <button type="button" class="more-btn more-btn-danger" id="backup-clear">清空本机数据</button>
       </div>
-      <p class="settings-note">行程只存在你的手机里，没有账号，也没有服务器，我们看不到。只有搜索、显示地图和导航时，地名或地址会发给地图服务（OpenStreetMap、高德或 Google 地图）。</p>
+      <p class="settings-note">行程只存在你的手机里，没有账号，也没有服务器，我们看不到。只有搜索、显示地图和导航时，地名、地址和大概位置会发给地图服务（OpenStreetMap、高德或 Google 地图）。</p>
       <div class="version-block">
         <p class="version-label" id="version-label">当前版本</p>
         <button type="button" class="changelog-row" id="changelog-open">
@@ -238,18 +286,7 @@
   <div class="sheet announce-sheet" id="announce-sheet" hidden>
     <div class="sheet-backdrop"></div>
     <div class="announce-card" role="dialog" aria-modal="true" aria-labelledby="announce-title">
-      <svg class="announce-illu" viewBox="0 0 120 80" width="120" height="80" aria-hidden="true">
-        <circle cx="60" cy="42" r="34" fill="#EAF2FF"/>
-        <rect x="44" y="14" width="32" height="56" rx="6" fill="#fff" stroke="#4C8DFF" stroke-width="3"/>
-        <rect x="50" y="24" width="20" height="6" rx="3" fill="#4C8DFF"/>
-        <rect x="50" y="35" width="20" height="5" rx="2.5" fill="#BFD6FF"/>
-        <rect x="50" y="45" width="14" height="5" rx="2.5" fill="#BFD6FF"/>
-        <circle cx="60" cy="61" r="2.5" fill="#4C8DFF"/>
-        <path d="M90 18l2.4 5.6L98 26l-5.6 2.4L90 34l-2.4-5.6L82 26l5.6-2.4z" fill="#FFC53D"/>
-        <path d="M28 46l1.6 3.4 3.4 1.6-3.4 1.6L28 56l-1.6-3.4-3.4-1.6 3.4-1.6z" fill="#FFC53D"/>
-        <circle cx="96" cy="52" r="3" fill="#4C8DFF" opacity=".5"/>
-        <circle cx="24" cy="24" r="2.5" fill="#4C8DFF" opacity=".5"/>
-      </svg>
+      <img class="announce-illu" src="./icons/icon-180.png" width="64" height="64" alt="" aria-hidden="true">
       <h2 class="announce-title" id="announce-title">新版本</h2>
       <ul class="announce-list" id="announce-list"></ul>
       <p class="announce-tip" id="announce-tip"></p>
@@ -303,33 +340,45 @@
     <div class="sheet-panel" role="dialog" aria-labelledby="install-sheet-title">
       <div class="sheet-handle" aria-hidden="true"></div>
       <div class="sheet-head">
-        <h2 id="install-sheet-title">添加到桌面</h2>
+        <h2 id="install-sheet-title">放到手机桌面</h2>
         <button type="button" class="icon-btn sheet-close" data-close="install-sheet" aria-label="关闭"></button>
       </div>
       <div id="install-body"></div>
     </div>
   </div>
 
-  <div class="ios-guide" id="ios-guide" role="dialog" aria-labelledby="ios-guide-title" hidden>
-    <div class="ios-guide-card">
-      <button type="button" class="ios-guide-x" id="ios-guide-x" aria-label="关闭">
-        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
-      </button>
-      <h2 class="ios-guide-title" id="ios-guide-title">添加到主屏幕，像 App 一样打开</h2>
-      <ol class="ios-guide-steps">
-        <li><span class="ios-guide-n">①</span>点底部的分享按钮
-          <svg class="ios-share-ico" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#4C8DFF" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-label="分享按钮" role="img"><path d="M12 3v12"/><path d="M8 7l4-4 4 4"/><path d="M8.5 10H6a1 1 0 0 0-1 1v9a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-9a1 1 0 0 0-1-1h-2.5"/></svg>
-        </li>
-        <li><span class="ios-guide-n">②</span>选「添加到主屏幕」</li>
-      </ol>
-      <button type="button" class="ios-guide-later" id="ios-guide-later">下次再说</button>
+  <!-- v5.2 微信 / App 内置浏览器：全屏遮罩，箭头指向右上角 ···（文案在 install-guide.js 的 COPY） -->
+  <div class="inapp-overlay" id="inapp-overlay" role="dialog" aria-modal="true" aria-labelledby="inapp-text" hidden>
+    <button type="button" class="inapp-close" id="inapp-close" aria-label="关闭">
+      <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button>
+    <svg class="inapp-arrow" id="inapp-arrow" viewBox="0 0 96 96" width="96" height="96" fill="none" stroke="#fff" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 88C22 52 44 30 80 18"/><path d="M58 12l24 5-9 23"/></svg>
+    <div class="inapp-body">
+      <p class="inapp-text" id="inapp-text"></p>
+      <div class="ig-illus" id="inapp-illus"></div>
+      <button type="button" class="inapp-copy" id="inapp-copy">复制网址</button>
     </div>
-    <svg class="ios-guide-arrow" viewBox="0 0 32 32" width="32" height="32" aria-hidden="true"><path d="M16 4v22" stroke="#4C8DFF" stroke-width="3" stroke-linecap="round" fill="none"/><path d="M7 18l9 9 9-9" stroke="#4C8DFF" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>
+  </div>
+
+  <!-- v5.2 iPhone / iPad Safari：「放到桌面」底部面板，3 步 + 插图位（现在是占位图，UI 会给正式线框图） -->
+  <div class="sheet ig-sheet" id="ios-install-sheet" hidden>
+    <div class="sheet-backdrop"></div>
+    <div class="sheet-panel" role="dialog" aria-modal="true" aria-labelledby="ig-title">
+      <div class="sheet-handle" aria-hidden="true"></div>
+      <h2 class="ig-title" id="ig-title"></h2>
+      <ol class="ig-steps" id="ig-steps"></ol>
+      <p class="ig-note" id="ig-note" hidden></p>
+      <button type="button" class="ig-done" id="ig-done">我加好了</button>
+      <button type="button" class="ig-later" id="ig-later">下次再说</button>
+      <svg class="ig-arrow" id="ig-arrow" viewBox="0 0 48 48" width="48" height="48" fill="none" stroke="#0F9D8A" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M24 6v32"/><path d="M12 27l12 12 12-12"/></svg>
+    </div>
+    <svg class="ig-arrow-ipad" viewBox="0 0 48 48" width="48" height="48" fill="none" stroke="#0F9D8A" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 36L36 12"/><path d="M18 12h18v18"/></svg>
   </div>
 
   <div class="toast" id="toast" hidden>
     <span id="toast-msg"></span>
     <button type="button" id="toast-undo">撤销</button>
+    <button type="button" class="toast-close" id="toast-close" aria-label="关闭" hidden><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
   </div>
 
   <script src="./vendor/leaflet.js"></script>
@@ -341,6 +390,8 @@
   <script src="./import.js"></script>
   <script src="./guess-type.js"></script>
   <script src="./install-env.js"></script>
+  <script src="./install-guide.js"></script>
+  <script src="./trip-name.js"></script>
   <script src="./ai-prompt.js"></script>
   <script src="./backup.js"></script>
   <script src="./legs.js"></script>

@@ -5,7 +5,9 @@
 (function (root) {
   "use strict";
 
-  var UNDO_MS = 10000;
+  /* v5.2：删一条撤销 5 秒；「清空全部」仍是 10 秒 */
+  var UNDO_MS = 5000;
+  var CLEAR_UNDO_MS = 10000;
 
   function indexOfId(items, id) {
     var list = items || [];
@@ -160,6 +162,7 @@
       next.address = address || name;
       delete next.lat;
       delete next.lng;
+      delete next.city;
     }
 
     if (type === "酒店") {
@@ -252,8 +255,38 @@
     return list;
   }
 
+  /**
+   * v5.2「补地址」：把搜到的地点填进同一条，只改地址和坐标；名字、日期、图标、备注等全部保留。
+   * 坐标统一存 WGS-84（项目约定）：高德结果在 geocode.js 里已转成 WGS-84（coordSystem "wgs84"）；
+   * 万一传进来的是 GCJ-02，就在这里转一次。到高德底图 / 高德导航时再按需转回 GCJ-02（geo.js）。
+   */
+  function applyFoundPlace(item, cand, address) {
+    var next = JSON.parse(JSON.stringify(item || {}));
+    if (!cand || !isFinite(cand.lat) || !isFinite(cand.lng)) return next;
+    var lat = Number(cand.lat);
+    var lng = Number(cand.lng);
+    if (cand.coordSystem === "gcj02" && root.GeoUtil && typeof root.GeoUtil.gcj02ToWgs84 === "function") {
+      var w = root.GeoUtil.gcj02ToWgs84(lat, lng);
+      if (w && isFinite(w.lat) && isFinite(w.lng)) {
+        lat = w.lat;
+        lng = w.lng;
+      }
+    }
+    next.lat = lat;
+    next.lng = lng;
+    var addr = String(address || cand.displayName || "").trim();
+    if (addr) next.address = addr;
+    /* v5.2：地图服务返回的城市，没有就删掉旧的（地址换了，旧城市不一定对） */
+    var city = String(cand.city || "").trim();
+    if (city) next.city = city;
+    else delete next.city;
+    return next;
+  }
+
   var api = {
+    applyFoundPlace: applyFoundPlace,
     UNDO_MS: UNDO_MS,
+    CLEAR_UNDO_MS: CLEAR_UNDO_MS,
     indexOfId: indexOfId,
     removeItem: removeItem,
     restoreItem: restoreItem,

@@ -66,8 +66,33 @@
     errorMessage: errorMessage,
     isDenied: isDenied,
     displayPoint: displayPoint,
-    requestPosition: requestPosition
+    requestPosition: requestPosition,
+    /* v5.2：导航选高德还是 Google 时，没坐标的地点参考「你现在在哪」。只读内存里的值，从不主动定位。 */
+    lastPoint: function () { return lastHere ? { lat: lastHere.lat, lng: lastHere.lng } : null; },
+    warmIfGranted: warmIfGranted
   };
+
+  /**
+   * v5.2：展开一张没坐标的卡片时用。只有浏览器里定位权限已经是「允许」（granted）时才取一次位置——
+   * 这时系统不会弹窗；没允许过 / 拒绝过 / 不支持权限查询，就什么都不做（绝不弹定位请求）。
+   * 位置只放在内存 lastHere，不保存、不上传、不进链接。每次打开页面最多试一次。
+   */
+  var warmTried = false;
+  function warmIfGranted(onReady) {
+    if (lastHere || warmTried) return;
+    var nav = root.navigator;
+    if (!nav || !nav.permissions || typeof nav.permissions.query !== "function" || !nav.geolocation) return;
+    warmTried = true;
+    nav.permissions.query({ name: "geolocation" }).then(function (st) {
+      if (!st || st.state !== "granted") return;
+      requestPosition(nav, function (res) {
+        if (!res.ok) return;
+        lastHere = { lat: res.lat, lng: res.lng };
+        if (typeof onReady === "function") onReady();
+      });
+    }, function () {});
+  }
+  var lastHere = null;
   root.LocateMe = api;
   if (typeof module !== "undefined" && module.exports) module.exports = api;
 
@@ -105,7 +130,7 @@
     var p = displayPoint(res.lat, res.lng, kind);
     var ll = [p.lat, p.lng];
     if (!ring) {
-      ring = L.circle(ll, { radius: res.accuracy || 0, stroke: false, fillColor: "#4C8DFF", fillOpacity: 0.12, interactive: false });
+      ring = L.circle(ll, { radius: res.accuracy || 0, stroke: false, fillColor: "#4C8DFF", fillOpacity: 0.15, interactive: false });
       ring.addTo(map);
     } else {
       ring.setLatLng(ll);
@@ -142,6 +167,7 @@
     requestPosition(window.navigator, function (res) {
       busy = false;
       if (res.ok) {
+        lastHere = { lat: res.lat, lng: res.lng };
         show(res);
         return;
       }

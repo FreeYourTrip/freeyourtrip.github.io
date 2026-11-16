@@ -17,7 +17,8 @@
   var AMAP_JS = "https://webapi.amap.com/maps";
   var MIN_INTERVAL_MS = 1000;
   var REQUEST_TIMEOUT_MS = 8000;
-  var FRIENDLY_NOT_FOUND = "暂时找不到位置，不影响「带我去」导航";
+  /* v5.2：没位置时「带我去」不一定能用，别再说「不影响导航」 */
+  var FRIENDLY_NOT_FOUND = "暂时找不到位置，可以先直接添加，之后再补地址";
   var lastRequestAt = 0;
   var chain = Promise.resolve();
   var amapLoader = null;
@@ -141,6 +142,16 @@
         lng: Number(r.lon),
         displayName: r.display_name || "",
         name: r.name || "",
+        /* v5.2：店名优先用 namedetails；地址分项用来拼「城市 邮编 · 街道」 */
+        nameDetail: (r.namedetails && (r.namedetails.name || r.namedetails["name:zh"] || r.namedetails["name:en"])) || "",
+        address: r.address && typeof r.address === "object" ? {
+          house_number: r.address.house_number || "",
+          road: r.address.road || r.address.pedestrian || "",
+          city: r.address.city || r.address.town || r.address.village || r.address.suburb || r.address.county || "",
+          postcode: r.address.postcode || ""
+        } : null,
+        /* v5.2：地图服务给的城市（city/town/village），选中后存进 item.city，给「那天在哪个城市」用 */
+        city: (r.address && (r.address.city || r.address.town || r.address.village)) || "",
         class: r.class || r.category || "",
         type: r.type || "",
         importance: typeof r.importance === "number" ? r.importance : 0
@@ -176,10 +187,38 @@
       .trim();
   }
 
-  function nominatimSearch(query) {
+  /**
+   * v5.2 区域偏好：拿那天酒店（或同一天别的条目）的坐标，先四舍五入到 1 位小数（约 10 km），
+   * 再往外扩约 20 km 拼成 Nominatim 的 viewbox。只发这个大概范围，不发酒店精确坐标，也绝不发用户自己的位置。
+   * 返回 { lat, lng, viewbox: "左,上,右,下" }（全部 1 位小数），坐标不对返回 null。
+   */
+  var BIAS_DEG = 0.2;
+  function round1(n) {
+    return Math.round(Number(n) * 10) / 10;
+  }
+  function fmt1(n) {
+    var v = round1(n);
+    return (Object.is(v, -0) ? 0 : v).toFixed(1);
+  }
+  function biasArea(center) {
+    if (!center || !isFinite(center.lat) || !isFinite(center.lng)) return null;
+    var lat = round1(center.lat);
+    var lng = round1(center.lng);
+    if (Math.abs(lat) > 85 || Math.abs(lng) > 180) return null;
+    var dLng = round1(BIAS_DEG / Math.max(0.3, Math.cos((lat * Math.PI) / 180)));
+    return {
+      lat: lat,
+      lng: lng,
+      viewbox: [fmt1(lng - dLng), fmt1(lat + BIAS_DEG), fmt1(lng + dLng), fmt1(lat - BIAS_DEG)].join(",")
+    };
+  }
+
+  function nominatimSearch(query, opts) {
     var q = sanitizeGeocodeQuery(query);
     if (!q) return Promise.resolve([]);
-    var hit = cacheGet(q);
+    var area = opts && opts.bias ? biasArea(opts.bias) : null;
+    var cacheKey = area ? q + " @" + area.viewbox : q;
+    var hit = cacheGet(cacheKey);
     if (hit && Array.isArray(hit.results)) {
       return Promise.resolve(hit.results);
     }
@@ -187,10 +226,12 @@
     return enqueue(function () {
       var url =
         NOMINATIM +
-        "?format=jsonv2&limit=5&accept-language=" +
+        "?format=jsonv2&limit=5&addressdetails=1&namedetails=1&accept-language=" +
         encodeURIComponent("zh,en") +
         "&q=" +
-        encodeURIComponent(q);
+        encodeURIComponent(q) +
+        /* bounded=0：只是优先这片区域，范围外的结果照样返回 */
+        (area ? "&viewbox=" + area.viewbox + "&bounded=0" : "");
       return fetchWithTimeout(url, {
           headers: { Accept: "application/json", "Accept-Language": "zh,en" }
         }).then(function (res) {
@@ -200,7 +241,7 @@
         return res.json();
       }).then(function (data) {
         var results = mapResults(data);
-        cacheSet(q, results);
+        cacheSet(cacheKey, results);
         return results;
       });
     });
@@ -246,6 +287,7 @@
         name: name,
         class: "",
         type: poi.type || poi.typecode || "",
+        city: String(poi.cityname || "").trim(),
         source: "amap",
         coordSystem: "wgs84"
       });
@@ -356,10 +398,10 @@
     });
   }
 
-  function amapPlaceSearch(AMapCtor, q) {
+  function amapPlaceSearch(AMapCtor, q, area) {
     return amapPluginSearch(AMapCtor, "AMap.PlaceSearch", function (done) {
       var searcher = new AMapCtor.PlaceSearch({ pageSize: 5, pageIndex: 1, extensions: "base" });
-      searcher.search(q, function (status, result) {
+      var cb = function (status, result) {
         if (status === "complete" && result && result.poiList) {
           done(null, mapAmapJsPois(result.poiList.pois || [], q));
           return;
@@ -369,7 +411,10 @@
           return;
         }
         done(new Error(status || "amap-search"));
-      });
+      };
+      /* 区域偏好：同样只用 1 位小数的大概中心，20 km 内找；GCJ-02 偏移（<1 km）比四舍五入还小，不另转换 */
+      if (area && typeof searcher.searchNearBy === "function") searcher.searchNearBy(q, [area.lng, area.lat], 20000, cb);
+      else searcher.search(q, cb);
     });
   }
 
@@ -394,16 +439,18 @@
    * 大陆查询在已配置 JS Key 时走高德 PlaceSearch，空结果再试 AutoComplete。
    * 失败、超时或配额错误由调用方回退 Nominatim。
    */
-  function amapSearch(query) {
+  function amapSearch(query, opts) {
     var q = sanitizeGeocodeQuery(query);
     if (!amapConfigured() || !q) return Promise.resolve([]);
-    var cacheQ = "amap:" + q;
+    var area = opts && opts.bias ? biasArea(opts.bias) : null;
+    var cacheQ = "amap:" + q + (area ? " @" + area.viewbox : "");
     var hit = cacheGet(cacheQ);
     if (hit && Array.isArray(hit.results)) return Promise.resolve(hit.results);
     return ensureAmapJs()
       .then(function (AMapCtor) {
-        return amapPlaceSearch(AMapCtor, q).then(function (list) {
+        return amapPlaceSearch(AMapCtor, q, area).then(function (list) {
           if (list && list.length) return list;
+          if (area) return amapPlaceSearch(AMapCtor, q, null).then(function (l2) { return l2 && l2.length ? l2 : amapAutoComplete(AMapCtor, q); });
           return amapAutoComplete(AMapCtor, q);
         });
       })
@@ -418,20 +465,42 @@
    * 统一搜索：已配置高德且查询像大陆地址时先走 JS API，失败或无结果再退回 Nominatim。
    * 两个配置都为空时只使用 Nominatim，不会加载 webapi.amap.com。
    */
-  function searchAddress(query) {
+  /** opts.bias = { lat, lng }：只来自行程里的条目（酒店 / 同一天的地点），由 biasArea 先四舍五入 */
+  function searchAddress(query, opts) {
     var q = sanitizeGeocodeQuery(query);
     if (!q) return Promise.resolve([]);
     if (amapConfigured() && looksMainland(q)) {
-      return amapSearch(q)
+      return amapSearch(q, opts)
         .then(function (list) {
           if (list && list.length) return list;
-          return nominatimSearch(q);
+          return nominatimSearch(q, opts);
         })
         .catch(function () {
-          return nominatimSearch(q);
+          return nominatimSearch(q, opts);
         });
     }
-    return nominatimSearch(q);
+    return nominatimSearch(q, opts);
+  }
+
+  /** 结果名字和要找的名字是否对得上（忽略大小写、空格、标点；有一半以上的词相同也算） */
+  function nameMatches(want, cand) {
+    var norm = function (s) { return String(s || "").toLowerCase().replace(/[\s,.'’\-·()（）]/g, ""); };
+    var w = norm(want);
+    var unit = root.GeoUtil && root.GeoUtil.isUnitLikeName ? root.GeoUtil.isUnitLikeName : function () { return false; };
+    /* 只比名字（店名、namedetails、display_name 第一段且不是单元号），不拿街道地址来凑 */
+    var rawNames = [cand && cand.name, cand && cand.nameDetail, cand && String(cand.displayName || "").split(",")[0]]
+      .map(function (s) { return String(s || "").trim(); })
+      .filter(function (s) { return s && !unit(s); });
+    var names = rawNames.map(norm).filter(Boolean);
+    if (!w || !names.length) return false;
+    for (var i = 0; i < names.length; i++) {
+      if (names[i].indexOf(w) !== -1 || w.indexOf(names[i]) !== -1) return true;
+    }
+    var words = String(want).toLowerCase().split(/[\s,]+/).filter(function (x) { return x.length > 1; });
+    if (!words.length) return false;
+    var hay = rawNames.join(" ").toLowerCase();
+    var hit = words.filter(function (x) { return hay.indexOf(x) !== -1; }).length;
+    return hit / words.length >= 0.5;
   }
 
   function lookupIata(code) {
@@ -640,6 +709,13 @@
 
     return searchNext(0).then(function (list) {
       out.candidates = list;
+      /* v5.2：只有一个结果但名字对不上（比如搜出来是楼里的某个单元、或别处同名的店）时不自动选，让用户确认 */
+      if (list.length === 1 && name && !nameMatches(name, list[0])) {
+        out.chosen = null;
+        out.status = "ambiguous";
+        out.message = "找到的位置可能不对，请确认地点";
+        return out;
+      }
       if (list.length === 1) {
         out.chosen = {
           lat: list[0].lat,
@@ -673,6 +749,7 @@
     if (chosen && typeof chosen.lat === "number") {
       item.lat = chosen.lat;
       item.lng = chosen.lng;
+      if (item.type !== "flight" && chosen.city && String(chosen.city).trim()) item.city = String(chosen.city).trim();
     }
     if (item.type === "flight" && fromChosen && typeof fromChosen.lat === "number") {
       item.fromLat = fromChosen.lat;
@@ -713,7 +790,70 @@
     return next();
   }
 
+  /* ---------- v5.2 搜不到时自动补上这趟的城市再搜 ---------- */
+  /** 「名字 + 城市」；名字里已经有这个城市就返回空（不重复搜） */
+  function cityQuery(query, city) {
+    var q = String(query || "").trim();
+    var c = String(city || "").trim();
+    if (!q || !c) return "";
+    if (q.toLowerCase().indexOf(c.toLowerCase()) !== -1) return "";
+    return q + " " + c;
+  }
+
+  /** 合并两次搜索结果，按坐标去重；prefer=true 时带城市的结果排前面 */
+  function mergeCityResults(plain, withCity, preferCity) {
+    var first = preferCity ? withCity || [] : plain || [];
+    var second = preferCity ? plain || [] : withCity || [];
+    var seen = {};
+    var out = [];
+    first.concat(second).forEach(function (r) {
+      if (!r || !isFinite(r.lat) || !isFinite(r.lng)) return;
+      var k = Number(r.lat).toFixed(4) + "," + Number(r.lng).toFixed(4);
+      if (seen[k]) return;
+      seen[k] = true;
+      out.push(r);
+    });
+    return out;
+  }
+
+  /**
+   * 先搜原词；没结果（或 opts.prefer：补地址时）再搜一次，合并：
+   * 第二次用「原词 + 那天的城市」（知道城市才加），并带上那天的大概区域 opts.bias（知道才带）。两样都没有就不重搜。
+   * opts.search 可替换搜索函数（检查脚本用假数据）。返回 { results, usedCity, cityQuery }。
+   */
+  function searchWithCity(query, city, opts) {
+    opts = opts || {};
+    /* 运行时再取 api.searchAddress，方便检查 / 截图时换成假数据 */
+    var search = opts.search || function (q, so) { return api.searchAddress(q, so); };
+    var area = opts.bias ? biasArea(opts.bias) : null;
+    var cq = cityQuery(query, city) || (area ? String(query || "").trim() : "");
+    var safe = function (q, so) {
+      try {
+        return Promise.resolve(so ? search(q, so) : search(q)).then(function (l) { return l || []; }, function () { return null; });
+      } catch (err) {
+        return Promise.resolve(null);
+      }
+    };
+    return safe(query).then(function (plain) {
+      var failed = plain === null;
+      plain = plain || [];
+      if (!cq || (!opts.prefer && plain.length)) {
+        if (failed && !cq) return Promise.reject(new Error("search failed"));
+        return { results: plain, usedCity: false, cityQuery: "" };
+      }
+      return safe(cq, area ? { bias: { lat: area.lat, lng: area.lng } } : null).then(function (wc) {
+        if (failed && wc === null) return Promise.reject(new Error("search failed"));
+        wc = wc || [];
+        return { results: mergeCityResults(plain, wc, !!opts.prefer), usedCity: wc.length > 0, cityQuery: cq };
+      });
+    });
+  }
+
   var api = {
+    cityQuery: cityQuery,
+    mergeCityResults: mergeCityResults,
+    searchWithCity: searchWithCity,
+    biasArea: biasArea,
     CACHE_KEY: CACHE_KEY,
     nominatimSearch: nominatimSearch,
     searchAddress: searchAddress,
@@ -725,6 +865,8 @@
     sanitizeGeocodeQuery: sanitizeGeocodeQuery,
     lookupIata: lookupIata,
     resolveItem: resolveItem,
+    nameMatches: nameMatches,
+    mapResults: mapResults,
     resolveAll: resolveAll,
     applyChoice: applyChoice,
     guessType: function (input, typ) {

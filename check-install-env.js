@@ -103,22 +103,13 @@ check("iOS guide: auto-shows until closed, then not for 7 days", function () {
   assert.ok(InstallEnv.IOS_GUIDE_KEY.indexOf("wishlist-map") === 0, "清空本机数据 resets it");
 });
 
-check("iOS guide markup and style follow the spec", function () {
+check("v5.2: old two-step card replaced by the install-guide sheet + in-app overlay", function () {
   const fs = require("fs");
   const html = fs.readFileSync(__dirname + "/index.html", "utf8");
-  const css = fs.readFileSync(__dirname + "/styles.css", "utf8");
   const tl = fs.readFileSync(__dirname + "/timeline.js", "utf8");
-  assert.ok(html.indexOf("添加到主屏幕，像 App 一样打开") !== -1);
-  assert.ok(html.indexOf("①</span>点底部的分享按钮") !== -1 && html.indexOf("②</span>选「添加到主屏幕」") !== -1);
-  assert.ok(/class="ios-share-ico"[^>]*viewBox/.test(html), "inline share SVG");
-  assert.ok(html.indexOf(">下次再说<") !== -1 && html.indexOf('id="ios-guide-x"') !== -1);
-  assert.ok(/\.ios-guide-card \{[^}]*margin: 16px;[^}]*border-radius: 16px;/.test(css));
-  assert.ok(/\.ios-guide-title \{[^}]*font-size: 16px;[^}]*font-weight: 700;[^}]*color: #1F2329;/.test(css));
-  assert.ok(/\.ios-guide-steps li \{[^}]*font-size: 14px;[^}]*color: #5C636E;/.test(css));
-  assert.ok(/\.ios-guide-x \{[^}]*width: 44px;[^}]*height: 44px;/.test(css));
-  assert.ok(/ios-guide-bob 1\.2s/.test(css) && /prefers-reduced-motion: reduce\)\s*\{\s*\.ios-guide-arrow \{ animation: none; \}/.test(css));
-  assert.ok(/class="ios-guide-arrow" viewBox="0 0 32 32" width="32" height="32"/.test(html) && html.indexOf('stroke="#4C8DFF"') !== -1);
-  assert.ok(/if \(!forceKind && iosGuideEligibleHere\(\)\) \{\s*openIosGuide\(\);/.test(tl), "添加到桌面 opens the guide on iPhone Safari");
+  assert.ok(html.indexOf('id="ios-guide"') === -1, "old card removed");
+  assert.ok(html.indexOf('id="ios-install-sheet"') !== -1 && html.indexOf('id="inapp-overlay"') !== -1);
+  assert.ok(/if \(kind === "ios-sheet"\) return openIosSheet\(g\.ipad\);/.test(tl), "放到手机桌面 opens the sheet on iPhone / iPad Safari");
 });
 
 if (failures) {

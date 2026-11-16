@@ -14,7 +14,7 @@
   --tap: 48px;
   --rail: 30px;
   --header-h: 64px;
-  --flight: #2F80ED;
+  --flight: #6B7A8F;
   --hotel: #8E5CF7;
   --restaurant: #F2994A;
   --attraction: #27AE60;
@@ -1209,7 +1209,7 @@ a { color: var(--brand); }
   border-radius: 12px;
   color: #fff;
 }
-#toast-undo { color: #4C8DFF; }
+#toast-undo { color: #0F9D8A; }
 #toast-undo[hidden] { display: none !important; }
 
 /* 「有新版本」横条：紧贴顶栏下方，从不强制更新 */
@@ -1235,7 +1235,7 @@ a { color: var(--brand); }
   white-space: nowrap;
   overflow: hidden;
 }
-.update-lead .ico { color: #4C8DFF; }
+.update-lead .ico { color: #0F9D8A; }
 .update-lead .ico svg { width: 18px; height: 18px; }
 .update-later {
   flex-shrink: 0;
@@ -1309,7 +1309,7 @@ a { color: var(--brand); }
   box-shadow: 0 12px 40px rgba(20, 35, 33, 0.25);
   text-align: left;
 }
-.announce-illu { display: block; margin: 0 auto 4px; }
+.announce-illu { display: block; width: 64px; height: 64px; margin: 0 auto 8px; border-radius: 14px; box-shadow: 0 2px 8px rgba(22, 51, 47, 0.12); }
 .announce-title { margin: 0 0 10px; font-size: 20px; font-weight: 800; text-align: center; color: #1F2329; }
 .announce-list { list-style: none; margin: 0; padding: 0; }
 .announce-list li {
@@ -1328,7 +1328,7 @@ a { color: var(--brand); }
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: #4C8DFF;
+  background: #0F9D8A;
 }
 .announce-tip {
   margin: 12px 0 0;
@@ -1346,7 +1346,7 @@ a { color: var(--brand); }
   margin-top: 14px;
   border: 0;
   border-radius: 10px;
-  background: #4C8DFF;
+  background: #0F9D8A;
   color: #fff;
   font-size: 16px;
   font-weight: 700;
@@ -1410,91 +1410,6 @@ a { color: var(--brand); }
 .topbar .top-action:focus-visible,
 .topbar .top-help-btn:focus-visible,
 .topbar .trip-name:focus-visible { outline-color: var(--brand); }
-
-/* iPhone Safari「添加到主屏幕」引导：底部白卡 + 指向 Safari 底栏中间的蓝色箭头 */
-.ios-guide {
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 45;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding-bottom: calc(2px + env(safe-area-inset-bottom, 0px));
-  pointer-events: none;
-}
-.ios-guide[hidden] { display: none !important; }
-.ios-guide-card {
-  position: relative;
-  align-self: stretch;
-  margin: 16px;
-  padding: 16px 16px 8px;
-  background: #fff;
-  border-radius: 16px;
-  box-shadow: 0 8px 28px rgba(20, 35, 33, 0.22);
-  pointer-events: auto;
-}
-.ios-guide-x {
-  position: absolute;
-  top: 0;
-  right: 0;
-  width: 44px;
-  height: 44px;
-  border: 0;
-  background: transparent;
-  color: #8A9099;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-}
-.ios-guide-title {
-  margin: 0 36px 10px 0;
-  font-size: 16px;
-  font-weight: 700;
-  color: #1F2329;
-  line-height: 1.4;
-}
-.ios-guide-steps { list-style: none; margin: 0; padding: 0; }
-.ios-guide-steps li {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin: 0 0 8px;
-  font-size: 14px;
-  color: #5C636E;
-  line-height: 1.5;
-}
-.ios-guide-n { color: #5C636E; }
-.ios-share-ico { flex-shrink: 0; }
-.ios-guide-later {
-  display: block;
-  margin: 2px auto 0;
-  min-height: 44px;
-  padding: 0 16px;
-  border: 0;
-  background: transparent;
-  color: #8A9099;
-  font-size: 14px;
-  cursor: pointer;
-}
-.ios-guide-arrow {
-  display: block;
-  width: 32px;
-  height: 32px;
-  margin-top: -8px;
-  animation: ios-guide-bob 1.2s ease-in-out infinite;
-}
-@keyframes ios-guide-bob {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(6px); }
-}
-@media (prefers-reduced-motion: reduce) {
-  .ios-guide-arrow { animation: none; }
-}
-/* 引导显示时暂时隐藏「＋ 添加」，让箭头直接指向 Safari 底栏 */
-body.ios-guide-open .add-dock { visibility: hidden; }
 
 /* ---------- v5 顶部日期条 #day-chips.cal（规则见 calendar.js） ---------- */
 .day-chips.cal {
@@ -1747,7 +1662,7 @@ body.ios-guide-open .add-dock { visibility: hidden; }
   margin: 0;
   border-radius: 50%;
   background: #4C8DFF;
-  border: 3px solid #fff;
+  border: 2px solid #fff;
   box-sizing: content-box;
   box-shadow: 0 1px 4px rgba(22, 51, 47, 0.3);
 }
@@ -1786,7 +1701,7 @@ body.ios-guide-open .add-dock { visibility: hidden; }
   .toast { left: 16px; right: auto; width: calc(var(--seg0-w) - 32px); transform: none; }
   .sheet { right: auto; width: var(--seg0-w); }
   .sheet-panel { left: 0; right: 0; width: auto; transform: none; }
-  .ios-guide { right: auto; width: var(--seg0-w); }
+  .inapp-overlay { right: auto; width: var(--seg0-w); }
   #map-view .locate-btn { right: 16px; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); }
   .leaflet-bottom.leaflet-right { margin-bottom: 0; }
   #view-toggle-btn { display: none; }
@@ -1796,3 +1711,512 @@ body.ios-guide-open .add-dock { visibility: hidden; }
 @media (min-width: 800px) {
   .locate-btn { right: calc(50% - 360px + 16px); }
 }
+
+/* ---------- v5.2「放到手机桌面」引导 ---------- */
+/* 微信 / App 内置浏览器：全屏深色遮罩，大箭头指向右上角 ··· */
+.inapp-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  background: rgba(12, 22, 21, 0.86);
+  color: #fff;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  padding: calc(112px + env(safe-area-inset-top, 0px)) 24px 24px;
+  overflow: auto;
+}
+.inapp-overlay[hidden] { display: none !important; }
+.inapp-arrow {
+  position: absolute;
+  top: calc(6px + env(safe-area-inset-top, 0px));
+  right: 14px;
+  width: 96px;
+  height: 96px;
+  animation: ig-nudge-up 1.2s ease-in-out infinite;
+}
+.inapp-arrow.is-off { display: none; }
+@keyframes ig-nudge-up {
+  0%, 100% { transform: translate(0, 0); }
+  50% { transform: translate(5px, -6px); }
+}
+.inapp-close {
+  position: absolute;
+  top: calc(8px + env(safe-area-inset-top, 0px));
+  left: 8px;
+  width: 44px;
+  height: 44px;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.14);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.inapp-body { width: 100%; max-width: 420px; text-align: center; }
+.inapp-text { margin: 0 0 20px; font-size: 20px; font-weight: 700; line-height: 1.6; overflow-wrap: anywhere; }
+.inapp-copy {
+  margin-top: 20px;
+  min-height: 48px;
+  min-width: 200px;
+  padding: 0 24px;
+  border: 0;
+  border-radius: 12px;
+  background: #fff;
+  color: #0B6F62;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.inapp-overlay .ig-slot { background: rgba(255, 255, 255, 0.08); border-color: rgba(255, 255, 255, 0.4); }
+.inapp-overlay .ig-slot-cap { color: rgba(255, 255, 255, 0.75); }
+
+/* iPhone / iPad Safari：底部面板 */
+.ig-sheet .sheet-panel { padding-bottom: calc(8px + env(safe-area-inset-bottom, 0px)); text-align: left; }
+.ig-title { margin: 6px 0 12px; font-size: 18px; font-weight: 700; color: #1F2329; line-height: 1.4; }
+.ig-steps { list-style: none; margin: 0; padding: 0; counter-reset: ig; }
+.ig-steps li { margin: 0 0 12px; }
+.ig-step-row { display: flex; align-items: flex-start; gap: 10px; font-size: 15px; color: #1F2329; line-height: 1.5; }
+.ig-n {
+  flex: 0 0 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #0F9D8A;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 1px;
+}
+.ig-illus { display: flex; gap: 8px; margin: 8px 0 0 34px; flex-wrap: wrap; }
+.inapp-body .ig-illus { margin: 0; justify-content: center; }
+.ig-slot {
+  flex: 1 1 120px;
+  max-width: 168px;
+  border: 1.5px dashed #C9C2B4;
+  border-radius: 10px;
+  background: #F7F3EC;
+  padding: 6px 6px 4px;
+  text-align: center;
+}
+.ig-slot svg { display: block; width: 100%; height: 56px; }
+.ig-slot-cap { display: block; font-size: 11px; color: #8A9099; line-height: 1.4; margin-top: 2px; }
+.ig-note { margin: 4px 0 10px; font-size: 13px; line-height: 1.5; color: #C2410C; }
+.ig-note[hidden] { display: none; }
+.ig-done {
+  display: block;
+  width: 100%;
+  min-height: 48px;
+  border: 0;
+  border-radius: 12px;
+  background: #0F9D8A;
+  color: #fff;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.ig-later {
+  display: block;
+  margin: 2px auto 0;
+  min-height: 44px;
+  padding: 0 16px;
+  border: 0;
+  background: transparent;
+  color: #8A9099;
+  font-size: 14px;
+  cursor: pointer;
+}
+/* 大箭头：指向屏幕下方 Safari 工具栏（分享 / ··· 在那里） */
+.ig-arrow { display: block; margin: 0 auto; width: 48px; height: 48px; animation: ig-bob 1.2s ease-in-out infinite; }
+@keyframes ig-bob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(8px); }
+}
+/* iPad：分享按钮在右上角，箭头改指右上 */
+.ig-arrow-ipad { display: none; position: absolute; top: calc(8px + env(safe-area-inset-top, 0px)); right: 16px; width: 56px; height: 56px; animation: ig-nudge-up 1.2s ease-in-out infinite; }
+.ig-sheet.is-ipad .ig-arrow { display: none; }
+.ig-sheet.is-ipad .ig-arrow-ipad { display: block; }
+@media (prefers-reduced-motion: reduce) {
+  .inapp-arrow, .ig-arrow, .ig-arrow-ipad { animation: none; }
+}
+/* 引导显示时暂时隐藏「＋ 添加」，箭头直接指向 Safari 底栏 */
+body.ig-open .add-dock, body.ig-open .locate-btn { visibility: hidden; }
+
+/* ---------- v5.2 使用说明三层 ---------- */
+.help-tier { margin: 0 0 20px; }
+.help-tier h3 { margin: 14px 0 10px; font-size: 18px; font-weight: 800; color: #16332F; }
+.help-privacy {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: #FFF4E5;
+  color: #9A3412;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.5;
+}
+.help-cards {
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  margin: 0 -20px;
+  padding: 0 20px 4px;
+  scroll-padding: 0 20px;
+}
+.help-cards::-webkit-scrollbar { display: none; }
+.help-card {
+  flex: 0 0 82%;
+  scroll-snap-align: start;
+  border-radius: 16px;
+  background: #F3FAF8;
+  border: 1px solid #D7F3EE;
+  padding: 14px 16px 16px;
+}
+.help-card-illu { display: block; width: 100%; height: 96px; background: #fff; border: 1.5px dashed #B9DCD5; border-radius: 12px; }
+.help-card-n { margin: 10px 0 2px; font-size: 12px; color: #8A9099; }
+.help-card h4 { margin: 0 0 4px; font-size: 18px; font-weight: 800; color: #16332F; }
+.help-card p { margin: 0; font-size: 16px; line-height: 1.5; color: #1F2329; }
+.help-dots { display: flex; justify-content: center; gap: 6px; margin: 10px 0 4px; }
+.help-dot { width: 7px; height: 7px; border-radius: 50%; background: #D5D9DE; }
+.help-dot.is-on { background: #0F9D8A; }
+.help-more {
+  display: none;
+  margin: 8px auto 0;
+  min-height: 44px;
+  padding: 0 16px;
+  border: 0;
+  background: transparent;
+  color: #0B6F62;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.help-sheet.help-first .help-tier-2,
+.help-sheet.help-first .help-tier-3 { display: none; }
+.help-sheet.help-first .help-more { display: block; }
+.help-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.help-tile {
+  min-height: 76px;
+  padding: 10px 4px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #fff;
+  color: #16332F;
+  font-size: 14px;
+  font-weight: 700;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  cursor: pointer;
+}
+.help-tile .ico { width: 36px; height: 36px; border-radius: 10px; background: #D7F3EE; color: var(--brand); display: flex; align-items: center; justify-content: center; }
+.help-tile .ico svg { width: 22px; height: 22px; }
+.help-tile.is-on { border-color: #0F9D8A; background: #F3FAF8; }
+.help-tile[hidden] { display: none; }
+.help-tile-detail { margin-top: 10px; padding: 12px 14px; border-radius: 12px; background: #F3FAF8; font-size: 16px; line-height: 1.5; }
+.help-tile-detail[hidden] { display: none; }
+.help-tile-detail .help-install-btn { margin-top: 10px; }
+.help-faq { border-bottom: 1px solid var(--line); }
+.help-faq summary { min-height: 48px; display: flex; align-items: center; font-size: 16px; font-weight: 700; cursor: pointer; list-style: none; }
+.help-faq summary::-webkit-details-marker { display: none; }
+.help-faq summary::after { content: "＋"; margin-left: auto; color: #8A9099; font-weight: 400; }
+.help-faq[open] summary::after { content: "－"; }
+.help-faq p { margin: 0 0 12px; font-size: 15px; line-height: 1.55; color: #5C636E; }
+
+/* ---------- v5.2 AI 向导 ---------- */
+.ai-big-btn {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 64px;
+  margin: 4px 0 12px;
+  padding: 12px 16px;
+  border: 0;
+  border-radius: 16px;
+  background: linear-gradient(135deg, #0F9D8A, #0B6F62);
+  color: #fff;
+  text-align: left;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(15, 157, 138, 0.28);
+}
+.ai-big-btn[hidden] { display: none; }
+.ai-big-ico { flex: 0 0 40px; height: 40px; border-radius: 12px; background: rgba(255, 255, 255, 0.18); display: flex; align-items: center; justify-content: center; }
+.ai-big-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.ai-big-label { font-size: 18px; font-weight: 800; }
+.ai-big-sub { font-size: 13px; opacity: 0.9; }
+.ai-wizard { margin: 0 0 16px; padding: 14px 14px 6px; border: 1px solid #D7F3EE; border-radius: 16px; background: #F7FCFB; }
+.ai-wizard[hidden] { display: none; }
+.ai-wiz-title { margin: 0 0 10px; font-size: 16px; font-weight: 800; color: #16332F; }
+.ai-progress { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin: 0 0 12px; }
+.ai-prog-seg {
+  height: 22px;
+  border-radius: 11px;
+  background: #E3E7EA;
+  color: #8A9099;
+  font-size: 12px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.25s;
+}
+.ai-prog-seg.is-on { background: #0F9D8A; color: #fff; }
+.ai-steps { list-style: none; margin: 0; padding: 0; }
+.ai-step { padding: 10px 0 12px; border-top: 1px solid #E3EEEB; opacity: 0.55; }
+.ai-step:first-child { border-top: 0; }
+.ai-step.is-current, .ai-step.is-done { opacity: 1; }
+.ai-step-text { margin: 0 0 8px; font-size: 16px; font-weight: 700; line-height: 1.5; color: #1F2329; overflow-wrap: anywhere; }
+.ai-step.is-done .ai-step-text::after { content: " ✓"; color: #0F9D8A; }
+.ai-small { margin: 0 0 6px; font-size: 13px; line-height: 1.5; color: #5C636E; }
+.ai-privacy { color: #9A3412; font-weight: 700; }
+.ai-step .primary-btn { width: 100%; }
+.ai-fallback { margin-top: 10px; }
+.ai-fallback[hidden] { display: none; }
+.ai-fallback textarea { width: 100%; box-sizing: border-box; }
+.ai-step .copy-btn.is-copied { background: #0B6F62; }
+@media (prefers-reduced-motion: reduce) { .ai-prog-seg { transition: none; } }
+
+/* v5.2 撤销提示的 ✕（点按区域 44px） */
+.toast-close {
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  margin: -8px -12px -8px -8px;
+  border: 0;
+  background: transparent;
+  color: #C9CED6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.toast-close[hidden] { display: none !important; }
+#toast-msg { flex: 1; min-width: 0; }
+
+/* ---------- v5.2 行程名胶囊（v6 会把它变成「切换行程」，结构不用改） ---------- */
+.trip-line { align-items: center; overflow: hidden; }
+.trip-pill { position: relative; display: inline-flex; align-items: center; flex: 0 0 auto; min-width: 0; max-width: 100%; }
+/* 名字优先占位，日期在后面让位（省略号） */
+.trip-line .trip-dates { flex: 1 1 auto; }
+.topbar .trip-name {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 28px;
+  max-width: none;
+  padding: 0 10px;
+  border-radius: 14px;
+  background: #F3ECE0;
+  color: #16332F;
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+  overflow: visible;
+  flex: 0 0 auto;
+  min-width: 0;
+  max-width: 100%;
+}
+.topbar .trip-name::before {
+  content: "";
+  position: absolute;
+  left: -4px;
+  right: -4px;
+  top: -8px;
+  bottom: -8px;
+}
+.topbar .trip-name:active { background: #E8DCC8; }
+.trip-name-text { display: block; max-width: 7em; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.trip-pill-ico { flex: 0 0 14px; width: 14px; height: 14px; display: block; }
+.trip-pill.is-flash .trip-name { animation: pill-flash 0.9s ease-out; }
+@keyframes pill-flash {
+  0% { background: #BFEDE4; }
+  100% { background: #F3ECE0; }
+}
+@media (prefers-reduced-motion: reduce) { .trip-pill.is-flash .trip-name { animation: none; } }
+/* 默认名时胶囊里写「点这里起名」，字色灰 */
+.trip-pill.is-default .trip-name-text { color: #6B7A85; font-weight: 500; }
+.trip-rename-box { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+.trip-rename-box[hidden] { display: none; }
+.topbar .trip-name-input {
+  width: 9em;
+  max-width: 40vw;
+  height: 28px;
+  padding: 0 2px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #16332F;
+  border: 0;
+  border-bottom: 2px solid #0F9D8A;
+  background: transparent;
+  outline: none;
+}
+.trip-name-done {
+  flex: 0 0 auto;
+  min-height: 32px;
+  padding: 0 6px;
+  border: 0;
+  background: transparent;
+  color: #0F9D8A;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+/* 起名建议：挂在胶囊下方的小气泡（fixed，避免被顶栏裁掉；位置由 JS 按胶囊算） */
+.name-pop {
+  position: fixed;
+  z-index: 65;
+  width: max-content;
+  max-width: min(320px, calc(100vw - 24px));
+  padding: 12px 14px 8px;
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 4px 16px rgba(22, 51, 47, 0.14);
+}
+.name-pop[hidden] { display: none; }
+.name-pop::before {
+  content: "";
+  position: absolute;
+  top: -6px;
+  left: 22px;
+  width: 12px;
+  height: 12px;
+  background: #fff;
+  transform: rotate(45deg);
+  box-shadow: -2px -2px 4px rgba(22, 51, 47, 0.05);
+}
+.name-pop-text { margin: 0 0 8px; font-size: 15px; font-weight: 600; color: #16332F; line-height: 1.5; }
+.name-pop-actions { display: flex; align-items: center; gap: 8px; }
+.name-pop-yes { min-height: 40px; padding: 0 16px; border: 0; border-radius: 10px; background: #0F9D8A; color: #fff; font-size: 14px; font-weight: 700; cursor: pointer; }
+.name-pop-self { min-height: 40px; padding: 0 10px; border: 0; background: transparent; color: #5C636E; font-size: 14px; cursor: pointer; }
+@media (max-width: 360px) {
+  .trip-name-text { max-width: 6em; }
+  .topbar .trip-dates { display: none; }
+}
+
+/* ---------- v5.2 导航按钮：「带我去」+「看位置」并排，约 6:4，间距 8px，高 40px ---------- */
+.nav-pair { display: flex; gap: 8px; align-items: stretch; max-width: 420px; }
+.nav-go,
+.nav-look {
+  height: 40px;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+  box-sizing: border-box;
+  min-width: 0;
+}
+.nav-go { flex: 6 1 0; background: #0F9D8A; color: #fff; }
+.nav-look { flex: 4 1 0; background: #fff; color: #16332F; border: 1px solid #D9E2E0; }
+.nav-pair.is-far .nav-look { flex: 0 1 50%; }
+.nav-look-ico { flex: 0 0 16px; }
+.nav-go.is-off { background: #E3E7EA; color: #8A9099; }
+.nav-look.is-off { background: #F4F5F6; color: #8A9099; border-color: #E3E7EA; }
+.nav-line { margin: 4px 0 0; font-size: 12px; color: #8A9099; line-height: 1.4; }
+.nav-fix-link { display: inline-flex; align-items: center; min-height: 44px; margin: 0; padding: 0 4px 0 0; border: 0; background: none; font: inherit; font-size: 13px; font-weight: 600; color: #0F9D8A; cursor: pointer; }
+.card-nav, .detail-nav { margin: 8px 0 4px; }
+
+/* ---------- v5.2 图标选择器：4×2，不横向滚动；52px 圆按钮，下方两个字 ---------- */
+.icon-pick-row { margin: 10px 0 4px; }
+.icon-pick-row[hidden] { display: none; }
+.icon-pick-label { display: block; font-size: 14px; color: #5C636E; margin-bottom: 8px; }
+.icon-picker { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px 4px; justify-items: center; }
+.icon-opt {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+.icon-dot {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  border: 2px solid transparent;
+}
+.icon-dot .ico svg { width: 24px; height: 24px; }
+.icon-opt.is-on .icon-dot { border-color: #16332F; box-shadow: 0 0 0 2px #fff inset; }
+.icon-name { font-size: 13px; color: #16332F; line-height: 1.2; }
+.icon-opt.is-on .icon-name { font-weight: 700; }
+
+/* v5.2 搜索结果：两行，56px；第二行地址「城市 邮编 · 街道」，单行省略 */
+.search-hit { min-height: 56px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center; gap: 2px; }
+.search-hit-name { font-size: 15px; font-weight: 600; color: #16332F; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+.search-hit-addr { display: block; font-size: 12px; color: #6B7A85; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+
+/* ---------- v5.2 搜不到也能加 / 补地址 ---------- */
+.search-fallback { display: flex; flex-direction: column; justify-content: center; gap: 2px; padding: 8px 14px; }
+.sf-main { display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 15px; font-weight: 700; }
+.sf-sub { display: block; font-size: 12px; font-weight: 400; color: #6B7A85; }
+.direct-add { margin-top: 10px; padding: 12px; border-radius: 14px; background: #fff; border: 1px solid #ECEEF1; }
+.direct-add[hidden] { display: none !important; }
+.direct-add-title { margin: 0 0 10px; font-size: 14px; font-weight: 600; color: #16332F; }
+.direct-add-actions { display: flex; gap: 8px; margin-top: 12px; }
+.direct-add-back,
+.direct-add-go { min-height: 44px; border-radius: 12px; font-size: 15px; font-weight: 600; cursor: pointer; }
+.direct-add-back { flex: 0 0 34%; background: #fff; border: 1px solid #D9E2E0; color: #16332F; }
+.direct-add-go { flex: 1; background: #0F9D8A; border: 0; color: #fff; }
+/* 卡片上的「待补地址」：灰点 + 灰字，可以点；视觉上小，点击区 44px */
+.fix-addr {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 4px 0 0;
+  padding: 2px 10px 2px 8px;
+  min-height: 24px;
+  border: 1px solid #D9E2E0;
+  border-radius: 12px;
+  background: #F6F7F8;
+  color: #6B7A85;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.fix-addr::before { content: ""; position: absolute; left: -4px; right: -4px; top: -10px; bottom: -10px; }
+.fix-addr:active { background: #ECEEF1; }
+.fix-dot { width: 8px; height: 8px; border-radius: 50%; background: #B8BEC6; flex: 0 0 8px; }
+.fix-head { margin: 0 0 8px; font-size: 14px; color: #16332F; }
+.fix-head[hidden], .fix-manual[hidden] { display: none !important; }
+.fix-manual { display: block; margin: 10px auto 0; min-height: 44px; padding: 0 12px; background: none; border: 0; color: #0F9D8A; font-size: 14px; font-weight: 600; text-decoration: underline; cursor: pointer; }
+#add-sheet.is-fixing #ai-big-btn,
+#add-sheet.is-fixing #ai-help,
+#add-sheet.is-fixing #manual-fold,
+#add-sheet.is-fixing #search-fallback,
+#add-sheet.is-fixing #direct-add { display: none !important; }
+
+/* v5.2 引导图：圆角 12，宽度铺满面板内容，高度按比例 */
+.ig-img { display: block; width: 100%; height: auto; border-radius: 12px; }
+.ig-illus.ig-illus-img { display: flex; flex-direction: column; flex-wrap: nowrap; gap: 8px; margin-left: 0; }
+.inapp-illus .ig-img { max-width: 100%; }
+
+/* 说明书隐私提醒：14px 线条图标 + 文字（界面不用 emoji） */
+.help-privacy { display: flex; align-items: flex-start; gap: 6px; }
+.help-alert-ico { flex: 0 0 14px; margin-top: 3px; }
+
+/* 没坐标又不知道你在哪：「Google 地图」「高德」两个一样大的按钮 */
+.nav-look.nav-app { flex: 1 1 0; color: #0B6F62; }

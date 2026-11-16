@@ -111,7 +111,11 @@
   function register() {
     if (!("serviceWorker" in navigator)) return;
     if (!(location.protocol === "http:" || location.protocol === "https:")) return;
+    /* v5.2：第一次打开时 sw.js 的 clients.claim() 也会触发 controllerchange。
+       那次不用刷新（页面本来就是最新的），否则新用户一打开就被刷一次，说明会弹两遍。只在「换版本」时刷新。 */
+    var hadController = !!navigator.serviceWorker.controller;
     navigator.serviceWorker.addEventListener("controllerchange", function () {
+      if (!hadController) return;
       if (reloading) return;
       reloading = true;
       window.location.reload();

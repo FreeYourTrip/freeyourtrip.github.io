@@ -31,13 +31,50 @@
     return lng < 72.004 || lng > 137.8347 || lat < 0.8293 || lat > 55.8271;
   }
 
+  /*
+   * v5.2：中国大陆的简化边界多边形（[经度, 纬度]，约 120 个点，精度几十公里，不是官方行政区界线）。
+   * 以前只用包围盒，福冈、首尔、平壤等也落在盒子里；现在先过多边形，再排除港澳台。
+   */
+  var MAINLAND_POLY = [
+    [135.1, 48.4], [133.9, 45.6], [132.9, 45.0], [131.1, 44.8], [130.9, 42.6], [130.6, 42.3], [129.7, 42.4],
+    [128.9, 42.0], [128.0, 41.5], [126.9, 41.8], [125.4, 40.6], [124.3, 39.85], [121.0, 38.6], [122.2, 40.7],
+    [121.1, 40.8], [119.6, 39.9], [118.5, 39.1], [117.7, 38.9], [117.6, 38.4], [119.1, 37.8], [119.9, 37.2],
+    [121.4, 37.6], [122.6, 37.4], [122.7, 37.0], [120.4, 36.0], [119.5, 35.3], [119.5, 34.6], [120.9, 33.4],
+    [121.9, 32.0], [122.0, 31.6], [122.0, 30.9], [122.4, 29.9], [121.9, 28.6], [121.2, 27.8], [120.5, 27.0],
+    [119.9, 26.0], [119.4, 25.2], [118.4, 24.4], [116.9, 23.2], [115.5, 22.7], [114.4, 22.4], [113.6, 22.1],
+    [111.9, 21.5], [110.6, 20.9], [110.2, 20.2], [109.7, 20.9], [109.1, 21.4], [108.3, 21.5], [107.9, 21.5],
+    [106.7, 22.0], [106.6, 22.9], [105.3, 23.3], [103.9, 22.5], [102.4, 22.6], [101.7, 21.1], [101.1, 21.6],
+    [100.1, 21.5], [99.2, 22.1], [99.5, 22.9], [98.6, 24.1], [97.5, 23.9], [97.7, 25.0], [98.7, 25.9],
+    [98.7, 27.6], [97.4, 28.3], [95.4, 29.0], [92.0, 27.8], [89.6, 28.2], [88.8, 27.3], [88.1, 27.9],
+    [86.0, 27.9], [84.1, 28.6], [82.2, 30.1], [81.1, 30.0], [79.0, 31.0], [78.4, 32.6], [78.3, 34.0],
+    [79.0, 35.5], [77.8, 35.5], [76.2, 35.8], [75.0, 36.9], [74.9, 38.4], [73.6, 39.4], [73.9, 39.8],
+    [75.5, 40.6], [76.8, 41.0], [78.1, 41.4], [80.2, 42.1], [80.8, 43.2], [80.4, 44.6], [79.9, 44.9],
+    [81.6, 45.4], [82.5, 45.6], [83.0, 47.2], [85.6, 47.1], [85.8, 48.4], [87.3, 49.1], [88.9, 48.0],
+    [90.4, 47.4], [91.0, 46.0], [90.7, 45.4], [93.5, 44.9], [95.4, 44.3], [96.4, 42.7], [100.0, 42.6],
+    [101.8, 42.5], [104.7, 41.7], [106.9, 42.3], [109.3, 42.4], [110.4, 42.8], [111.9, 43.7], [113.6, 44.8],
+    [116.7, 46.4], [118.4, 46.7], [119.9, 46.7], [118.5, 47.9], [115.6, 47.9], [116.5, 49.9], [117.9, 49.7],
+    [119.9, 51.0], [120.8, 52.4], [122.4, 53.4], [125.0, 53.2], [126.6, 52.0], [127.8, 50.0], [130.6, 48.9],
+    [132.5, 47.7], [134.7, 48.3]
+  ];
+  var HAINAN_POLY = [[108.6, 19.1], [109.5, 18.15], [110.6, 18.4], [111.1, 19.6], [110.6, 20.15], [109.6, 20.05], [108.6, 19.3]];
+
+  function inPoly(lng, lat, poly) {
+    var inside = false;
+    for (var i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+      var xi = poly[i][0], yi = poly[i][1], xj = poly[j][0], yj = poly[j][1];
+      if ((yi > lat) !== (yj > lat) && lng < ((xj - xi) * (lat - yi)) / (yj - yi) + xi) inside = !inside;
+    }
+    return inside;
+  }
+
   /**
-   * 粗略判断是否在中国大陆（用于推荐高德、以及是否做 GCJ-02 转换）。
-   * 使用简单包围盒，并排除香港、澳门、台湾；不是官方行政区多边形。
+   * 是否在中国大陆（用于推荐高德、以及是否做 GCJ-02 转换）。
+   * 简化多边形 + 排除香港、澳门、台湾；日本、韩国、朝鲜、蒙古、越南等都在多边形外。
    */
   function inMainlandChina(lat, lng) {
-    if (typeof lat !== "number" || typeof lng !== "number") return false;
-    if (lng < 73.66 || lng > 135.05 || lat < 18.16 || lat > 53.55) return false;
+    if (typeof lat !== "number" || typeof lng !== "number" || !isFinite(lat) || !isFinite(lng)) return false;
+    if (lng < 73.4 || lng > 135.2 || lat < 18.0 || lat > 53.6) return false;
+    if (!inPoly(lng, lat, MAINLAND_POLY) && !inPoly(lng, lat, HAINAN_POLY)) return false;
     /* 台湾 */
     if (lat >= 20.5 && lat <= 25.4 && lng >= 119.3 && lng <= 122.05) return false;
     /* 香港（北界避开深圳市区） */
@@ -193,28 +230,70 @@
     return !!(p && typeof p.lat === "number" && typeof p.lng === "number");
   }
 
+  /** 显示用的名字（高德导航终点名等）。 */
   function pointLabel(p) {
     if (!p) return "";
     return String(p.name || p.address || p.airport || "");
   }
 
+  /**
+   * v5.2 发给 Google 的地点文字：地址优先。
+   * 只发名字（如「Suite X01」这类楼内单元名）或只发坐标（落在某栋楼的某个单元上）时，Google 公交常算不出路线。
+   * 顺序：地址 → 坐标 lat,lng → 名字（最后才用）。
+   */
+  /** 「Suite X01」「Unit 3」「Flat 2B」「12」这类楼内单元 / 门牌号，不能当地点名 */
+  function isUnitLikeName(name) {
+    var n = String(name || "").trim();
+    if (!n) return false;
+    if (/^(suite|unit|flat|apt\.?|apartment|room|rm\.?|floor|fl\.?|level|block|bldg\.?|building|no\.?|#)\s*[\w-]{1,6}$/i.test(n)) return true;
+    if (/^\d+[a-z]?(\s*[-–]\s*\d+[a-z]?)?$/i.test(n)) return true;
+    return false;
+  }
+
+  function pointQuery(p) {
+    if (!p) return "";
+    var addr = String(p.address || "").trim();
+    var name = String(p.name || "").trim();
+    if (isUnitLikeName(name)) name = "";
+    /* 名字 + 地址，让 Google 自己去找这家店（连锁店不会跑去别的分店）。不用「名字 + 城市」。 */
+    if (addr && name && addr.toLowerCase().indexOf(name.toLowerCase()) === -1) return name + ", " + addr;
+    if (addr) return addr;
+    /* 没有地址：用坐标 */
+    if (hasPointCoords(p)) return formatCoord(p.lat) + "," + formatCoord(p.lng);
+    return name || String(p.airport || "").trim();
+  }
+
+  /** 有没有能导航的信息（地址或坐标；机场代码也算） */
+  function pointUsable(p) {
+    return !!(p && (String(p.address || "").trim() || hasPointCoords(p) || String(p.airport || "").trim()));
+  }
+
   function googleDirUrl(origin, dest, modeId) {
     var info = modeInfo(modeId);
     var url = "https://www.google.com/maps/dir/?api=1";
-    if (origin) {
-      if (hasPointCoords(origin)) {
-        url += "&origin=" + formatCoord(origin.lat) + "," + formatCoord(origin.lng);
-      } else if (pointLabel(origin)) {
-        url += "&origin=" + encodeURIComponent(pointLabel(origin));
-      }
-    }
-    if (hasPointCoords(dest)) {
-      url += "&destination=" + formatCoord(dest.lat) + "," + formatCoord(dest.lng);
-    } else {
-      url += "&destination=" + encodeURIComponent(pointLabel(dest));
-    }
+    /* 不给起点 = 从我现在的位置出发 */
+    if (origin && pointQuery(origin)) url += "&origin=" + encodeURIComponent(pointQuery(origin));
+    url += "&destination=" + encodeURIComponent(pointQuery(dest));
     url += "&travelmode=" + info.google;
     return url;
+  }
+
+  /** v5.2「看位置」：只打开这个地方，不是路线。中国大陆用高德标点 / 搜索，其余用 Google 搜索。 */
+  function buildPlaceLink(p, here) {
+    if (!p) return { href: "#", app: "google" };
+    if (!hasPointCoords(p) && here && hasPointCoords(here) && inMainlandChina(here.lat, here.lng)) {
+      return { app: "amap", href: "https://uri.amap.com/search?keyword=" + encodeURIComponent(pointQuery(p)) + "&callnative=1" };
+    }
+    /* 和导航一样：只有坐标在中国大陆才用高德 */
+    if (hasPointCoords(p) && inMainlandChina(p.lat, p.lng)) {
+      var g = amapCoord(p.lat, p.lng);
+      return {
+        app: "amap",
+        href: "https://uri.amap.com/marker?position=" + formatCoord(g.lng) + "," + formatCoord(g.lat) +
+          "&name=" + encodeURIComponent(pointLabel(p)) + "&callnative=1"
+      };
+    }
+    return { app: "google", href: "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(pointQuery(p)) };
   }
 
   function amapNavUrl(origin, dest, modeId) {
@@ -222,7 +301,7 @@
     if (!hasPointCoords(dest)) {
       return (
         "https://uri.amap.com/search?keyword=" +
-        encodeURIComponent(pointLabel(dest)) +
+        encodeURIComponent(pointQuery(dest) || pointLabel(dest)) +
         "&callnative=1"
       );
     }
@@ -252,14 +331,25 @@
     return url;
   }
 
-  function recommendFlexible(origin, dest) {
-    if (origin && hasPointCoords(origin) && hasPointCoords(dest)) {
-      return recommendApp(origin, dest);
-    }
-    if (hasPointCoords(dest) && inMainlandChina(dest.lat, dest.lng)) return "amap";
-    var text = pointLabel(dest) || pointLabel(origin);
-    if (looksChineseMainlandQuery(text)) return "amap";
-    return "google";
+  /*
+   * v5.2：只有「终点有坐标且在中国大陆」（有起点时起点也要在大陆）才用高德；没有坐标一律 Google，
+   * 不再看名字里有没有汉字（以前「大阪」「东京」「首尔」没坐标时会因为是汉字而打开高德）。
+   */
+  /**
+   * v5.2 没坐标的地点怎么导航：知道你在哪（内存里的位置）→ "auto"，自动选高德或 Google；
+   * 不知道 → "choose"，给「Google 地图」「高德」两个按钮 + 提示。有坐标的地点总是 "auto"。
+   */
+  function navChoice(dest, here) {
+    if (hasPointCoords(dest)) return "auto";
+    return here && hasPointCoords(here) ? "auto" : "choose";
+  }
+
+  function recommendFlexible(origin, dest, here) {
+    /* 终点没坐标：看「你现在在哪」（只用内存里已有的位置，不主动定位）；在中国大陆选高德，其他地方 / 不知道选 Google */
+    if (!hasPointCoords(dest)) return here && hasPointCoords(here) && inMainlandChina(here.lat, here.lng) ? "amap" : "google";
+    if (!inMainlandChina(dest.lat, dest.lng)) return "google";
+    if (origin && hasPointCoords(origin) && !inMainlandChina(origin.lat, origin.lng)) return "google";
+    return "amap";
   }
 
   /** 带我去 / 从我的位置出发：可只有终点；无坐标时用名称或地址文本。 */
@@ -268,8 +358,8 @@
   }
 
   /** 两点连接；任一点缺坐标时退回文本导航。 */
-  function buildFlexibleNavLinks(origin, dest, modeId) {
-    var rec = recommendFlexible(origin, dest);
+  function buildFlexibleNavLinks(origin, dest, modeId, here) {
+    var rec = recommendFlexible(origin, dest, here);
     var google = googleDirUrl(origin, dest, modeId);
     var amap = amapNavUrl(origin, dest, modeId);
     return {
@@ -299,6 +389,8 @@
     inMainlandChina: inMainlandChina,
     wgs84ToGcj02: wgs84ToGcj02,
     gcj02ToWgs84: gcj02ToWgs84,
+    navChoice: navChoice,
+    recommendFlexible: recommendFlexible,
     amapCoord: amapCoord,
     looksChineseMainlandQuery: looksChineseMainlandQuery,
     hasPointCoords: hasPointCoords,
@@ -309,7 +401,11 @@
     buildAmapUrl: buildAmapUrl,
     recommendApp: recommendApp,
     buildNavLinks: buildNavLinks,
-    haversineKm: haversineKm
+    haversineKm: haversineKm,
+    pointQuery: pointQuery,
+    isUnitLikeName: isUnitLikeName,
+    pointUsable: pointUsable,
+    buildPlaceLink: buildPlaceLink
   };
 
   root.GeoUtil = api;

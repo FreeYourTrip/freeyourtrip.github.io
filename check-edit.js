@@ -173,17 +173,28 @@ check("flight edit shifts arrival date with departure date", function () {
   assert.strictEqual(res.item.lat, 1);
 });
 
-check("UI wiring: help text, undo 10s, no 无法恢复, sw v14 caches item-edit.js", function () {
+check("UI wiring: help text, undo 10s, no 无法恢复, sw v15 caches item-edit.js", function () {
   const tl = fs.readFileSync(__dirname + "/timeline.js", "utf8");
   const html = fs.readFileSync(__dirname + "/index.html", "utf8");
   const sw = fs.readFileSync(__dirname + "/sw.js", "utf8");
-  assert.ok(tl.indexOf("卡片右边的“删除”可以删掉这一项，点开卡片还能修改；列表右上角“清空全部”一次删光。删错了 10 秒内点底部的“撤销”就能恢复。") !== -1);
-  assert.strictEqual(ItemEdit.UNDO_MS, 10000);
-  assert.ok(tl.indexOf("删除后 10 秒内可以撤销。") !== -1);
+  /* 说明书里不写秒数：单条 5 秒、清空 10 秒，写死一个数会错（IT老板 最终意见） */
+  assert.ok(tl.indexOf('{ key: "edit", icon: "trash", title: "改和删", text: "点开卡片就能改。删错了，马上点底部的「撤销」就能恢复" }') !== -1);
+  const helpSrc = tl.slice(tl.indexOf("var HELP_TIERS"), tl.indexOf("function helpIllu"));
+  assert.ok(!/\d+ ?秒/.test(helpSrc), "help never states a fixed number of seconds");
+  assert.strictEqual(ItemEdit.UNDO_MS, 5000, "single delete: 5 s");
+  assert.strictEqual(ItemEdit.CLEAR_UNDO_MS, 10000, "清空全部: 10 s");
+  assert.ok(/showToast\("已删除", [\s\S]*?\}, UNDO_MS\);/.test(tl), "single delete uses 5 s");
+  assert.ok(/showToast\("已清空", [\s\S]*?\}, CLEAR_UNDO_MS\);/.test(tl), "clear-all uses 10 s");
+  assert.ok(tl.indexOf("删除后 5 秒内可以撤销。") !== -1 && tl.indexOf("建议先备份（在“设置”里点“完整备份”导出文件）。删除后 10 秒内可以撤销。") !== -1);
+  assert.ok(/<button type="button" class="toast-close" id="toast-close" aria-label="关闭"/.test(html), "toast ✕");
+  const css = fs.readFileSync(__dirname + "/styles.css", "utf8");
+  assert.ok(/\.toast-close \{[^}]*width: 44px;[^}]*height: 44px;/.test(css), "✕ tap target 44px");
+  assert.ok(tl.indexOf('document.addEventListener("pointerdown", toastOutside, true)') !== -1 && tl.indexOf('window.addEventListener("scroll", toastScroll, true)') !== -1, "tap elsewhere / scroll closes early");
+  assert.ok(!/progress|hold to pause|长按暂停/.test(tl.slice(tl.indexOf("function showToast"), tl.indexOf("function showToast") + 1500)), "no progress bar / no hold-to-pause");
   assert.ok(tl.indexOf("确定删除这一项吗？") !== -1);
   assert.ok(tl.indexOf("window.confirm") === -1);
   assert.ok((tl + html).indexOf("无法恢复") === -1);
-  assert.ok(sw.indexOf('"xingcheng-map-shell-v14"') !== -1);
+  assert.ok(sw.indexOf('"xingcheng-map-shell-v15"') !== -1);
   assert.ok(sw.indexOf("./item-edit.js") !== -1);
   assert.ok(html.indexOf('src="./item-edit.js"') !== -1);
   assert.ok(html.indexOf('id="clear-all-btn"') !== -1);

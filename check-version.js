@@ -28,9 +28,9 @@ function tapOk(store) {
   store[V.LAST_SEEN_KEY] = V.APP_VERSION;
 }
 
-check("version is v5, defined once", function () {
-  assert.strictEqual(V.APP_VERSION, "v5.1");
-  assert.strictEqual(V.versionLabel(), "当前版本 v5.1 · 2026-11-16");
+check("version is v5.2, defined once", function () {
+  assert.strictEqual(V.APP_VERSION, "v5.2");
+  assert.strictEqual(V.versionLabel(), "当前版本 v5.2 · 2026-11-16");
   const files = ["timeline.js", "index.html", "update-banner.js", "item-edit.js", "app.js"];
   files.forEach((f) => {
     const s = fs.readFileSync(__dirname + "/" + f, "utf8");
@@ -52,7 +52,7 @@ check("compareVersion", function () {
 check("first-time user → help only, version recorded silently, never the card", function () {
   const store = {};
   assert.strictEqual(openApp(store, { hasTrips: false }), "help");
-  assert.strictEqual(store[V.LAST_SEEN_KEY], "v5.1");
+  assert.strictEqual(store[V.LAST_SEEN_KEY], "v5.2");
   assert.strictEqual(openApp(store, { hasTrips: true }), "help", "next open: still help (until 不再自动弹出), no card");
   assert.strictEqual(openApp(store, { hasTrips: true, helpHidden: true }), "none");
 });
@@ -78,27 +78,40 @@ check("v4 user with no trips but 不再自动弹出 ticked → card (not first-t
   assert.strictEqual(openApp({}, { hasTrips: false, helpHidden: true }), "announce");
 });
 
-check("someone who already saw v5 gets the v5.1 card once", function () {
+check("someone who already saw v5 or v5.1 gets the v5.2 card once", function () {
   const store = { [V.LAST_SEEN_KEY]: "v5" };
   assert.strictEqual(openApp(store, { hasTrips: true, helpHidden: true }), "announce");
   tapOk(store);
-  assert.strictEqual(store[V.LAST_SEEN_KEY], "v5.1");
+  assert.strictEqual(store[V.LAST_SEEN_KEY], "v5.2");
   assert.strictEqual(openApp(store, { hasTrips: true, helpHidden: true }), "none");
   assert.strictEqual(openApp({ [V.LAST_SEEN_KEY]: "v5" }, { hasTrips: false, helpHidden: false }), "announce", "even without trips, a v5 viewer is a returning user");
+  assert.strictEqual(openApp({ [V.LAST_SEEN_KEY]: "v5.1" }, { hasTrips: true, helpHidden: true }), "announce", "v5.1 viewer gets the v5.2 card");
 });
 
-check("v5.1 announcement text exactly as approved", function () {
-  assert.strictEqual(V.ANNOUNCEMENT.title, "新版本 v5.1 来啦");
+check("v5.2 announcement and changelog exactly as the copywriter wrote them; v5.1 entry untouched", function () {
+  assert.strictEqual(V.ANNOUNCEMENT.title, "v5.2 更新");
   assert.deepStrictEqual(V.ANNOUNCEMENT.bullets, [
-    "日期怎么写都能认，认不出的会标黄让你改",
-    "地图上能一键定位到自己",
-    "设置里分开了「分享我的行程」和「推荐这个工具」，不会再点错",
-    "窄屏手机上排版更整齐；放到 iPhone 桌面的，打开时有启动画面"
+    "放到桌面更简单，跟着提示做就能像 App 一样点开",
+    "截图交给 AI，3 步排好行程",
+    "导航更准，大阪、东京这类地方不会再误开高德",
+    "搜不到的地点也能直接加，图标可以自己选"
   ]);
+  const css = fs.readFileSync(__dirname + "/styles.css", "utf8");
+  assert.ok(/\.announce-list li::before \{[^}]*background: #0F9D8A;/.test(css) && /\.announce-ok \{[^}]*background: #0F9D8A;/.test(css), "teal bullets and button");
+  assert.ok(!V.ANNOUNCEMENT.placeholder, "no longer a placeholder");
+  assert.deepStrictEqual(V.CHANGELOG[0], {
+    version: "v5.2",
+    date: "2026-11-16",
+    lines: [
+      "新增：放到桌面的引导、分级说明书、截图交给 AI 的 3 步向导、行程起名提示、自选图标、搜不到的地点也能先加上，之后点『待补地址』补上位置",
+      "修复：导航时店名和地址一起传；没坐标的地点按你当前所在位置选高德或 Google；搜索结果会显示地址，搜错了一眼就能看出来",
+      "调整：『带我去』和『看位置』挪进卡片里，点开卡片就能看到；删除单条后，撤销提示缩短到 5 秒"
+    ]
+  });
   assert.strictEqual(V.ANNOUNCEMENT.tip, "更新不会删除你的行程。如果看到的还是旧版：把网页彻底关掉再打开。放在桌面的，就从后台划掉，再点图标打开。");
   const tl = fs.readFileSync(__dirname + "/timeline.js", "utf8");
   assert.ok(tl.indexOf("a.bullets.slice(0, 5)") !== -1, "all bullets rendered");
-  assert.deepStrictEqual(V.CHANGELOG[0].lines, [
+  assert.deepStrictEqual(V.CHANGELOG[1].lines, [
     "日期写法不标准也能自动认，认不出的标黄让你确认",
     "地图新增定位按钮；设置里分成「分享我的行程」和「推荐这个工具」",
     "窄屏排版和日期条标签优化，补齐各款 iPhone 的启动画面"
@@ -112,16 +125,17 @@ check("next release re-announces", function () {
 
 check("announcement content: title, ≤5 bullets, refresh tip always present", function () {
   const a = V.ANNOUNCEMENT;
-  assert.strictEqual(a.title, "新版本 " + V.APP_VERSION + " 来啦");
+  assert.ok(a.title.indexOf(V.APP_VERSION) !== -1, "title names the version");
   assert.ok(a.bullets.length >= 1 && a.bullets.length <= 5);
   assert.strictEqual(a.tip, "更新不会删除你的行程。如果看到的还是旧版：把网页彻底关掉再打开。放在桌面的，就从后台划掉，再点图标打开。");
   const html = fs.readFileSync(__dirname + "/index.html", "utf8");
   assert.ok(html.indexOf('id="announce-tip"') !== -1 && html.indexOf('id="announce-ok"') !== -1);
-  assert.ok(/<svg class="announce-illu"/.test(html), "inline SVG illustration");
+  assert.ok(/<img class="announce-illu" src="\.\/icons\/icon-180\.png" width="64" height="64"/.test(html), "app icon instead of the old SVG illustration");
+  assert.ok(html.indexOf('<svg class="announce-illu"') === -1);
 });
 
-check("changelog v1–v5.1, newest first = APP_VERSION, 1–3 lines each, no hashes or private data", function () {
-  assert.deepStrictEqual(V.CHANGELOG.map((v) => v.version), ["v5.1", "v5", "v4", "v3", "v2", "v1"]);
+check("changelog v1–v5.2, newest first = APP_VERSION, 1–3 lines each, no hashes or private data", function () {
+  assert.deepStrictEqual(V.CHANGELOG.map((v) => v.version), ["v5.2", "v5.1", "v5", "v4", "v3", "v2", "v1"]);
   assert.strictEqual(V.CHANGELOG[0].version, V.APP_VERSION);
   V.CHANGELOG.forEach((v) => {
     assert.ok(v.lines.length >= 1 && v.lines.length <= 3, v.version);
@@ -141,7 +155,7 @@ check("settings shows version label and 更新记录 row; sw caches version.js",
   assert.ok(settings.indexOf("更新记录") !== -1);
   assert.ok(tl.indexOf("AppVersion.versionLabel()") !== -1);
   assert.ok(html.indexOf('src="./version.js"') !== -1 && html.indexOf('src="./version.js"') < html.indexOf('src="./timeline.js"'));
-  assert.ok(sw.indexOf('"./version.js"') !== -1 && sw.indexOf('"xingcheng-map-shell-v14"') !== -1);
+  assert.ok(sw.indexOf('"./version.js"') !== -1 && sw.indexOf('"xingcheng-map-shell-v15"') !== -1);
   assert.ok(V.LAST_SEEN_KEY.indexOf("wishlist-map") === 0, "清空本机数据 resets it");
 });
 
@@ -164,6 +178,16 @@ check("rename: FreeYourTrip short name, Free Your Trip everywhere else, top bar 
   assert.ok(bk.indexOf('payload.app !== "行程地图"') !== -1, "file format id unchanged so old backups still import");
   const head = fs.readFileSync(__dirname + "/DEVLOG.md", "utf8").split("\n")[0];
   assert.ok(head.indexOf("Free Your Trip") !== -1, head);
+});
+
+check("AI prompt (v5.2): year never invented, several screenshots at once, one row per flight leg and per hotel stay", function () {
+  const P = require("./ai-prompt.js").TEXT;
+  assert.ok(P.indexOf("8. 截图里看不出年份、从下单日期等也推不出来时，日期按截图原样写，不要自己编一个年份") !== -1);
+  assert.ok(P.indexOf("9. 我可能一次发好几张截图，请全部整理在一起") !== -1);
+  assert.ok(P.indexOf("10. 每段航班单独一行（转机就是两行）；酒店每次入住只写一行「入住日期 ~ 退房日期」，住 3 晚也是一行，中途换酒店才另起一行") !== -1);
+  assert.ok(P.indexOf("11. 只输出这些行，放在一个代码块里，不要加任何解释") !== -1);
+  assert.ok(!/每晚|每一晚/.test(P), "hotel = one row per stay, never per night");
+  assert.ok(!/https?:\/\//.test(P), "no links in the prompt");
 });
 
 if (failures) {

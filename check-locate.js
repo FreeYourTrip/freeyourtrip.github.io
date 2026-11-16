@@ -90,12 +90,12 @@ check("wiring: button markup, aria-label, only on tap, never on load, script + p
   const tl = fs.readFileSync(__dirname + "/timeline.js", "utf8");
   assert.ok(/<button type="button" class="locate-btn" id="locate-btn" aria-label="定位到我"/.test(html));
   assert.ok(html.indexOf('src="./locate.js"') !== -1 && sw.indexOf('"./locate.js"') !== -1);
-  assert.ok(sw.indexOf('"xingcheng-map-shell-v14"') !== -1);
+  assert.ok(sw.indexOf('"xingcheng-map-shell-v15"') !== -1);
   assert.strictEqual((src.match(/getCurrentPosition\(/g) || []).length, 1, "exactly one call site");
   assert.ok(/b\.addEventListener\("click", onTap\)/.test(src), "requested only from the click handler");
   const bindFn = src.slice(src.indexOf("function bind()"));
   assert.ok(bindFn.indexOf("requestPosition") === -1, "bind() does not request on load");
-  assert.ok(tl.indexOf("地图右下角的定位按钮可以显示你现在在哪（位置只在你手机上用，不保存不上传）") !== -1);
+  assert.ok(tl.indexOf("点顶部的地图图标，所有地点一眼看全。右下角的按钮能定位到你自己") !== -1, "help line (v5.2 copywriter)");
   assert.ok(tl.indexOf("getMap: function") !== -1 && tl.indexOf("mapTileKind: function") !== -1);
 });
 
@@ -108,8 +108,8 @@ check("button CSS: 44×44 white circle, shadow, states, reduced motion; dot + ac
   assert.ok(/@keyframes locate-pulse \{ from \{ opacity: 1; \} to \{ opacity: 0\.4; \} \}/.test(css));
   assert.ok(/prefers-reduced-motion: reduce\) \{\s*\.locate-btn\.is-locating \.locate-ico \{ animation: none; \}/.test(css));
   assert.ok(/\.locate-btn\.is-denied \{ color: #8A9099; \}/.test(css));
-  assert.ok(/\.me-dot \{[^}]*width: 14px;[^}]*background: #4C8DFF;[^}]*border: 3px solid #fff;/.test(css));
-  assert.ok(src.indexOf('stroke: false, fillColor: "#4C8DFF", fillOpacity: 0.12') !== -1);
+  assert.ok(/\.me-dot \{[^}]*width: 14px;[^}]*background: #4C8DFF;[^}]*border: 2px solid #fff;/.test(css));
+  assert.ok(src.indexOf('stroke: false, fillColor: "#4C8DFF", fillOpacity: 0.15') !== -1);
   assert.ok(src.indexOf('map.once("dragstart"') !== -1, "dragging returns to outline");
 });
 

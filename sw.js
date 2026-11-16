@@ -1,5 +1,5 @@
 /* 行程地图：缓存应用外壳。全部使用相对路径，可部署在 GitHub Pages 子目录（如 /repo-name/）。 */
-var CACHE = "xingcheng-map-shell-v14";
+var CACHE = "xingcheng-map-shell-v15";
 var SHELL = [
   "./",
   "./index.html",
@@ -20,17 +20,20 @@ var SHELL = [
   "./import.js",
   "./guess-type.js",
   "./install-env.js",
+  "./install-guide.js",
+  "./guide/01-wechat.webp",
+  "./guide/02-safari-classic-share-focus.webp",
+  "./guide/03-safari-ios26-more-focus.webp",
+  "./guide/04-share-sheet-add-focus.webp",
+  "./guide/05-add-confirm-focus.webp",
+  "./guide/ipad-share.webp",
+  "./trip-name.js",
   "./ai-prompt.js",
   "./backup.js",
   "./app.js",
   "./timeline.js",
   "./vendor/leaflet.css",
   "./vendor/leaflet.js",
-  "./vendor/images/marker-icon.png",
-  "./vendor/images/marker-icon-2x.png",
-  "./vendor/images/marker-shadow.png",
-  "./vendor/images/layers.png",
-  "./vendor/images/layers-2x.png",
   "./manifest.webmanifest",
   "./icons/icon-16.png",
   "./icons/icon-32.png",

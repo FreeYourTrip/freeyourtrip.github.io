@@ -66,16 +66,66 @@
     heart:
       '<path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/>',
     help:
-      '<circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 1 1 3.4 2.3c-.8.4-1.4 1-1.4 1.9V14"/><path d="M12 17h.01"/>'
+      '<circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 1 1 3.4 2.3c-.8.4-1.4 1-1.4 1.9V14"/><path d="M12 17h.01"/>',
+    /* v5.2 自选图标：同一颜色组里的图标形状各不相同 */
+    nature:
+      '<path d="M3 20l6-10 4 6 2-3 6 7z"/><circle cx="17" cy="6" r="2"/>',
+    dessert:
+      '<path d="M8 11a4 4 0 1 1 8 0"/><path d="M7 11h10l-5 10z"/>',
+    shop:
+      '<path d="M5 8h14l-1 12H6z"/><path d="M9 8V6a3 3 0 0 1 6 0v2"/>',
+    train:
+      '<rect x="6" y="3" width="12" height="14" rx="3"/><path d="M6 11h12"/><path d="M9 14h.01M15 14h.01"/><path d="M8 21l2-4M16 21l-2-4"/>',
+    pin:
+      '<path d="M12 21s6-5.6 6-10.3A6 6 0 0 0 6 10.7C6 15.4 12 21 12 21z"/><circle cx="12" cy="10.5" r="2.2"/>'
   };
 
+  /* v5.2 颜色只在这里配一次（IT老板 定稿，按组锁定）：
+     景点、自然 绿；餐厅、甜品 橙；购物 粉；酒店 紫；交通 石板灰；其他 炭黑图标 + 沙色底 */
+  var PALETTE = {
+    green: { color: "#27AE60", tint: "#E3F7EA" },
+    orange: { color: "#F2994A", tint: "#FDEDD9" },
+    pink: { color: "#E26D9B", tint: "#FBE6EE" },
+    purple: { color: "#8E5CF7", tint: "#F1E9FE" },
+    slate: { color: "#6B7A8F", tint: "#E8ECF0" },
+    charcoal: { color: "#2B2B2B", tint: "#EEE7DA" }
+  };
+
+  /* 图标选择器：4×2，顺序即显示顺序；标签都是两个字 */
+  var CATEGORIES = [
+    { key: "sight", label: "景点", icon: "attraction", group: "green" },
+    { key: "nature", label: "自然", icon: "nature", group: "green" },
+    { key: "food", label: "餐厅", icon: "restaurant", group: "orange" },
+    { key: "dessert", label: "甜品", icon: "dessert", group: "orange" },
+    { key: "shop", label: "购物", icon: "shop", group: "pink" },
+    { key: "hotel", label: "酒店", icon: "hotel", group: "purple" },
+    { key: "transport", label: "交通", icon: "train", group: "slate" },
+    { key: "other", label: "其他", icon: "pin", group: "charcoal" }
+  ];
+
+  function categoryMeta(key) {
+    for (var i = 0; i < CATEGORIES.length; i++) {
+      var c = CATEGORIES[i];
+      if (c.key === key) {
+        var p = PALETTE[c.group];
+        return { icon: c.icon, color: p.color, tint: p.tint, label: c.label, category: c.key };
+      }
+    }
+    return null;
+  }
+
+  function fromPalette(icon, group, label) {
+    return { icon: icon, color: PALETTE[group].color, tint: PALETTE[group].tint, label: label };
+  }
+
+  /* 没自选图标时，按类型给默认图标；颜色同样取自 PALETTE */
   var TYPE_META = {
-    flight: { icon: "flight", color: "#2F80ED", tint: "#E3F0FD", label: "机票" },
-    hotel: { icon: "hotel", color: "#8E5CF7", tint: "#F1E9FE", label: "酒店" },
-    restaurant: { icon: "restaurant", color: "#F2994A", tint: "#FDEDD9", label: "餐厅" },
-    attraction: { icon: "attraction", color: "#27AE60", tint: "#E3F7EA", label: "景点" },
-    street: { icon: "street", color: "#6B7A8F", tint: "#E8ECF0", label: "街道" },
-    place: { icon: "attraction", color: "#27AE60", tint: "#E3F7EA", label: "地点" }
+    flight: fromPalette("flight", "slate", "机票"),
+    hotel: fromPalette("hotel", "purple", "酒店"),
+    restaurant: fromPalette("restaurant", "orange", "餐厅"),
+    attraction: fromPalette("attraction", "green", "景点"),
+    street: fromPalette("street", "slate", "街道"),
+    place: fromPalette("attraction", "green", "地点")
   };
 
   function normalizeSubtype(s) {
@@ -98,6 +148,10 @@
   }
 
   function typeMeta(itemOrKind) {
+    if (itemOrKind && typeof itemOrKind === "object" && itemOrKind.icon && itemOrKind.type !== "flight") {
+      var picked = categoryMeta(itemOrKind.icon);
+      if (picked) return picked;
+    }
     var kind = typeof itemOrKind === "string" ? itemOrKind : typeKind(itemOrKind);
     return TYPE_META[kind] || TYPE_META.place;
   }
@@ -126,6 +180,9 @@
     typeKind: typeKind,
     typeMeta: typeMeta,
     TYPE_META: TYPE_META,
+    PALETTE: PALETTE,
+    CATEGORIES: CATEGORIES,
+    categoryMeta: categoryMeta,
     svg: function (name) {
       return PATHS[name] ? svg(PATHS[name]) : "";
     }

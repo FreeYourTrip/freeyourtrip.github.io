@@ -60,6 +60,8 @@ python3 -m http.server 8080 --directory .
 | `ai-prompt.js` | 「复制给 AI 的话」的提示词正文 |
 | `guess-type.js` | 按 OSM class/type 猜测地点类型 |
 | `install-env.js` | 判断独立窗口 / iOS Safari / 微信等，决定「添加到桌面」提示 |
+| `install-guide.js` | v5.2「放到手机桌面」引导：选哪种引导（微信遮罩 / iOS 底部说明 / 安卓 / 电脑）、何时自动弹、全部文案；`SHOW_SEPARATE_STORAGE_NOTE` 开关（有行程时的橙色提醒，待真机确认） |
+| `trip-name.js` | v5.2 行程名胶囊与起名建议：默认名判断、日期范围、城市来源（去程到达机场 → 酒店地址 → 只用日期） |
 | `item-edit.js` | 单条删除 / 撤销 / 清空全部 / 修改的纯函数 |
 | `locate.js` | 地图「定位到我」按钮：只在点按钮时取一次位置，位置只放在内存里，不保存、不上传、不进分享 / 备份；高德（GCJ-02）底图下大陆坐标先转换 |
 | `recommend.js` | 设置里的「推荐这个工具」：系统分享（`navigator.share`）或复制介绍文字和网址，不含任何行程数据 |
@@ -71,7 +73,7 @@ python3 -m http.server 8080 --directory .
 | `manifest.webmanifest` / `sw.js` / `icons/` | 可安装到手机主屏幕（相对路径，根路径或子目录都能用）。`icons/` 为 v5 新图标：16、32、120、152、167、180、192、512 和 `icon-maskable-512.png`，换图时保持文件名不变 |
 | `cover-1200x630.png` / `splash-*.png` | 链接预览封面（og:image）和 iPhone 启动图（9 张：1290×2796、1179×2556、1170×2532、1284×2778、1125×2436、1242×2688、828×1792、1080×2340、750×1334，按 device-width / device-height / 像素比 / 竖屏匹配），都不进预缓存 |
 | `导入格式说明.txt` | 导入格式说明（推荐管道格式） |
-| `check.js` / `check-import.js` / `check-privacy.js` / `check-legs.js` / `check-guess-type.js` / `check-install-env.js` / `check-edit.js` / `check-update.js` / `check-version.js` / `check-calendar.js` / `check-patch.js` / `check-pending.js` / `check-locate.js` | 可选的离线校验 |
+| `check.js` / `check-import.js` / `check-privacy.js` / `check-legs.js` / `check-guess-type.js` / `check-install-env.js` / `check-edit.js` / `check-update.js` / `check-version.js` / `check-calendar.js` / `check-patch.js` / `check-pending.js` / `check-locate.js` / `check-install-guide.js` / `check-name-suggest.js` / `check-import-tolerant.js` / `check-search-pick.js` / `check-v52-ui.js` / `check-fix-address.js` / `check-size.js` | 可选的离线校验（`check-size.js`：打印预缓存总量和比 `size-baseline.json` 的增减，超过 1.5 MB 或用了 png/jpg 图片只警告） |
 
 ## 心愿清单字段（`DESTINATIONS`）
 
@@ -148,7 +150,7 @@ flightFromLondon: {
 4. 高德返回的是 GCJ-02，入库前**只转换一次**成 WGS-84。导航里发给高德的大陆坐标会再从存储的 WGS-84 转回 GCJ-02。不要对已经入库存成 WGS-84 的点再转一次。
 5. 两项都为空时不会加载任何高德脚本，行为与只用 Nominatim 相同。出错、超时或配额用尽时回退 Nominatim / OSM，页面不会因此中断。底图仍用 Leaflet + OpenStreetMap 图块。
 
-查找失败或超过 8 秒时，条目仍会留下，并提示「暂时找不到位置，不影响「带我去」导航」。「带我去」在没有坐标时会改用名称或地址文本打开地图。
+查找失败或超过 8 秒时，条目仍会留下，并提示「暂时找不到位置，可以先直接添加，之后再补地址」。没有坐标的条目卡片上显示「待补地址」，点它可以搜索补上位置；有地址没坐标时导航用名称 + 地址文本。
 
 本页没有 Content-Security-Policy 元标签。若自行加上 CSP，需要放行 `https://webapi.amap.com`（以及其回源与图块域名），否则可选的高德脚本会被挡住。
 

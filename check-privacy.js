@@ -126,7 +126,21 @@ check("locate: position stays in memory only — never stored, sent, or exported
   });
   const tl = fs.readFileSync(__dirname + "/timeline.js", "utf8");
   const bk = fs.readFileSync(__dirname + "/backup.js", "utf8");
-  assert.ok(tl.indexOf("LocateMe") === -1 && tl.indexOf("geolocation") === -1, "timeline.js never touches the position");
+  assert.ok(tl.indexOf("geolocation") === -1, "timeline.js never requests the position");
+  /* v5.2：timeline.js 只在 hereInMemory() 里读内存里的位置，用来选高德还是 Google；不存、不放进链接 */
+  const hereFn = tl.slice(tl.indexOf("function hereInMemory"), tl.indexOf("function hereInMemory") + 300);
+  /* LocateMe 只在两处出现：hereInMemory() 读内存位置；展开没坐标卡片时 warmIfGranted（权限已允许才取，不弹窗） */
+  assert.ok(/window\.LocateMe && LocateMe\.warmIfGranted\) \{\s*LocateMe\.warmIfGranted\(renderList\);/.test(tl));
+  assert.strictEqual(tl.split("LocateMe").length - 1, hereFn.split("LocateMe").length - 1 + 3, "LocateMe only in hereInMemory() and the warm-up on expand");
+  const loc = fs.readFileSync(__dirname + "/locate.js", "utf8");
+  const warm = loc.slice(loc.indexOf("function warmIfGranted"), loc.indexOf("function warmIfGranted") + 700);
+  assert.ok(/st\.state !== "granted"\) return;/.test(warm), "only when permission is already granted (no prompt)");
+  assert.ok(!/localStorage|sessionStorage|fetch\(/.test(warm), "never stored or sent");
+  const G = require("./geo.js");
+  const here = { lat: 31.234567, lng: 121.476543 };
+  const l = G.buildFlexibleNavLinks(null, { name: "示例", address: "上海市示例路 1 号" }, "公共交通", here);
+  const p = G.buildPlaceLink({ name: "示例", address: "上海市示例路 1 号" }, here);
+  [l.href, l.google, l.amap, p.href].forEach((u) => assert.ok(u.indexOf("31.234567") === -1 && u.indexOf("121.476543") === -1, "your position never goes into a link: " + u));
   assert.ok(bk.indexOf("LocateMe") === -1 && bk.indexOf("geolocation") === -1, "backup/share never include the position");
   const ex = fs.readFileSync(__dirname + "/timeline.js", "utf8").match(/function exportState\(\)[\s\S]*?\n  \}/);
   assert.ok(ex && !/position|coords|locate/i.test(ex[0]), "exportState has no position fields");
@@ -134,8 +148,48 @@ check("locate: position stays in memory only — never stored, sent, or exported
   assert.ok(!/geolocation|getCurrentPosition/.test(html), "no geolocation call on page load");
 });
 
-if (failures) {
-  console.log("\n" + failures + " failure(s)");
-  process.exit(1);
-}
-console.log("\nAll privacy checks passed.");
+check("area bias: viewbox numbers have at most 1 decimal; built only from trip items, never the user's location", function () {
+  const fs = require("fs");
+  const exact = { lat: 35.003712, lng: 135.778845 };
+  const box = Geocode.biasArea(exact);
+  box.viewbox.split(",").forEach((n) => assert.ok(/^-?\d+(\.\d)?$/.test(n), "1 decimal max: " + n));
+  assert.ok(box.viewbox.indexOf("35.0037") === -1 && box.viewbox.indexOf("135.7788") === -1, "exact hotel coords never sent");
+  [[51.50729, -0.12759], [-33.86882, 151.20929], [0.04, -0.04]].forEach(([lat, lng]) => {
+    Geocode.biasArea({ lat, lng }).viewbox.split(",").forEach((n) => assert.ok(/^-?\d+(\.\d)?$/.test(n), n));
+  });
+  const geo = fs.readFileSync(__dirname + "/geocode.js", "utf8");
+  assert.ok(!/LocateMe|geolocation|lastPoint|hereInMemory/.test(geo), "geocode.js never reads the user's position");
+  const tl = fs.readFileSync(__dirname + "/timeline.js", "utf8");
+  const args = tl.slice(tl.indexOf("function searchDayArgs"), tl.indexOf("function openFixAddress"));
+  assert.ok(args.length > 100 && !/LocateMe|hereInMemory|lastPoint|geolocation/.test(args), "the bias comes from trip items only");
+  assert.ok(/TripName\.dayArea\(items, day, opts\)/.test(args));
+  const tn = fs.readFileSync(__dirname + "/trip-name.js", "utf8");
+  assert.ok(!/LocateMe|geolocation|lastPoint/.test(tn));
+});
+
+(async function () {
+  /* real request URL with a fake fetch: rounded viewbox, bounded=0, no exact coords */
+  const urls = [];
+  globalThis.localStorage = { getItem: () => null, setItem: () => {}, removeItem: () => {} };
+  globalThis.fetch = (u) => { urls.push(u); return Promise.resolve({ ok: true, json: () => Promise.resolve([]) }); };
+  try {
+    await Geocode.nominatimSearch("示例小店 Kyoto", { bias: { lat: 35.003712, lng: 135.778845 } });
+    const u = urls[0] || "";
+    const vb = (u.match(/[?&]viewbox=([^&]*)/) || [])[1] || "";
+    assert.strictEqual(decodeURIComponent(vb), "135.6,35.2,136.0,34.8");
+    assert.ok(/[?&]bounded=0(&|$)/.test(u), "bias only prefers, never limits");
+    assert.ok(!/35\.00|135\.77|\d\.\d{2}/.test(decodeURIComponent(u.replace(/^[^?]*\?/, "").replace(/q=[^&]*/, ""))), "no value with 2+ decimals in the params");
+    await Geocode.nominatimSearch("示例小店");
+    assert.ok(urls[1] && urls[1].indexOf("viewbox") === -1, "no bias → no viewbox");
+    console.log("PASS  Nominatim request: rounded viewbox + bounded=0, nothing more precise");
+  } catch (err) {
+    failures += 1;
+    console.log("FAIL  Nominatim request bias");
+    console.log("      " + (err && err.stack ? err.stack : err));
+  }
+  if (failures) {
+    console.log("\n" + failures + " failure(s)");
+    process.exit(1);
+  }
+  console.log("\nAll privacy checks passed.");
+})();

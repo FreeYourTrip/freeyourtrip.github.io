@@ -65,7 +65,7 @@ check("sw.js never forces updates and keeps offline fallback", function () {
   const install = sw.slice(sw.indexOf('addEventListener("install"'), sw.indexOf('addEventListener("message"'));
   assert.ok(install.indexOf("skipWaiting()") === -1, "install must not call skipWaiting");
   assert.ok(/SKIP_WAITING[\s\S]*self\.skipWaiting\(\)/.test(sw), "skipWaiting only on user message");
-  assert.ok(sw.indexOf('"xingcheng-map-shell-v14"') !== -1);
+  assert.ok(sw.indexOf('"xingcheng-map-shell-v15"') !== -1);
   assert.ok(sw.indexOf('"./update-banner.js"') !== -1);
   assert.ok(/return cached \|\| fresh/.test(sw), "cache-first so offline opens the cached version");
   assert.ok(/catch\(function \(\) \{\s*return cached \|\| caches\.match\("\.\/index\.html"\)/.test(sw), "offline fallback to cached index");
@@ -79,7 +79,7 @@ check("banner markup, texts and help line", function () {
   assert.ok(html.indexOf(">稍后<") !== -1 && html.indexOf(">立即更新<") !== -1);
   assert.ok(html.indexOf('src="./update-banner.js"') !== -1);
   assert.ok(html.indexOf("serviceWorker.register") === -1, "registration lives in update-banner.js only");
-  assert.ok(tl.indexOf("更新不会删除你的行程。如果看到的还是旧版：把网页彻底关掉再打开。放在桌面的，就从后台划掉，再点图标打开。") !== -1);
+  assert.ok(tl.indexOf('{ q: "更新", a: "看到的还是旧版，就把网页彻底关掉再打开" }') !== -1, "help line (v5.2 copywriter)");
 });
 
 check("works at root (freeyourtrip.github.io/) or any subfolder: relative paths only", function () {

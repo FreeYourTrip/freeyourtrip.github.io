@@ -40,8 +40,19 @@
   function tidyPipeLine(raw) {
     var line = trim(raw);
     line = line.replace(/^[-*•●]\s+/, "");
+    /* v5.2：AI 有时输出 Markdown 表格「| 类型 | 名称 | … |」：去掉首尾的竖线 */
+    if (/^[|｜]/.test(line) && /[|｜]$/.test(line) && line.length > 1) {
+      line = line.replace(/^[|｜]\s*/, "").replace(/\s*[|｜]$/, "");
+    }
     return trim(line);
   }
+
+  /** Markdown 表格的分隔行「---|---|…」 */
+  function isTableRule(line) {
+    return /^[\s|｜:：\-—]+$/.test(line) && /-/.test(line);
+  }
+
+  var ROW_TYPE_RE = /^(机票|航班|飞机|酒店|住宿|民宿|地点|餐厅|景点|街道|flight|hotel|place)/i;
 
   function splitPipeLine(line) {
     return tidyPipeLine(line).replace(/\uFF5C/g, "|").split("|").map(trim);
@@ -495,17 +506,20 @@
     var items = [];
     var errors = [];
     var notes = [];
+    /* v5.2：AI 常在行程前后加解释文字。只要认出了行，这些解释行就安静跳过，不再逐行提示。 */
+    var skippedProse = [];
     var i;
     for (i = 0; i < lines.length; i++) {
       var lineNo = i + 1;
       var raw = tidyPipeLine(lines[i]);
       if (!raw) continue;
       if (/^#/.test(raw)) continue;
+      if (isTableRule(raw)) continue;
       var cols = splitPipeLine(raw);
       if (isHeaderRow(cols)) continue;
       if (cols.length !== 5) {
-        if (!/[|｜]/.test(raw)) {
-          notes.push("第 " + lineNo + " 行不像行程条目，已跳过。");
+        if (!/[|｜]/.test(raw) || !ROW_TYPE_RE.test(cols[0])) {
+          skippedProse.push("第 " + lineNo + " 行不像行程条目，已跳过。");
         } else {
           errors.push("第 " + lineNo + " 行：列数不是 5 列（分割后得到 " + cols.length + " 列）。应为「类型 | 名称 | 地址 | 日期时间 | 备注」，空单元格也请保留竖线。");
         }
@@ -521,6 +535,8 @@
         items.push(result.item);
       }
     }
+    if (!items.length) notes = skippedProse.concat(notes);
+    else if (skippedProse.length) notes = ["AI 回复里的 " + skippedProse.length + " 行说明文字已跳过。"].concat(notes);
     return { items: items, errors: errors, notes: notes, format: "pipe" };
   }
 
