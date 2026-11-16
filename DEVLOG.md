@@ -22,12 +22,12 @@
 
 | 项 | 内容 |
 | --- | --- |
-| 线上地址 | https://freeyourtrip.github.io/ （2026-11-16 起；当前线上提交 `89710de`（v5.2），sw `xingcheng-map-shell-v15`；v5 首次部署为 `55ba75e`） |
+| 线上地址 | https://freeyourtrip.github.io/ （2026-11-16 起；当前线上提交 `41a1d0b`（v5.3），sw `xingcheng-map-shell-v16`；v5 首次部署为 `55ba75e`） |
 | 代码仓库 | https://github.com/FreeYourTrip/freeyourtrip.github.io （公开仓库，部署在根路径） |
 | 高德域名白名单 | `freeyourtrip.github.io`（Key 与安全密钥不写入本日志或仓库，`config.js` 里保持为空） |
 | 旧网址 | 已停用：https://chickenbb52-hub.github.io/Trip-Map/ 现返回 404（2026-11-16 15:09 Europe/London 核实）；仓库 `chickenbb52-hub/Trip-Map` 已由用户本人删除；按用户要求不做自动跳转 |
 | 托管 | GitHub Pages，从 `main` 的仓库根目录部署；仓库根有空文件 `.nojekyll`，避免 Jekyll 处理 |
-| 截至本日志 | （2026-11-16 17:08 Europe/London 更新）线上 https://freeyourtrip.github.io/ 对应提交 `89710de`（2026-11-16 17:01 上线），service worker 缓存名 `xingcheng-map-shell-v15`，显示版本 v5.2（金牌程序员核对了 sw.js、version.js、index.html、timeline.js，线上和本地一致；IT老板 核对过整站，和仓库逐字节一致，20 个检查全部通过，0.66MB）；高德 Key 与安全密钥均为空（`config.js` 里是空字符串）。旧网址 chickenbb52-hub.github.io/Trip-Map 已停用（返回 404）。之前的状态（v5.1 `7f726aa`、12:25 时的 `e8e43ff`）见历史记录。 |
+| 截至本日志 | （2026-11-16 17:44 Europe/London 更新）线上 https://freeyourtrip.github.io/ 对应提交 `41a1d0b`（2026-11-16 17:43 上线），service worker 缓存名 `xingcheng-map-shell-v16`，显示版本 v5.3（金牌程序员逐个比对发布包里的网站文件，线上和本地一致；云端 20 个检查全部通过，0.71MB）；高德 Key 与安全密钥均为空（`config.js` 里是空字符串）。旧网址 chickenbb52-hub.github.io/Trip-Map 已停用（返回 404）。之前的状态（v5.2 `89710de`、v5.1 `7f726aa`）见历史记录。 |
 
 ### 技术栈（已上线的第一版 / 隐私版）
 
@@ -768,6 +768,7 @@ git revert <出错的提交哈希>   # 优先用 revert，便于保留历史
 - 是否已上线：是，2026-11-16 17:01 上线，commit 89710de（sw v15）
 
 ### 2026-11-16 17:19（Europe/London）— v5.3：待补地址自动候选、在地图上选、批量补位置、粘贴地址（只做了模拟测试，没上真机）
+- 上线：2026-11-16 17:43（Europe/London）推送提交 `41a1d0b`，线上 sw v16、版本 v5.3，网站文件和本地逐个一致。
 - 做了什么：
   - 待补地址的条目（导入没找到、「直接添加」、展开「待补地址」的卡片）在后台找最多 3 个候选：先搜「名字 + 当天城市」（城市只来自 `item.city`），再搜去掉「店 / 餐厅 / Restaurant」等后缀的简化名，同时带当天大概区域。卡片里地址那一行换成「是这里吗？」+ 候选行 +「都不是」；点「都不是」或没有候选时出现「在地图上选」。点一下候选才补（哪怕只有 1 个也不自动填），卡片收起，「待补地址」变成绿色「已补上」2 秒后消失，可撤销。候选只存内存（新文件 `fix-cand.js`）。原来的「补上地址 ›」和补地址搜索照旧。
   - 「在地图上选」：全屏地图，中心按当天酒店 → 同一天其他条目 → 当前地图视野；长按放图钉（可拖），底部 56px「就是这里」只存坐标，不查地址、不发请求。
