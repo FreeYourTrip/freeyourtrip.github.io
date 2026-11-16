@@ -114,7 +114,7 @@ check("UI: 「＋ 直接添加「xxx」」 + small line, icon step, toast, card 
   assert.ok(tl.indexOf('added: "已添加。点卡片上的『待补地址』，就能出现在地图上"') !== -1);
   assert.ok(/addPlaceAndToast\(item, DIRECT_COPY\.added\)/.test(tl));
   const di = tl.slice(tl.indexOf("function directItem"), tl.indexOf("function finishDirectAdd"));
-  assert.ok(/item\.address = "";/.test(di) && /itemFromType\(name, "", "地点", null, date\)/.test(di), "no address, no coords");
+  assert.ok(/item\.address = "";/.test(di) && /itemFromType\(name, "", addPreset \|\| "地点", null, date\)/.test(di), "no address, no coords (v5.3: 加酒店 keeps the hotel type)");
   assert.ok(tl.indexOf('fixBtn: "待补地址"') !== -1 && /class="fix-addr" data-fix="/.test(tl));
   assert.ok(/\.fix-addr::before \{ content: ""; position: absolute; left: -4px; right: -4px; top: -10px; bottom: -10px; \}/.test(css) && /min-height: 24px;/.test(css), "24px + 2×10px = 44px tap target");
   assert.ok(/\.fix-dot \{[^}]*background: #B8BEC6;/.test(css), "grey dot");

@@ -217,7 +217,18 @@
     var q = sanitizeGeocodeQuery(query);
     if (!q) return Promise.resolve([]);
     var area = opts && opts.bias ? biasArea(opts.bias) : null;
-    var cacheKey = area ? q + " @" + area.viewbox : q;
+    /* v5.3（旅行顾问）：有区域时先 bounded=1 只在框里找；0 个结果再 bounded=0（只是优先这片区域，等于全局） */
+    if (area && !opts.unbounded) {
+      return nominatimRequest(q, area, 1).then(function (list) {
+        if (list && list.length) return list;
+        return nominatimRequest(q, area, 0);
+      });
+    }
+    return nominatimRequest(q, area, 0);
+  }
+
+  function nominatimRequest(q, area, bounded) {
+    var cacheKey = area ? q + " @" + area.viewbox + (bounded ? " b1" : "") : q;
     var hit = cacheGet(cacheKey);
     if (hit && Array.isArray(hit.results)) {
       return Promise.resolve(hit.results);
@@ -230,8 +241,7 @@
         encodeURIComponent("zh,en") +
         "&q=" +
         encodeURIComponent(q) +
-        /* bounded=0：只是优先这片区域，范围外的结果照样返回 */
-        (area ? "&viewbox=" + area.viewbox + "&bounded=0" : "");
+        (area ? "&viewbox=" + area.viewbox + "&bounded=" + (bounded ? 1 : 0) : "");
       return fetchWithTimeout(url, {
           headers: { Accept: "application/json", "Accept-Language": "zh,en" }
         }).then(function (res) {
@@ -520,7 +530,29 @@
    *   message?: string
    * }>
    */
-  function resolveItem(item) {
+  /** 两点距离（公里），给「离当天其他地点太远」用 */
+  function kmBetween(a, b) {
+    var R = 6371;
+    var dLat = ((b.lat - a.lat) * Math.PI) / 180;
+    var dLng = ((b.lng - a.lng) * Math.PI) / 180;
+    var x = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos((a.lat * Math.PI) / 180) * Math.cos((b.lat * Math.PI) / 180) * Math.sin(dLng / 2) * Math.sin(dLng / 2);
+    return 2 * R * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x));
+  }
+  var FAR_KM = 30;
+
+  function chosenFrom(r) {
+    return { lat: r.lat, lng: r.lng, displayName: r.displayName, city: r.city || "", source: r.source || "nominatim" };
+  }
+
+  /**
+   * ctx（v5.3，IT老板）：{ city, bias } —— 当天城市文字（item.city）和当天大概区域（酒店 / 同一天条目的坐标）。
+   * 只用来搜：名字后补城市、Nominatim viewbox（bounded=1 → 0）。
+   * 结果多于 1 个：不替用户选第一个，留在待补，候选给卡片用；只有 1 个但离当天其他地点 > 30 km：也留在待补。
+   */
+  function resolveItem(item, ctx) {
+    ctx = ctx || {};
+    var sopts = ctx.bias ? { bias: ctx.bias } : undefined;
     var out = {
       item: item,
       status: "ok",
@@ -601,7 +633,8 @@
           var list = part.list || [];
           if (part.end === "from") {
             out.fromCandidates = list;
-            if (list.length === 1 || list.length > 1) {
+            /* v5.3：多个结果不替用户选 */
+            if (list.length === 1) {
               var f = list[0];
               if (f) {
                 out.fromChosen = {
@@ -627,12 +660,6 @@
               };
               out.status = "ok";
             } else if (list.length > 1) {
-              out.chosen = {
-                lat: list[0].lat,
-                lng: list[0].lng,
-                displayName: list[0].displayName,
-                source: "nominatim"
-              };
               out.status = "ambiguous";
               out.message = "找到 " + list.length + " 个候选，请确认到达机场";
             } else if (!out.chosen) {
@@ -683,6 +710,14 @@
       pushQuery(queries, stripPostcode(addr));
       if (name) pushQuery(queries, name + ", " + stripPostcode(addr));
     }
+    /* 只有名字（地址就是名字）时，先搜「名字 + 当天城市」 */
+    if (name && ctx.city && (!addr || addr === name)) {
+      var cq = cityQuery(name, ctx.city);
+      if (cq) {
+        /* 「名字 + 城市」排第一，去掉「名字, 名字」这种没用的组合 */
+        queries = [cq].concat(queries.filter(function (q) { return q !== name && q !== addr && q !== name + ", " + addr; }));
+      }
+    }
     if (name) pushQuery(queries, name);
     if (item.type === "hotel" && name && !/hotel|饭店|酒店/i.test(name)) {
       pushQuery(queries, name + " Hotel");
@@ -701,7 +736,7 @@
         return Promise.resolve([]);
       }
       out.query = queries[i];
-      return searchAddress(queries[i]).then(function (list) {
+      return searchAddress(queries[i], sopts).then(function (list) {
         if (list && list.length) return list;
         return searchNext(i + 1);
       });
@@ -716,21 +751,18 @@
         out.message = "找到的位置可能不对，请确认地点";
         return out;
       }
+      if (list.length === 1 && ctx.bias && isFinite(ctx.bias.lat) && kmBetween(ctx.bias, list[0]) > FAR_KM) {
+        out.chosen = null;
+        out.status = "far";
+        out.message = "找到的位置离当天其他地点很远，请确认地点";
+        return out;
+      }
       if (list.length === 1) {
-        out.chosen = {
-          lat: list[0].lat,
-          lng: list[0].lng,
-          displayName: list[0].displayName,
-          source: "nominatim"
-        };
+        out.chosen = chosenFrom(list[0]);
         out.status = "ok";
       } else if (list.length > 1) {
-        out.chosen = {
-          lat: list[0].lat,
-          lng: list[0].lng,
-          displayName: list[0].displayName,
-          source: "nominatim"
-        };
+        /* v5.3（IT老板）：多个结果绝不自动用第一个 */
+        out.chosen = null;
         out.status = "ambiguous";
         out.message = "找到 " + list.length + " 个候选，请确认地点";
       } else {
@@ -758,19 +790,36 @@
     return item;
   }
 
-  function resolveAll(items, onEach) {
+  /**
+   * ctxFor(item)（v5.3）：每条搜之前现算当天城市 + 区域；酒店先搜，后面的地点就能用上刚找到的酒店位置。
+   * 返回的结果顺序和 items 一样。
+   */
+  function resolveAll(items, onEach, ctxFor) {
     var list = items || [];
-    var results = [];
+    var results = new Array(list.length);
+    var order = list.map(function (it, k) { return k; });
+    order.sort(function (a, b) {
+      var ha = list[a] && list[a].type === "hotel" ? 0 : 1;
+      var hb = list[b] && list[b].type === "hotel" ? 0 : 1;
+      return ha - hb || a - b;
+    });
     var i = 0;
     function next() {
-      if (i >= list.length) return Promise.resolve(results);
-      var item = list[i];
+      if (i >= order.length) return Promise.resolve(results);
+      var idx = order[i];
+      var item = list[idx];
       i += 1;
-      return resolveItem(item)
+      var ctx = null;
+      try {
+        ctx = typeof ctxFor === "function" ? ctxFor(item) : null;
+      } catch (err) {
+        ctx = null;
+      }
+      return resolveItem(item, ctx)
         .then(function (res) {
           if (res.chosen) applyChoice(item, res.chosen, res.fromChosen);
-          results.push(res);
-          if (typeof onEach === "function") onEach(res, results.length - 1, list.length);
+          results[idx] = res;
+          if (typeof onEach === "function") onEach(res, idx, list.length);
           return next();
         })
         .catch(function (err) {
@@ -782,8 +831,8 @@
             chosen: null,
             message: FRIENDLY_NOT_FOUND
           };
-          results.push(fail);
-          if (typeof onEach === "function") onEach(fail, results.length - 1, list.length);
+          results[idx] = fail;
+          if (typeof onEach === "function") onEach(fail, idx, list.length);
           return next();
         });
     }
@@ -851,6 +900,8 @@
 
   var api = {
     cityQuery: cityQuery,
+    FAR_KM: FAR_KM,
+    kmBetween: kmBetween,
     mergeCityResults: mergeCityResults,
     searchWithCity: searchWithCity,
     biasArea: biasArea,

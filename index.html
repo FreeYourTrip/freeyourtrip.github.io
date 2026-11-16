@@ -83,6 +83,7 @@
     </div>
 
     <div class="day-chips" id="day-chips" hidden role="tablist" aria-label="日期条：按天查看"></div>
+    <button type="button" class="fix-banner" id="fix-banner" hidden><svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="#C98A1B" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 14.5s4.5-4.2 4.5-7.7A4.5 4.5 0 0 0 3.5 6.8C3.5 10.3 8 14.5 8 14.5z"/><circle cx="8" cy="6.8" r="1.6"/></svg><span id="fix-banner-text"></span><span class="fix-banner-go">去补 ›</span></button>
     <div class="install-banner" id="install-banner" hidden>
       <button type="button" class="install-banner-go" id="install-banner-go"></button>
       <button type="button" class="install-banner-x" id="install-banner-dismiss" aria-label="关闭"></button>
@@ -107,11 +108,31 @@
     </div>
   </div>
 
+  <!-- v5.3 点「＋ 添加」先选类型（文案见 timeline.js ADD_MENU_COPY） -->
+  <div class="sheet add-menu" id="add-menu" hidden>
+    <div class="sheet-backdrop" data-close="add-menu"></div>
+    <div class="sheet-panel" role="dialog" aria-modal="true" aria-labelledby="am-title" tabindex="-1">
+      <div class="sheet-handle" aria-hidden="true"></div>
+      <div class="sheet-head">
+        <h2 id="am-title"></h2>
+        <button type="button" class="icon-btn sheet-close" data-close="add-menu" aria-label="关闭"></button>
+      </div>
+      <div class="am-rows">
+        <button type="button" class="am-row" id="am-flight" data-add-kind="flight"><span class="am-ico" style="color:#6B7A8F;background:#6B7A8F1A"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8a2 2 0 0 0 2-2h14a2 2 0 0 0 2 2v2a2 2 0 0 0 0 4v2a2 2 0 0 0-2 2H5a2 2 0 0 0-2-2v-2a2 2 0 0 0 0-4z"/><path d="M14 6v12" stroke-dasharray="2 2"/></svg></span><span class="am-txt"><span class="am-main" id="am-flight-main"></span><span class="am-sub" id="am-flight-sub"></span></span><span class="am-chev" aria-hidden="true">›</span></button>
+        <button type="button" class="am-row" id="am-hotel" data-add-kind="hotel"><span class="am-ico" style="color:#8E5CF7;background:#8E5CF71A"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 18V7"/><path d="M3 14h18v4"/><path d="M21 14v-3a3 3 0 0 0-3-3h-7v6"/><circle cx="7" cy="11" r="2"/></svg></span><span class="am-txt"><span class="am-main" id="am-hotel-main"></span><span class="am-sub" id="am-hotel-sub"></span></span><span class="am-chev" aria-hidden="true">›</span></button>
+        <button type="button" class="am-row" id="am-place" data-add-kind="place"><span class="am-ico" style="color:#0F9D8A;background:#0F9D8A1A"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s7-6.5 7-12a7 7 0 0 0-14 0c0 5.5 7 12 7 12z"/><circle cx="12" cy="9" r="2.5"/></svg></span><span class="am-txt"><span class="am-main" id="am-place-main"></span><span class="am-sub" id="am-place-sub"></span></span><span class="am-chev" aria-hidden="true">›</span></button>
+      </div>
+      <div class="am-divider" role="separator"></div>
+      <button type="button" class="am-whole" id="am-whole" data-add-kind="whole"></button>
+    </div>
+  </div>
+
   <div class="sheet" id="add-sheet" hidden>
     <div class="sheet-backdrop" data-close="add-sheet"></div>
     <div class="sheet-panel" role="dialog" aria-labelledby="add-sheet-title">
       <div class="sheet-handle" aria-hidden="true"></div>
       <div class="sheet-head">
+        <button type="button" class="sheet-back" id="add-sheet-back" aria-label="返回「添加什么？」" hidden>‹</button>
         <h2 id="add-sheet-title">添加</h2>
         <button type="button" class="icon-btn sheet-close" data-close="add-sheet" aria-label="关闭"></button>
       </div>
@@ -125,7 +146,9 @@
       <!-- v5.2 补地址：从卡片上的「补地址」进来时才显示 -->
       <p class="fix-head" id="fix-head" hidden></p>
       <label class="sr-only" for="place-search">输入地名</label>
-      <input type="search" id="place-search" placeholder="输入地名，比如 大英博物馆" autocomplete="off" enterkeyhint="search" spellcheck="false">
+      <input type="search" id="place-search" placeholder="输入店名，或粘贴地址" autocomplete="off" enterkeyhint="search" spellcheck="false">
+      <!-- v5.3 只在「加酒店」页显示 -->
+      <button type="button" class="add-map-link" id="add-map-link" hidden>找不到？在地图上选 ›</button>
       <div class="search-status" id="search-status" role="status"></div>
       <ul class="search-results" id="search-results" hidden></ul>
       <button type="button" class="search-fallback" id="search-fallback" hidden><span class="sf-main" id="sf-main">＋ 直接添加</span><span class="sf-sub">没有地图位置，也能放进行程</span></button>
@@ -375,6 +398,29 @@
     <svg class="ig-arrow-ipad" viewBox="0 0 48 48" width="48" height="48" fill="none" stroke="#0F9D8A" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 36L36 12"/><path d="M18 12h18v18"/></svg>
   </div>
 
+  <div class="sheet fix-panel" id="fix-panel" hidden>
+    <div class="sheet-backdrop" data-close="fix-panel"></div>
+    <div class="sheet-panel" role="dialog" aria-modal="true" aria-labelledby="fp-title">
+      <div class="sheet-handle" aria-hidden="true"></div>
+      <div class="fp-head">
+        <h2 id="fp-title">待补位置</h2>
+        <button type="button" class="fp-skip" id="fp-skip">跳过</button>
+      </div>
+      <div class="fp-page" id="fp-page"></div>
+      <div class="fp-done" id="fp-done" hidden><span class="fp-check" aria-hidden="true"><svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span><p>都补好了</p></div>
+      <button type="button" class="fc-map fp-map" id="fp-map"><svg class="fc-ico" viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 14.5s4.5-4.2 4.5-7.7A4.5 4.5 0 0 0 3.5 6.8C3.5 10.3 8 14.5 8 14.5z"/><circle cx="8" cy="6.8" r="1.6"/></svg><span>在地图上选</span></button>
+    </div>
+  </div>
+
+  <div class="map-pick" id="map-pick" hidden role="dialog" aria-modal="true" aria-label="在地图上选">
+    <div class="mp-head">
+      <button type="button" class="mp-close" id="mp-close" aria-label="关闭"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      <p class="mp-hint">长按放一个图钉，可以拖动，再点『就是这里』</p>
+    </div>
+    <div id="mp-map" class="mp-map"></div>
+    <div class="mp-foot"><button type="button" class="mp-save" id="mp-save" disabled>就是这里</button></div>
+  </div>
+
   <div class="toast" id="toast" hidden>
     <span id="toast-msg"></span>
     <button type="button" id="toast-undo">撤销</button>
@@ -392,6 +438,7 @@
   <script src="./install-env.js"></script>
   <script src="./install-guide.js"></script>
   <script src="./trip-name.js"></script>
+  <script src="./fix-cand.js"></script>
   <script src="./ai-prompt.js"></script>
   <script src="./backup.js"></script>
   <script src="./legs.js"></script>

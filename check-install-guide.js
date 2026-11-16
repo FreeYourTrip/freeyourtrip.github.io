@@ -50,10 +50,11 @@ check("final copy, kept in one place", function () {
   assert.strictEqual(C.wechatText, "微信里没法放到桌面。点右上角 ···，选『在 Safari 中打开』或『在默认浏览器中打开』");
   assert.strictEqual(C.copyUrl, "复制网址");
   assert.strictEqual(C.iosTitle, "放到桌面，像 App 一样打开");
-  assert.deepStrictEqual(C.iosSteps, ["点底部的分享按钮（方框加向上箭头）。没看到就先点「···」", "往下滑，选「添加到主屏幕」", "点右上角「添加」"]);
+  /* v5.3：UI 要求每步说明一行，文案缩短（含义不变） */
+  assert.deepStrictEqual(C.iosSteps, ["点底部分享按钮，没有就先点「···」", "往下滑，选「添加到主屏幕」", "点右上角「添加」"]);
   assert.strictEqual(C.done, "我加好了");
   assert.strictEqual(C.later, "下次再说");
-  assert.strictEqual(C.hasItemsNote, "桌面打开后看不到这里的行程。请先在设置里点『完整备份』，再到桌面那边点『导入』。");
+  assert.strictEqual(C.hasItemsNote, "桌面看不到这些行程，先『完整备份』再到桌面『导入』", "v5.3: one line");
   assert.strictEqual(C.settingsLabel, "放到手机桌面");
   assert.strictEqual(C.settingsSub, "像 App 一样，点图标就打开");
   const html = fs.readFileSync(__dirname + "/index.html", "utf8");

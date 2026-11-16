@@ -65,7 +65,7 @@ check("sw.js never forces updates and keeps offline fallback", function () {
   const install = sw.slice(sw.indexOf('addEventListener("install"'), sw.indexOf('addEventListener("message"'));
   assert.ok(install.indexOf("skipWaiting()") === -1, "install must not call skipWaiting");
   assert.ok(/SKIP_WAITING[\s\S]*self\.skipWaiting\(\)/.test(sw), "skipWaiting only on user message");
-  assert.ok(sw.indexOf('"xingcheng-map-shell-v15"') !== -1);
+  assert.ok(sw.indexOf('"xingcheng-map-shell-v16"') !== -1);
   assert.ok(sw.indexOf('"./update-banner.js"') !== -1);
   assert.ok(/return cached \|\| fresh/.test(sw), "cache-first so offline opens the cached version");
   assert.ok(/catch\(function \(\) \{\s*return cached \|\| caches\.match\("\.\/index\.html"\)/.test(sw), "offline fallback to cached index");

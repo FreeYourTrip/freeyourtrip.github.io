@@ -27,7 +27,7 @@ check("help: 3 tiers as cards; only tier 1 on first open; privacy line; 常用 g
   const uiSrc = (tl + fs.readFileSync(__dirname + "/index.html", "utf8") + fs.readFileSync(__dirname + "/install-guide.js", "utf8") + fs.readFileSync(__dirname + "/trip-name.js", "utf8")).replace(/✓|✕/g, "");
   assert.ok(!EMOJI.test(uiSrc), "emoji left in UI: " + (uiSrc.match(EMOJI) || [""])[0]);
   [
-    '{ key: "add", title: "添加", text: "点「＋ 添加」，输入地名，点一下结果就加好了" }',
+    '{ key: "add", title: "添加", text: "点「＋ 添加」，选加机票、酒店还是地点，搜到后点一下就加好了" }',
     '{ key: "ai", title: "截图交给 AI", text: "机票、酒店截图丢给任意 AI，自动整理成行程" }',
     '{ key: "map", title: "带我去", text: "点开地点卡片，点「带我去」直接打开导航" }'
   ].forEach((l) => assert.ok(tl.indexOf(l) !== -1, l));
@@ -64,7 +64,7 @@ check("AI wizard: big button on top, 1-2-3 progress, exact copy, clipboard read 
     step1: "点「复制给 AI 的话」，复制完按钮显示「已复制 ✓」",
     copied: "已复制 ✓",
     step2: "打开你常用的 AI（豆包、Kimi、DeepSeek、ChatGPT 都行），先粘贴，再把截图发过去",
-    step2Small: "不会截图？iPhone 同时按侧边键和音量加键",
+    step2Small: "不会截图？同时按侧边键和音量加键", /* v5.3 定稿：去掉 iPhone */
     privacy: "发截图前，把护照号、银行卡、手机号裁掉或涂掉",
     step3: "把 AI 的回复整段复制，回来点「粘贴并导入」",
     step3Small: "手机弹出「粘贴」或「允许」时，再点一下就行",

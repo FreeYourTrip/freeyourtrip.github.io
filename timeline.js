@@ -812,7 +812,10 @@
       : "";
     var open = expanded[item.id] ? " is-open" : "";
     var extra = [];
-    if (item.address) extra.push("<p>" + escapeHtml(item.address) + "</p>");
+    var needsAddr = item.type !== "flight" && itemUnlocated(item);
+    /* v5.3：待补的卡片，地址那一行换成「是这里吗？」候选 */
+    if (needsAddr) extra.push(candBoxHtml(item));
+    else if (item.address) extra.push("<p>" + escapeHtml(item.address) + "</p>");
     if (item.note) extra.push("<p>" + escapeHtml(item.note) + "</p>");
     if (item.confirmationNo) extra.push("<p>确认号 " + secretToggleHtml(item.confirmationNo) + "</p>");
     if (item.seat) extra.push("<p>座位 " + escapeHtml(item.seat) + "</p>");
@@ -820,13 +823,13 @@
       extra.push("<p>入住 " + escapeHtml(item.checkIn) + "，退房 " + escapeHtml(item.checkOut) + "</p>");
     }
     if (item.type === "flight") extra.push("<p>" + escapeHtml(formatFlightLocal(item)) + "</p>");
-    var needsAddr = item.type !== "flight" && itemUnlocated(item);
     if (itemUnlocated(item) && !needsAddr) {
       extra.push(
         '<button type="button" class="pick-location" data-pick="' + escapeHtml(item.id) + '">选一下位置</button>'
       );
     }
-    extra.push(cardNavHtml(item, conn));
+    /* v5.3（UI）：卡片在列候选（「是这里吗？」或点了「都不是」）时，不放灰掉的「带我去 / 看位置」和「补上地址 ›」；补好后恢复正常导航 */
+    if (!(needsAddr && candShowing(item))) extra.push(cardNavHtml(item, conn));
     return (
       '<article class="card' +
       open +
@@ -854,6 +857,8 @@
       pendingLine +
       (needsAddr
         ? '<button type="button" class="fix-addr" data-fix="' + escapeHtml(item.id) + '" aria-label="' + escapeHtml(DIRECT_COPY.fixBtn + "：" + itemTitle(item)) + '"><span class="fix-dot" aria-hidden="true"></span>' + escapeHtml(DIRECT_COPY.fixBtn) + "</button>"
+        : justFixed[item.id]
+        ? '<span class="fixed-pill" role="status"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 8.5l3 3 6-7"/></svg>' + escapeHtml(FC_COPY.fixed || "已补上") + "</span>"
         : "") +
       "</div>" +
       '<button type="button" class="expand-btn" data-expand="' +
@@ -903,6 +908,7 @@
   }
 
   function renderList() {
+    updateFixBanner();
     var root = $("timeline");
     if (!root) return;
     var trip = currentTrip();
@@ -1002,6 +1008,36 @@
         if (expanded[eid] && eit && eit.type !== "flight" && itemUnlocated(eit) && !hereInMemory() && window.LocateMe && LocateMe.warmIfGranted) {
           LocateMe.warmIfGranted(renderList);
         }
+        /* v5.3：展开待补的卡片 → 后台找候选（已经找过就直接用内存里的） */
+        if (expanded[eid] && eit && eit.type !== "flight" && itemUnlocated(eit)) queueCandidates(eit);
+        return;
+      }
+      var fcRow = ev.target.closest && ev.target.closest("[data-fc-item]");
+      if (fcRow) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        var fit = findItem(fcRow.getAttribute("data-fc-item"));
+        var flist = (fit && window.FixCand && FixCand.getCached(fit)) || [];
+        var fc = flist[Number(fcRow.getAttribute("data-fc-i"))];
+        if (fc) {
+          fcRow.classList.add("is-picked");
+          applyCandidate(fit.id, fc);
+        }
+        return;
+      }
+      var fcNone = ev.target.closest && ev.target.closest("[data-fc-none]");
+      if (fcNone) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        candNone[fcNone.getAttribute("data-fc-none")] = true;
+        renderList();
+        return;
+      }
+      var fcMap = ev.target.closest && ev.target.closest("[data-fc-map]");
+      if (fcMap) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        openMapPick(fcMap.getAttribute("data-fc-map"));
         return;
       }
       var del = ev.target.closest && ev.target.closest("[data-delete]");
@@ -1148,7 +1184,11 @@
     var el = $(id);
     var wasOpen = el && !el.hidden;
     if (el) el.hidden = true;
-    if (id === "add-sheet") exitFixMode();
+    if (id === "add-sheet") {
+      exitFixMode();
+      if (wasOpen) setAddPreset("place");
+      if (hotelMode) setHotelMode(false);
+    }
     if (wasOpen && pendingNameSuggest) setTimeout(flushNameSuggest, 250);
   }
 
@@ -1164,7 +1204,7 @@
       title: "新手先看这 3 条",
       cards: [
         /* 第 1 层：广告文案宣传大师定稿 */
-        { key: "add", title: "添加", text: "点「＋ 添加」，输入地名，点一下结果就加好了" },
+        { key: "add", title: "添加", text: "点「＋ 添加」，选加机票、酒店还是地点，搜到后点一下就加好了" },
         { key: "ai", title: "截图交给 AI", text: "机票、酒店截图丢给任意 AI，自动整理成行程" },
         { key: "map", title: "带我去", text: "点开地点卡片，点「带我去」直接打开导航" }
       ]
@@ -1178,7 +1218,9 @@
         { key: "map", icon: "map", title: "地图", text: "点顶部的地图图标，所有地点一眼看全。右下角的按钮能定位到你自己" },
         { key: "share", icon: "share", title: "分享我的行程", text: "发给同行的人，订单号和座位会自动隐藏" },
         { key: "install", icon: "device", title: "放到桌面", text: "像 App 一样，点图标就打开" },
-        { key: "rename", icon: "pencil", title: "改行程名", text: "点左上角的名字或铅笔" }
+        { key: "rename", icon: "pencil", title: "改行程名", text: "点左上角的名字或铅笔" },
+        /* v5.3 定稿 */
+        { key: "fixplace", icon: "pin", title: "补位置", text: "卡片上写着『待补地址』的，点开从候选里选对的那个。都不对，就在地图上长按选点。" }
       ]
     },
     faq: {
@@ -1383,13 +1425,57 @@
   }
 
   /* ---------- v5.2 AI 向导：文案都在这一处 ---------- */
+  /* v5.3（IT老板 批准，文案定稿）：点「＋ 添加」先弹「添加什么？」，文案都在这里 */
+  var ADD_MENU_COPY = {
+    title: "添加什么？",
+    flight: "加机票",
+    flightSub: "截图交给 AI，自动整理",
+    hotel: "加酒店",
+    hotelSub: "搜酒店名，点一下加进行程",
+    place: "加地点",
+    placeSub: "吃的、玩的、逛的",
+    whole: "有整份行程截图？交给 AI 一次整理 ›",
+    hotelPlaceholder: "输入酒店名，或粘贴地址",
+    hotelTitle: "加酒店",
+    back: "返回「添加什么？」",
+    mapLink: "找不到？在地图上选 ›",
+    mapHotelName: "未命名酒店",
+    placePlaceholder: "输入店名，或粘贴地址"
+  };
+  var addPreset = ""; /* "酒店" = 从「加酒店」进来，搜到的结果按酒店加 */
+  var hotelMode = false; /* 「加酒店」页：标题「加酒店」、‹ 返回、没有 AI 大按钮和手动填写、能在地图上选 */
+  var HOTEL_BED_SVG = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 18V7"/><path d="M3 14h18v4"/><path d="M21 14v-3a3 3 0 0 0-3-3h-7v6"/><circle cx="7" cy="11" r="2"/></svg>';
+
+  /** v5.3：从「添加」加的酒店都有入住和退房（退房 = 入住 + 1 天），规则在 fix-cand.js hotelDates */
+  function applyHotelDates(item) {
+    if (!item || item.type !== "hotel") return item;
+    var d = FC().hotelDates(selectedDateOrEmpty(), tripDays(currentTrip().items || []), todayIso());
+    if (d) {
+      item.checkIn = d.checkIn;
+      item.checkOut = d.checkOut;
+      delete item.date;
+    }
+    return item;
+  }
+
+  function setHotelMode(on) {
+    hotelMode = !!on;
+    var sheet = $("add-sheet");
+    if (sheet) sheet.classList.toggle("is-hotel", hotelMode);
+    if ($("add-sheet-back")) $("add-sheet-back").hidden = !hotelMode;
+    if ($("add-map-link")) $("add-map-link").hidden = !hotelMode;
+    var title = $("add-sheet-title");
+    if (title && !editingId && !fixingId) title.textContent = hotelMode ? ADD_MENU_COPY.hotelTitle : "添加";
+  }
+
   var AI_WIZARD_COPY = {
     bigSub: "截图交给 AI，自动排好行程",
     title: "截图交给 AI，自动排好行程",
     step1: "点「复制给 AI 的话」，复制完按钮显示「已复制 ✓」",
     copied: "已复制 ✓",
     step2: "打开你常用的 AI（豆包、Kimi、DeepSeek、ChatGPT 都行），先粘贴，再把截图发过去",
-    step2Small: "不会截图？iPhone 同时按侧边键和音量加键",
+    /* v5.3 定稿：步骤 2 下面的小字 */
+    step2Small: "不会截图？同时按侧边键和音量加键",
     privacy: "发截图前，把护照号、银行卡、手机号裁掉或涂掉",
     step3: "把 AI 的回复整段复制，回来点「粘贴并导入」",
     step3Small: "手机弹出「粘贴」或「允许」时，再点一下就行",
@@ -1526,8 +1612,9 @@
         example: false
       };
       if (pickedIcon) hotel.icon = pickedIcon;
+      applyHotelDates(hotel);
       showManualStatus('<p class="ok">正在查找位置…</p>');
-      Geocode.resolveItem(hotel)
+      Geocode.resolveItem(hotel, dayArgsFor(hotel))
         .then(function (res) {
           finishImport([hotel], [res], []);
         })
@@ -1553,7 +1640,7 @@
     if (day) item.date = day;
     if (pickedIcon) item.icon = pickedIcon;
     showManualStatus('<p class="ok">正在查找位置…</p>');
-    Geocode.resolveItem(item)
+    Geocode.resolveItem(item, dayArgsFor(item))
       .then(function (res) {
         finishImport([item], [res], []);
       })
@@ -1707,6 +1794,7 @@
   }
 
   function setAddMode(isEdit) {
+    if (isEdit && hotelMode) setHotelMode(false);
     var sheet = $("add-sheet");
     if (sheet) sheet.classList.toggle("is-editing", !!isEdit);
     Array.prototype.forEach.call(document.querySelectorAll("#add-sheet .add-only"), function (el) {
@@ -1868,12 +1956,13 @@
     renderAll();
     if (res.addressChanged && window.Geocode && res.item.address) {
       showToast("已保存，正在找新地址的位置…");
-      Geocode.resolveItem(res.item)
+      Geocode.resolveItem(res.item, dayArgsFor(res.item))
         .then(function (r) {
           var cur = findItem(id);
           if (!cur) return;
           var fresh = Object.assign({}, cur);
           if (r && r.chosen) Geocode.applyChoice(fresh, r.chosen, r.fromChosen);
+          else if (r && r.candidates && r.candidates.length && window.FixCand) FixCand.setCached(fresh, r.candidates);
           var t = currentTrip();
           t.items = ItemEdit.updateItem(t.items || [], id, fresh);
           saveAllTrips();
@@ -2402,7 +2491,7 @@
 
   function addPlaceAndToast(item, msg) {
     var added = appendItems([item], { keepDay: true }) || [item];
-    var real = added[0] || item;
+    var real = findItem((added[0] || item).id) || added[0] || item;
     closeSheet("add-sheet");
     clearSearchUi(true);
     showToast(msg || "已添加：" + (real.nameZh || nameOrBlank(real)), function () {
@@ -2413,6 +2502,7 @@
       saveAllTrips();
       renderAll();
     });
+    return real;
   }
 
   function nameOrBlank(item) {
@@ -2467,15 +2557,14 @@
       .map(function (c, i) {
         var name = candidateName(c, query) || "未命名地点";
         var addr = candidateAddrLine(c, name);
-        return (
-          '<li><button type="button" class="search-hit" data-hit="' +
-          i +
-          '"><span class="search-hit-name">' +
-          escapeHtml(name) +
-          '</span>' +
-          (addr ? '<span class="search-hit-addr">' + escapeHtml(addr) + "</span>" : "") +
-          "</button></li>"
-        );
+        var text = '<span class="search-hit-name">' + escapeHtml(name) + "</span>" +
+          (addr ? '<span class="search-hit-addr">' + escapeHtml(addr) + "</span>" : "");
+        /* v5.3「加酒店」页：结果行前面放紫色床图标 */
+        if (hotelMode && !fixingId) {
+          return '<li><button type="button" class="search-hit has-ico" data-hit="' + i + '"><span class="search-hit-ico" aria-hidden="true">' +
+            HOTEL_BED_SVG + '</span><span class="search-hit-text">' + text + "</span></button></li>";
+        }
+        return '<li><button type="button" class="search-hit" data-hit="' + i + '">' + text + "</button></li>";
       })
       .join("");
   }
@@ -2492,12 +2581,13 @@
     var item = itemFromType(
       name,
       candidateShortAddr(c, name) || c.displayName || name,
-      guessLabel(c),
+      addPreset || guessLabel(c),
       { lat: c.lat, lng: c.lng },
       selectedDateOrEmpty()
     );
     /* v5.2：存下地图服务给的城市（只有这一个新字段） */
     if (c.city && String(c.city).trim()) item.city = String(c.city).trim();
+    applyHotelDates(item);
     addPlaceAndToast(item);
   }
 
@@ -2557,9 +2647,10 @@
 
   /** 直接添加的那一条：只有名字（和选的图标、当天日期），地址留空、没坐标 */
   function directItem(name, icon, date) {
-    var item = itemFromType(name, "", "地点", null, date);
+    var item = itemFromType(name, "", addPreset || "地点", null, date);
     item.address = "";
     if (icon) item.icon = icon;
+    applyHotelDates(item);
     return item;
   }
 
@@ -2567,7 +2658,9 @@
     if (!directName) return;
     var item = directItem(directName, directIcon, selectedDateOrEmpty());
     hideDirectAdd();
-    addPlaceAndToast(item, DIRECT_COPY.added);
+    var real = addPlaceAndToast(item, DIRECT_COPY.added);
+    /* v5.3（IT老板）：「直接添加」的条目也在后台找候选 */
+    queueCandidates(real || item);
   }
 
   /* ---------- v5.2 补地址：卡片上点「待补地址」→ 搜索（名字已填好，自动补上当天城市）→ 选一个，更新同一条 ---------- */
@@ -2592,9 +2685,460 @@
     return { city: (c && c.query) || "", bias: TripName.dayArea ? TripName.dayArea(items, day, opts) : null };
   }
 
+  /* ---------- v5.3 待补地址：自动候选（点一下才补）、批量补位置、在地图上选 ---------- */
+  var FC = function () { return window.FixCand || null; };
+  var FC_COPY = (window.FixCand && FixCand.COPY) || {};
+  var candState = {}; /* id → "loading" | "done"（只在内存） */
+  var candNone = {}; /* id → 点过「都不是」 */
+  var justFixed = {}; /* id → 刚补上，2 秒内显示「已补上」 */
+  var candChain = Promise.resolve();
+
+  /** 某条的当天城市文字 + 大概区域（和补地址搜索同一套规则；extra = 正在导入、还没存的条目） */
+  function dayArgsFor(item, extra) {
+    if (!window.TripName || !TripName.dayCity || !item) return { city: "", bias: null };
+    var items = (currentTrip().items || []).concat(extra || []);
+    var day = itemDay(item) || (item.pendingDate ? "" : selectedDateOrEmpty());
+    var opts = { excludeId: item.id, time: item.time || item.checkInTime || "" };
+    var c = TripName.dayCity(items, day, opts);
+    return { city: (c && c.query) || "", bias: TripName.dayArea ? TripName.dayArea(items, day, opts) : null };
+  }
+
+  function locPinSvg(color) {
+    return '<svg class="fc-ico" viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="' + (color || "currentColor") + '" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 14.5s4.5-4.2 4.5-7.7A4.5 4.5 0 0 0 3.5 6.8C3.5 10.3 8 14.5 8 14.5z"/><circle cx="8" cy="6.8" r="1.6"/></svg>';
+  }
+
+  /** 后台找候选（一条一条排队，Nominatim 本来就 1 秒 1 次）；只填内存缓存，不改条目 */
+  function queueCandidates(item) {
+    var F = FC();
+    if (!F || !item || !F.needsFix(item) || !window.Geocode) return;
+    if (F.getCached(item) || candState[item.id] === "loading") return;
+    candState[item.id] = "loading";
+    var snapshot = JSON.parse(JSON.stringify(item));
+    candChain = candChain.then(function () {
+      return F.findCandidates(snapshot, dayArgsFor(snapshot), {
+        search: function (q, o) { return Geocode.searchAddress(q, o); }
+      });
+    }).then(function () {
+      candState[snapshot.id] = "done";
+      renderList();
+      refreshFixPanelPage();
+    }, function () {
+      candState[snapshot.id] = "done";
+      renderList();
+      refreshFixPanelPage();
+    });
+  }
+
+  function candRowsHtml(item, attr) {
+    var F = FC();
+    var list = (F && F.getCached(item)) || [];
+    return list.map(function (c, j) {
+      var l = F.candidateLines(c);
+      return '<li><button type="button" class="fc-row" ' + attr + '="' + escapeHtml(item.id) + '" data-fc-i="' + j + '">' +
+        locPinSvg("#0F9D8A") +
+        '<span class="fc-txt"><span class="fc-name">' + escapeHtml(l.name) + "</span>" +
+        (l.sub ? '<span class="fc-sub">' + escapeHtml(l.sub) + "</span>" : "") +
+        "</span></button></li>";
+    }).join("");
+  }
+
+  function mapPickBtnHtml(id) {
+    return '<button type="button" class="fc-map" data-fc-map="' + escapeHtml(id) + '">' + locPinSvg() + "<span>" + escapeHtml(FC_COPY.mapPick) + "</span></button>";
+  }
+
+  /** 这张卡片正在列候选吗（有至少 1 个候选） */
+  function candShowing(item) {
+    var F = FC();
+    var list = F && item ? F.getCached(item) : null;
+    return !!(list && list.length);
+  }
+
+  /** 卡片展开后，地址那一行的位置：「是这里吗？」+ 最多 3 个候选 +「都不是」→「在地图上选」 */
+  function candBoxHtml(item) {
+    var F = FC();
+    if (!F) return "";
+    var list = F.getCached(item);
+    if (!list) {
+      return '<div class="fc-box" data-fc-box="' + escapeHtml(item.id) + '"><p class="fc-head">' + escapeHtml(FC_COPY.loading) + "</p>" + mapPickBtnHtml(item.id) + "</div>";
+    }
+    if (!list.length) return '<div class="fc-box" data-fc-box="' + escapeHtml(item.id) + '">' + mapPickBtnHtml(item.id) + "</div>";
+    return '<div class="fc-box" data-fc-box="' + escapeHtml(item.id) + '"><p class="fc-head">' + escapeHtml(FC_COPY.heading) + "</p>" +
+      '<ul class="fc-list">' + candRowsHtml(item, "data-fc-item") + "</ul>" +
+      (candNone[item.id] ? mapPickBtnHtml(item.id) : '<button type="button" class="fc-none" data-fc-none="' + escapeHtml(item.id) + '">' + escapeHtml(FC_COPY.none) + "</button>") +
+      "</div>";
+  }
+
+  /** 用户点了一个候选：只更新这一条的坐标、地址、城市（WGS-84）；名字 / 日期 / 图标 / 备注不动 */
+  function applyCandidate(id, cand, opts) {
+    opts = opts || {};
+    var old = findItem(id);
+    if (!old || !cand) return false;
+    var before = JSON.parse(JSON.stringify(old));
+    var name = itemTitle(old);
+    var next = ItemEdit.applyFoundPlace(old, cand, candidateShortAddr(cand, name) || cand.displayName || "");
+    if (typeof next.lat !== "number") return false;
+    var trip = currentTrip();
+    trip.items = ItemEdit.updateItem(trip.items || [], id, next);
+    saveAllTrips();
+    expanded[id] = false;
+    markJustFixed(id);
+    renderAll();
+    if (!opts.quiet) {
+      showToast("已补上位置", function () {
+        var t = currentTrip();
+        t.items = ItemEdit.updateItem(t.items || [], id, before);
+        saveAllTrips();
+        renderAll();
+      });
+    }
+    return true;
+  }
+
+  function markJustFixed(id) {
+    justFixed[id] = true;
+    setTimeout(function () {
+      delete justFixed[id];
+      renderList();
+    }, 2000);
+  }
+
+  /* ---------- 顶部「N 个地点待补位置」 ---------- */
+  function updateFixBanner() {
+    var F = FC();
+    var el = $("fix-banner");
+    if (!el || !F) return;
+    var n = F.unlocated(currentTrip().items || []).length;
+    el.hidden = !n;
+    if ($("fix-banner-text")) $("fix-banner-text").textContent = F.bannerText(n);
+  }
+
+  /* ---------- 批量面板 ---------- */
+  var fixPanel = null;
+  var fixPanelNone = false;
+
+  function openFixPanel() {
+    var F = FC();
+    if (!F) return;
+    var items = F.unlocated(currentTrip().items || []).slice();
+    items.sort(function (a, b) {
+      var da = itemDay(a) || "9999";
+      var db = itemDay(b) || "9999";
+      return da < db ? -1 : da > db ? 1 : 0;
+    });
+    if (!items.length) return;
+    fixPanel = F.createPanel(items.map(function (it) { return it.id; }), {
+      onPage: renderFixPanel,
+      onDone: fixPanelDone
+    });
+    fixPanelNone = false;
+    if ($("fp-done")) $("fp-done").hidden = true;
+    if ($("fp-page")) $("fp-page").hidden = false;
+    if ($("fp-skip")) $("fp-skip").hidden = false;
+    if ($("fp-map")) $("fp-map").hidden = false;
+    openSheet("fix-panel");
+    renderFixPanel();
+  }
+
+  function renderFixPanel() {
+    if (!fixPanel || fixPanel.done) return;
+    fixPanelNone = false;
+    var id = fixPanel.current();
+    var item = findItem(id);
+    if (!item) {
+      fixPanel.skip();
+      return;
+    }
+    var F = FC();
+    queueCandidates(item);
+    if ($("fp-title")) $("fp-title").textContent = fixPanel.title();
+    var args = dayArgsFor(item);
+    var meta = [itemDay(item) ? formatMd(itemDay(item)) : "", args.city].filter(Boolean).join(" · ");
+    var list = F.getCached(item);
+    var html = '<h3 class="fp-name">' + escapeHtml(itemTitle(item)) + "</h3>" +
+      (meta ? '<p class="fp-meta">' + escapeHtml(meta) + "</p>" : "") +
+      '<div class="fp-cands">';
+    if (!list) html += '<p class="fc-head">' + escapeHtml(FC_COPY.loading) + "</p>";
+    else if (list.length) {
+      html += '<p class="fc-head">' + escapeHtml(FC_COPY.heading) + "</p>" +
+        '<ul class="fc-list">' + candRowsHtml(item, "data-fp-item") + "</ul>" +
+        '<button type="button" class="fc-none" data-fp-none="1">' + escapeHtml(FC_COPY.none) + "</button>";
+    }
+    html += "</div>";
+    if ($("fp-page")) $("fp-page").innerHTML = html;
+    if ($("fp-map")) $("fp-map").setAttribute("data-fc-map", id);
+  }
+
+  function refreshFixPanelPage() {
+    if (fixPanel && !fixPanel.done && $("fix-panel") && !$("fix-panel").hidden && !fixPanelNone) renderFixPanel();
+  }
+
+  function fixPanelChose() {
+    if (!fixPanel) return;
+    fixPanel.chose();
+  }
+
+  function fixPanelDone(st) {
+    if (!st.allFixed()) {
+      /* 有跳过的：安静关掉，跳过的照样留在顶部提示里，不再追问 */
+      closeSheet("fix-panel");
+      fixPanel = null;
+      return;
+    }
+    if ($("fp-page")) $("fp-page").hidden = true;
+    if ($("fp-skip")) $("fp-skip").hidden = true;
+    if ($("fp-map")) $("fp-map").hidden = true;
+    if ($("fp-title")) $("fp-title").textContent = "";
+    if ($("fp-done")) $("fp-done").hidden = false;
+    setTimeout(function () {
+      closeSheet("fix-panel");
+      fixPanel = null;
+    }, 1500);
+  }
+
+  /* ---------- 在地图上选 ---------- */
+  var pickMap = null;
+  var pickMarker = null;
+  var pickId = null;
+  var pickAfter = null;
+  var pickNew = null; /* v5.3「加酒店」页：在地图上选一个新酒店 { label, name } */
+
+  function openMapPick(id, after, newSpec) {
+    var item = newSpec ? null : findItem(id);
+    var ov = $("map-pick");
+    if ((!item && !newSpec) || !ov || typeof L === "undefined") return;
+    pickId = newSpec ? null : id;
+    pickNew = newSpec || null;
+    pickAfter = after || null;
+    ov.hidden = false;
+    if ($("mp-save")) $("mp-save").disabled = true;
+    if (!pickMap) {
+      pickMap = L.map($("mp-map"), { tapHold: true, zoomControl: true, attributionControl: true });
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        maxZoom: 19,
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+      }).addTo(pickMap);
+      pickMap.on("contextmenu", function (e) { dropPickPin(e.latlng); });
+      bindLongPress($("mp-map"));
+    }
+    if (pickMarker) {
+      pickMap.removeLayer(pickMarker);
+      pickMarker = null;
+    }
+    var mc = tripMap ? tripMap.getCenter() : null;
+    var c = FC().pickCenter(currentTrip().items || [], item ? itemDay(item) : selectedDateOrEmpty(), { excludeId: id }, mc ? { lat: mc.lat, lng: mc.lng, zoom: tripMap.getZoom() } : null);
+    setTimeout(function () {
+      pickMap.invalidateSize();
+      if (c) pickMap.setView([c.lat, c.lng], c.zoom || 15);
+      else pickMap.setView([20, 0], 2);
+    }, 30);
+  }
+
+  /** 自己做的长按（500ms、手指不动）：有些浏览器不给 Leaflet 发 contextmenu */
+  function bindLongPress(el) {
+    if (!el) return;
+    var timer = null;
+    var start = null;
+    function clear() {
+      if (timer) clearTimeout(timer);
+      timer = null;
+    }
+    el.addEventListener("pointerdown", function (ev) {
+      if (ev.isPrimary === false || (ev.target && ev.target.closest && ev.target.closest(".leaflet-marker-icon, .leaflet-control"))) return;
+      start = { x: ev.clientX, y: ev.clientY };
+      clear();
+      timer = setTimeout(function () {
+        timer = null;
+        if (!pickMap) return;
+        var r = el.getBoundingClientRect();
+        dropPickPin(pickMap.containerPointToLatLng([start.x - r.left, start.y - r.top]));
+      }, 500);
+    });
+    el.addEventListener("pointermove", function (ev) {
+      if (start && timer && Math.abs(ev.clientX - start.x) + Math.abs(ev.clientY - start.y) > 10) clear();
+    });
+    el.addEventListener("pointerup", clear);
+    el.addEventListener("pointercancel", clear);
+  }
+
+  function dropPickPin(latlng) {
+    if (!pickMap || !latlng) return;
+    if (pickMarker) pickMarker.setLatLng(latlng);
+    else {
+      pickMarker = L.marker(latlng, {
+        draggable: true,
+        icon: L.divIcon({ className: "mp-pin-wrap", html: '<div class="mp-pin">' + locPinSvg("#fff") + "</div>", iconSize: [36, 44], iconAnchor: [18, 42] })
+      }).addTo(pickMap);
+    }
+    if ($("mp-save")) $("mp-save").disabled = false;
+  }
+
+  function closeMapPick() {
+    if ($("map-pick")) $("map-pick").hidden = true;
+    pickId = null;
+    pickNew = null;
+    pickAfter = null;
+  }
+
+  /** 「就是这里」：只存坐标，不查地址，不发请求 */
+  function saveMapPick() {
+    if (pickNew && pickMarker) {
+      var spec = pickNew;
+      var p = pickMarker.getLatLng();
+      var fresh = itemFromType(spec.name, "", spec.label, null, selectedDateOrEmpty());
+      fresh.address = "";
+      applyHotelDates(fresh);
+      fresh = FC().applyMapPick(fresh, { lat: p.lat, lng: p.lng }, mapTiles);
+      closeMapPick();
+      addPlaceAndToast(fresh);
+      return;
+    }
+    if (!pickId || !pickMarker) return;
+    var id = pickId;
+    var after = pickAfter;
+    var old = findItem(id);
+    if (!old) return closeMapPick();
+    var before = JSON.parse(JSON.stringify(old));
+    var ll = pickMarker.getLatLng();
+    var next = FC().applyMapPick(old, { lat: ll.lat, lng: ll.lng }, mapTiles);
+    var trip = currentTrip();
+    trip.items = ItemEdit.updateItem(trip.items || [], id, next);
+    saveAllTrips();
+    closeMapPick();
+    expanded[id] = false;
+    markJustFixed(id);
+    renderAll();
+    if (after) after();
+    else {
+      showToast("已补上位置", function () {
+        var t = currentTrip();
+        t.items = ItemEdit.updateItem(t.items || [], id, before);
+        saveAllTrips();
+        renderAll();
+      });
+    }
+  }
+
+  /** v5.3：搜索框粘贴复制来的地址（小红书 / 微信）：去掉 emoji、「地址：」、换行、话题标签再搜；链接一律丢掉，不解析 */
+  /* ---------- v5.3 「添加什么？」 ---------- */
+  function openAddMenu() {
+    exitFixMode();
+    if (editingId) exitEditMode();
+    openSheet("add-menu");
+    /* 焦点放到面板上（不在第一行画焦点框），键盘按 Tab 就到三行 */
+    var panel = $("add-menu") && $("add-menu").querySelector(".sheet-panel");
+    if (panel) {
+      try { panel.focus(); } catch (err) {}
+    }
+  }
+
+  /** 搜索页按类型准备：kind = "hotel" | "place"；酒店把搜到的结果按酒店加（之后的日期流程和以前一样） */
+  function setAddPreset(kind) {
+    addPreset = kind === "hotel" ? "酒店" : "";
+    var box = $("place-search");
+    if (box) box.setAttribute("placeholder", kind === "hotel" ? ADD_MENU_COPY.hotelPlaceholder : ADD_MENU_COPY.placePlaceholder);
+  }
+
+  function openAddFor(kind) {
+    closeSheet("add-menu");
+    if (kind === "flight" || kind === "whole") {
+      setAddPreset("place");
+      openSheet("add-sheet");
+      openAiWizard(true);
+      var box = $("ai-help");
+      if (box && box.scrollIntoView) box.scrollIntoView({ block: "start" });
+      return;
+    }
+    setAddPreset(kind);
+    openSheet("add-sheet");
+    setHotelMode(kind === "hotel");
+    if ($("place-search")) {
+      try { $("place-search").focus(); } catch (err) {}
+    }
+  }
+
+  function bindAddMenu() {
+    var C = ADD_MENU_COPY;
+    var put = function (id, t) { if ($(id)) $(id).textContent = t; };
+    put("am-title", C.title);
+    put("am-flight-main", C.flight);
+    put("am-flight-sub", C.flightSub);
+    put("am-hotel-main", C.hotel);
+    put("am-hotel-sub", C.hotelSub);
+    put("am-place-main", C.place);
+    put("am-place-sub", C.placeSub);
+    put("am-whole", C.whole);
+    put("add-map-link", C.mapLink);
+    if ($("add-sheet-back")) {
+      $("add-sheet-back").setAttribute("aria-label", C.back);
+      $("add-sheet-back").addEventListener("click", function () {
+        closeSheet("add-sheet");
+        openAddMenu();
+      });
+    }
+    if ($("add-map-link")) $("add-map-link").addEventListener("click", function () {
+      var q = String(($("place-search") && $("place-search").value) || "").trim();
+      openMapPick(null, null, { label: "酒店", name: q || C.mapHotelName });
+    });
+    var menu = $("add-menu");
+    if (!menu) return;
+    menu.addEventListener("click", function (ev) {
+      var b = ev.target.closest && ev.target.closest("[data-add-kind]");
+      if (b) openAddFor(b.getAttribute("data-add-kind"));
+    });
+  }
+
+  function bindPasteSearch() {
+    var box = $("place-search");
+    if (!box) return;
+    box.setAttribute("placeholder", ADD_MENU_COPY.placePlaceholder);
+    box.addEventListener("paste", function (ev) {
+      var dt = ev.clipboardData || window.clipboardData;
+      var text = dt && dt.getData ? dt.getData("text") : "";
+      if (!text || !window.FixCand || !FixCand.looksPasted(text)) return;
+      var clean = FixCand.cleanPasted(text);
+      if (!clean) return;
+      ev.preventDefault();
+      box.value = clean;
+      box.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+  }
+
+  function bindFixUi() {
+    if ($("fix-banner")) $("fix-banner").addEventListener("click", openFixPanel);
+    if ($("fp-skip")) $("fp-skip").addEventListener("click", function () {
+      if (fixPanel) fixPanel.skip();
+    });
+    if ($("fp-map")) $("fp-map").addEventListener("click", function () {
+      var id = $("fp-map").getAttribute("data-fc-map");
+      if (id) openMapPick(id, fixPanelChose);
+    });
+    if ($("fp-page")) $("fp-page").addEventListener("click", function (ev) {
+      var row = ev.target.closest && ev.target.closest("[data-fp-item]");
+      if (row) {
+        var it = findItem(row.getAttribute("data-fp-item"));
+        var list = (it && FC().getCached(it)) || [];
+        var c = list[Number(row.getAttribute("data-fc-i"))];
+        if (c && applyCandidate(it.id, c, { quiet: true })) {
+          row.classList.add("is-picked");
+          fixPanelChose();
+        }
+        return;
+      }
+      if (ev.target.closest && ev.target.closest("[data-fp-none]")) {
+        fixPanelNone = true;
+        var box = $("fp-page").querySelector(".fp-cands");
+        if (box) box.innerHTML = '<p class="fc-head">' + escapeHtml("那就在地图上选，或点右上角「跳过」") + "</p>";
+      }
+    });
+    if ($("mp-close")) $("mp-close").addEventListener("click", closeMapPick);
+    if ($("mp-save")) $("mp-save").addEventListener("click", saveMapPick);
+  }
+
   function openFixAddress(id) {
     var item = findItem(id);
     if (!item) return;
+    setAddPreset("place");
+    setHotelMode(false);
     if (editingId) exitEditMode();
     fixingId = id;
     var sheet = $("add-sheet");
@@ -3016,7 +3560,7 @@
     var box = $("add-pick");
     if (!box) return;
     var need = (resolutions || []).filter(function (r) {
-      return r.status === "ambiguous" || r.status === "none" || r.status === "error";
+      return r.status === "ambiguous" || r.status === "far" || r.status === "none" || r.status === "error";
     });
     if (!need.length) {
       box.hidden = true;
@@ -3069,9 +3613,27 @@
     });
   }
 
+  /**
+   * v5.3（IT老板）：导入后没坐标的条目进待补。搜到多个结果（或唯一结果离当天太远）时，把这些结果当候选放进内存；
+   * 没有结果的，后台再按当天城市 / 区域 / 简化名找一次。都要用户点一下才补。
+   */
+  function seedCandidates(items, resolutions) {
+    if (!window.FixCand) return;
+    items.forEach(function (it, i) {
+      var cur = findItem(it.id) || it;
+      if (!FixCand.needsFix(cur)) return;
+      var res = resolutions[i];
+      if (res && res.candidates && res.candidates.length && (res.status === "ambiguous" || res.status === "far")) {
+        FixCand.setCached(cur, res.candidates);
+        candState[cur.id] = "done";
+      } else queueCandidates(cur);
+    });
+  }
+
   function finishImport(items, resolutions, errors, notes) {
     applyResolutions(items, resolutions || []);
     if (items.length) appendItems(items);
+    seedCandidates(items, resolutions || []);
     if (items.length) queueNameSuggest(items.length);
     var parts = [];
     var pendingN = items.filter(isPendingItem).length;
@@ -3113,7 +3675,8 @@
       return;
     }
     showAddStatus('<p class="ok">正在查找位置…</p>');
-    Geocode.resolveAll(items)
+    /* v5.3（IT老板）：导入也用当天城市 + 区域（bounded=1 → 0）；酒店先找，后面的地点能用上 */
+    Geocode.resolveAll(items, null, function (it) { return dayArgsFor(it, items); })
       .then(function (resolutions) {
         finishImport(items, resolutions, errors, result.notes);
       })
@@ -3144,7 +3707,7 @@
     };
     if (day) item.date = day;
     showManualStatus('<p class="ok">正在查找位置…</p>');
-    Geocode.resolveItem(item)
+    Geocode.resolveItem(item, dayArgsFor(item))
       .then(function (res) {
         finishImport([item], [res], []);
       })
@@ -3315,6 +3878,9 @@
     openDetail: openDetail,
     confirm: openConfirm,
     openAnnouncement: openAnnouncement,
+    refresh: renderAll,
+    openFixPanel: openFixPanel,
+    openMapPick: openMapPick,
     openIosSheet: openIosSheet,
     openInAppOverlay: openInAppOverlay,
     maybeAutoGuide: maybeAutoGuide,
@@ -3352,14 +3918,8 @@
     $("settings-btn").addEventListener("click", function () {
       openSheet("settings-sheet");
     });
-    $("add-fab").addEventListener("click", function () {
-      exitFixMode();
-      if (editingId) exitEditMode();
-      openSheet("add-sheet");
-      if ($("place-search")) {
-        try { $("place-search").focus(); } catch (err) {}
-      }
-    });
+    $("add-fab").addEventListener("click", openAddMenu);
+    bindAddMenu();
     $("add-go").addEventListener("click", function () {
       wizardImport(($("add-text") && $("add-text").value) || "");
     });
@@ -3479,10 +4039,15 @@
         closeSheet("settings-sheet");
         closeSheet("install-sheet");
         closeSheet("month-sheet");
+        closeSheet("fix-panel");
+        closeSheet("add-menu");
+        closeMapPick();
       }
     });
     bindAddPick();
     bindEditDelete();
+    bindFixUi();
+    bindPasteSearch();
     if ($("changelog-open")) $("changelog-open").addEventListener("click", openChangelog);
     if ($("announce-ok")) $("announce-ok").addEventListener("click", dismissAnnouncement);
     if ($("inapp-close")) $("inapp-close").addEventListener("click", function () {

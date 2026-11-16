@@ -90,7 +90,7 @@ check("wiring: button markup, aria-label, only on tap, never on load, script + p
   const tl = fs.readFileSync(__dirname + "/timeline.js", "utf8");
   assert.ok(/<button type="button" class="locate-btn" id="locate-btn" aria-label="定位到我"/.test(html));
   assert.ok(html.indexOf('src="./locate.js"') !== -1 && sw.indexOf('"./locate.js"') !== -1);
-  assert.ok(sw.indexOf('"xingcheng-map-shell-v15"') !== -1);
+  assert.ok(sw.indexOf('"xingcheng-map-shell-v16"') !== -1);
   assert.strictEqual((src.match(/getCurrentPosition\(/g) || []).length, 1, "exactly one call site");
   assert.ok(/b\.addEventListener\("click", onTap\)/.test(src), "requested only from the click handler");
   const bindFn = src.slice(src.indexOf("function bind()"));

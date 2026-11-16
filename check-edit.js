@@ -194,7 +194,7 @@ check("UI wiring: help text, undo 10s, no 无法恢复, sw v15 caches item-edit.
   assert.ok(tl.indexOf("确定删除这一项吗？") !== -1);
   assert.ok(tl.indexOf("window.confirm") === -1);
   assert.ok((tl + html).indexOf("无法恢复") === -1);
-  assert.ok(sw.indexOf('"xingcheng-map-shell-v15"') !== -1);
+  assert.ok(sw.indexOf('"xingcheng-map-shell-v16"') !== -1);
   assert.ok(sw.indexOf("./item-edit.js") !== -1);
   assert.ok(html.indexOf('src="./item-edit.js"') !== -1);
   assert.ok(html.indexOf('id="clear-all-btn"') !== -1);

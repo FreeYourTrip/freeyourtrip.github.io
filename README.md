@@ -73,7 +73,7 @@ python3 -m http.server 8080 --directory .
 | `manifest.webmanifest` / `sw.js` / `icons/` | 可安装到手机主屏幕（相对路径，根路径或子目录都能用）。`icons/` 为 v5 新图标：16、32、120、152、167、180、192、512 和 `icon-maskable-512.png`，换图时保持文件名不变 |
 | `cover-1200x630.png` / `splash-*.png` | 链接预览封面（og:image）和 iPhone 启动图（9 张：1290×2796、1179×2556、1170×2532、1284×2778、1125×2436、1242×2688、828×1792、1080×2340、750×1334，按 device-width / device-height / 像素比 / 竖屏匹配），都不进预缓存 |
 | `导入格式说明.txt` | 导入格式说明（推荐管道格式） |
-| `check.js` / `check-import.js` / `check-privacy.js` / `check-legs.js` / `check-guess-type.js` / `check-install-env.js` / `check-edit.js` / `check-update.js` / `check-version.js` / `check-calendar.js` / `check-patch.js` / `check-pending.js` / `check-locate.js` / `check-install-guide.js` / `check-name-suggest.js` / `check-import-tolerant.js` / `check-search-pick.js` / `check-v52-ui.js` / `check-fix-address.js` / `check-size.js` | 可选的离线校验（`check-size.js`：打印预缓存总量和比 `size-baseline.json` 的增减，超过 1.5 MB 或用了 png/jpg 图片只警告） |
+| `check.js` / `check-import.js` / `check-privacy.js` / `check-legs.js` / `check-guess-type.js` / `check-install-env.js` / `check-edit.js` / `check-update.js` / `check-version.js` / `check-calendar.js` / `check-patch.js` / `check-pending.js` / `check-locate.js` / `check-install-guide.js` / `check-name-suggest.js` / `check-import-tolerant.js` / `check-search-pick.js` / `check-v52-ui.js` / `check-fix-address.js` / `check-size.js` / `check-v53-fix.js` | 可选的离线校验（`check-size.js`：打印预缓存总量和比 `size-baseline.json` 的增减，超过 1.5 MB 或用了 png/jpg 图片只警告） |
 
 ## 心愿清单字段（`DESTINATIONS`）
 

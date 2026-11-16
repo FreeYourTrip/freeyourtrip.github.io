@@ -177,11 +177,13 @@ check("area bias: viewbox numbers have at most 1 decimal; built only from trip i
     const u = urls[0] || "";
     const vb = (u.match(/[?&]viewbox=([^&]*)/) || [])[1] || "";
     assert.strictEqual(decodeURIComponent(vb), "135.6,35.2,136.0,34.8");
-    assert.ok(/[?&]bounded=0(&|$)/.test(u), "bias only prefers, never limits");
-    assert.ok(!/35\.00|135\.77|\d\.\d{2}/.test(decodeURIComponent(u.replace(/^[^?]*\?/, "").replace(/q=[^&]*/, ""))), "no value with 2+ decimals in the params");
+    /* v5.3：先 bounded=1（只在框里找），0 个结果再 bounded=0 */
+    assert.ok(/[?&]bounded=1(&|$)/.test(u), "first try stays inside the box");
+    assert.ok(urls[1] && /[?&]bounded=0(&|$)/.test(urls[1]) && urls[1].indexOf("viewbox=" + vb) !== -1, "0 results → bounded=0 fallback");
+    urls.slice(0, 2).forEach((x) => assert.ok(!/35\.00|135\.77|\d\.\d{2}/.test(decodeURIComponent(x.replace(/^[^?]*\?/, "").replace(/q=[^&]*/, ""))), "no value with 2+ decimals in the params"));
     await Geocode.nominatimSearch("示例小店");
-    assert.ok(urls[1] && urls[1].indexOf("viewbox") === -1, "no bias → no viewbox");
-    console.log("PASS  Nominatim request: rounded viewbox + bounded=0, nothing more precise");
+    assert.ok(urls[2] && urls[2].indexOf("viewbox") === -1, "no bias → no viewbox");
+    console.log("PASS  Nominatim request: rounded viewbox, bounded=1 then 0, nothing more precise");
   } catch (err) {
     failures += 1;
     console.log("FAIL  Nominatim request bias");
