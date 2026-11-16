@@ -22,12 +22,12 @@
 
 | 项 | 内容 |
 | --- | --- |
-| 线上地址 | https://freeyourtrip.github.io/ （2026-11-16 起；当前线上提交 `7f726aa`（v5.1），sw `xingcheng-map-shell-v14`；v5 首次部署为 `55ba75e`） |
+| 线上地址 | https://freeyourtrip.github.io/ （2026-11-16 起；当前线上提交 `89710de`（v5.2），sw `xingcheng-map-shell-v15`；v5 首次部署为 `55ba75e`） |
 | 代码仓库 | https://github.com/FreeYourTrip/freeyourtrip.github.io （公开仓库，部署在根路径） |
 | 高德域名白名单 | `freeyourtrip.github.io`（Key 与安全密钥不写入本日志或仓库，`config.js` 里保持为空） |
 | 旧网址 | 已停用：https://chickenbb52-hub.github.io/Trip-Map/ 现返回 404（2026-11-16 15:09 Europe/London 核实）；仓库 `chickenbb52-hub/Trip-Map` 已由用户本人删除；按用户要求不做自动跳转 |
 | 托管 | GitHub Pages，从 `main` 的仓库根目录部署；仓库根有空文件 `.nojekyll`，避免 Jekyll 处理 |
-| 截至本日志 | （2026-11-16 15:38 Europe/London 更新）线上 https://freeyourtrip.github.io/ 对应提交 `7f726aa`，service worker 缓存名 `xingcheng-map-shell-v14`，显示版本 v5.1（已核实 sw.js、version.js、locate.js 线上返回正确）；高德 Key 与安全密钥均为空（`config.js` 里是空字符串）。旧网址 chickenbb52-hub.github.io/Trip-Map 已停用（返回 404，仓库已删除，不做跳转）。12:25 时的旧状态（提交 `e8e43ff`、`config.js` 404）见第 3 节历史记录。 |
+| 截至本日志 | （2026-11-16 17:08 Europe/London 更新）线上 https://freeyourtrip.github.io/ 对应提交 `89710de`（2026-11-16 17:01 上线），service worker 缓存名 `xingcheng-map-shell-v15`，显示版本 v5.2（金牌程序员核对了 sw.js、version.js、index.html、timeline.js，线上和本地一致；IT老板 核对过整站，和仓库逐字节一致，20 个检查全部通过，0.66MB）；高德 Key 与安全密钥均为空（`config.js` 里是空字符串）。旧网址 chickenbb52-hub.github.io/Trip-Map 已停用（返回 404）。之前的状态（v5.1 `7f726aa`、12:25 时的 `e8e43ff`）见历史记录。 |
 
 ### 技术栈（已上线的第一版 / 隐私版）
 
@@ -726,7 +726,7 @@ git revert <出错的提交哈希>   # 优先用 revert，便于保留历史
 - 涉及文件：`styles.css`、`timeline.js`（`isDualScreen` 钩子）、`check-locate.js`、`README.md`、`DESIGN.md`
 - 是否已上线：是，已推送（提交 `7f726aa`）。仍是 sw `xingcheng-map-shell-v14`，无新外部域名，高德 Key 为空，假数据。
 
-### 2026-11-16 16:22（Europe/London）— v5.2：放到桌面引导、分级说明书、截图交给 AI 向导、行程起名、自选图标、导航修复（只做了模拟测试，没上真机；未推送）
+### 2026-11-16 16:22（Europe/London）— v5.2：放到桌面引导、分级说明书、截图交给 AI 向导、行程起名、自选图标、导航修复（只做了模拟测试，没上真机；17:01 已上线，提交 `89710de`）
 
 - 提出：用户（苹果用户保存到桌面太难）；方案：IT老板；文案：广告文案宣传大师；插图待 UI（现在全是自画占位图，标「示意图（占位）」）。
 - 版本：显示 **v5.2**，sw 缓存 `xingcheng-map-shell-v15`（预缓存加 `install-guide.js`、`trip-name.js`）。
@@ -765,4 +765,4 @@ git revert <出错的提交哈希>   # 优先用 revert，便于保留历史
 - 补充（16:53 Europe/London，终审）：说明书第 1 层换定稿、搜不到的提示改为「暂时找不到位置，可以先直接添加，之后再补地址」，隐私一句改为「…搜索和导航时，地名和大概区域会发给地图服务」。没坐标的卡片：已允许定位就静默取一次位置（不弹窗、只在内存）自动选 App；不知道位置就给「Google 地图」「高德」两个按钮 + 提示（判断在 `GeoUtil.navChoice`）。当天城市改为只用地图服务给的城市：选中搜索结果时存进新字段 `item.city`（Nominatim city/town/village，高德 cityname），当天城市 = 那天酒店的 city → 同一天时间最近、带 city 的条目 → 都没有就不补文字；去掉城市表（EXTRA_CITIES / 市中心坐标）和按坐标找最近机场猜城市，地址文字也不再解析。补地址和搜不到重搜时另带区域偏好：那天酒店坐标（否则同一天别的条目坐标）先四舍五入到 1 位小数，再扩约 20 km 作 Nominatim `viewbox`（`bounded=0`，只优先不限定；高德走 searchNearBy，空结果再全局搜）；从不发精确坐标或你自己的位置，除 `item.city` 外不新存任何东西。iOS 引导步骤换裁好的 `*-focus.webp`（整图 02–05 移出预缓存并删除；微信遮罩和 iPad 仍用整图），面板实测 1297px 高（含有行程提醒，目标约 1000px，未达到）；公告标题「v5.2 更新」、4 条去掉 emoji、按钮和圆点改 #0F9D8A。新增 `check-size.js`：打印预缓存原始大小合计和比上次记录（`size-baseline.json`，`--record` 更新）的增减；超过 1.5 MB、或图片除 App 图标外用了 png/jpg，只打 WARNING 不算失败（Leaflet 自带的 5 张 png 没用到，已移出预缓存）；当前 694,548 字节，已记为基线。20 个检查文件全部通过。
 - 补充（16:57 Europe/London，UI 小改）：撤销链接、更新横幅图标改为 #0F9D8A；「我的位置」蓝点保留 #4C8DFF，白边 2px，精度圈透明度 0.15。styles.css 其余蓝色背景留到 v6 统一主色。
 - 补充 16:58（交叉审核后修改）：更新日志「调整」行加上导航挪进卡片，「新增」行加上「待补地址」；设置页隐私说明改成「地名、地址和大概位置」，和说明书一致；没地址的卡片里，灰按钮下面的小字换成可以点的「补上地址 ›」（13px #0F9D8A），点了打开预填好的搜索（详情页还是显示文字）。check-version 跟着改，20/20 通过，重拍 v52-9。
-- 是否已上线：否，**未推送**。无新外部域名，高德 Key 为空，全部假数据。
+- 是否已上线：是，2026-11-16 17:01 上线，commit 89710de（sw v15）
