@@ -93,7 +93,7 @@
     if (!m) {
       return { error: opts.badMessage };
     }
-    if (!isValidIsoDate(m[1]) || !isValidIsoDate(m[3])) {
+    if (!isValidIsoDate(m[1]) || !isValidIsoDate(m[3]) || !isValidTime(m[2]) || !isValidTime(m[4])) {
       return { error: opts.badMessage + "（日期无效）" };
     }
     if (opts.requireTimes && (!m[2] || !m[4])) {
@@ -111,12 +111,96 @@
     var s = trim(raw);
     if (!s) return { date: "", time: "" };
     var m = s.match(/^(\d{4}-\d{2}-\d{2})(?:[ T](\d{2}:\d{2}))?$/);
-    if (!m || !isValidIsoDate(m[1])) {
+    if (!m || !isValidIsoDate(m[1]) || !isValidTime(m[2])) {
       return {
         error: "地点的日期时间应为「YYYY-MM-DD」或「YYYY-MM-DD HH:mm」，也可留空"
       };
     }
     return { date: m[1], time: m[2] || "" };
+  }
+
+  /* ---------- 日期 / 时间宽容写法 → 标准「YYYY-MM-DD HH:MM」 ---------- */
+  var activeYearHint = "";
+  var hintLocked = false;
+
+  function toHalfWidth(s) {
+    return String(s == null ? "" : s)
+      .replace(/[\uFF10-\uFF19]/g, function (c) { return String.fromCharCode(c.charCodeAt(0) - 0xFF10 + 48); })
+      .replace(/\uFF1A/g, ":")
+      .replace(/\uFF0F/g, "/")
+      .replace(/\uFF0E/g, ".")
+      .replace(/[\uFF0D\u2010-\u2013]/g, "-")
+      .replace(/\u3000/g, " ");
+  }
+
+  /** 从整段文字里找一个能用的年份（第一个完整日期的年），给只写「12月11日」的行用。 */
+  function findYearHint(text) {
+    var m = /(?:^|[^\d])((?:19|20)\d{2})\s*(?:[-/.]|年)\s*\d{1,2}/.exec(toHalfWidth(text));
+    return m ? m[1] : "";
+  }
+
+  function pad(n) {
+    n = Number(n);
+    return n < 10 ? "0" + n : String(n);
+  }
+
+  function fixTime(h, mi, ap) {
+    h = Number(h);
+    mi = mi == null || mi === "" ? 0 : Number(mi);
+    ap = String(ap || "").toLowerCase().replace(/\./g, "");
+    if (ap === "pm" || ap === "下午" || ap === "晚上") {
+      if (h < 12) h += 12;
+    } else if (ap === "am" || ap === "上午" || ap === "早上") {
+      if (h === 12) h = 0;
+    }
+    if (h > 23 || mi > 59) return null;
+    return pad(h) + ":" + pad(mi);
+  }
+
+  /**
+   * 把日期时间单元格里的常见写法改成标准写法；认不出来的部分原样保留（后面照旧报错）。
+   * 日期：2026/12/11、2026.12.11、2026年12月11日、2026-1-5；12月11日（只有 yearHint 时）。
+   * 时间：9:00、9：00、9点、9点30、9点半、9:00 AM / PM、9am、下午3点；全角数字。
+   */
+  function normalizeDateTime(raw, yearHint) {
+    var s = toHalfWidth(raw);
+    if (!s.trim()) return s;
+    s = s.replace(/((?:19|20)\d{2})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*[日号]?/g, function (_, y, m, d) {
+      return y + "-" + pad(m) + "-" + pad(d) + " ";
+    });
+    s = s.replace(/((?:19|20)\d{2})\s*[-/.]\s*(\d{1,2})\s*[-/.]\s*(\d{1,2})(?!\d)/g, function (_, y, m, d) {
+      return y + "-" + pad(m) + "-" + pad(d) + " ";
+    });
+    if (yearHint) {
+      s = s.replace(/(^|[^\d-])(\d{1,2})\s*月\s*(\d{1,2})\s*[日号]?/g, function (_, pre, m, d) {
+        return pre + yearHint + "-" + pad(m) + "-" + pad(d) + " ";
+      });
+    }
+    // 时间：带冒号的（可带 AM/PM 或 上午/下午）
+    s = s.replace(/(上午|下午|早上|晚上)?\s*(\d{1,2}):(\d{2})(?!\d)\s*([AaPp]\.?[Mm]\.?)?/g, function (all, ap1, h, mi, ap2) {
+      var t = fixTime(h, mi, ap2 || ap1);
+      return t ? " " + t + " " : all;
+    });
+    // 9点 / 9点30 / 9点半 / 下午3点
+    s = s.replace(/(上午|下午|早上|晚上)?\s*(\d{1,2})\s*[点點时時](?:\s*(半|\d{1,2})\s*分?)?/g, function (all, ap, h, mi) {
+      var t = fixTime(h, mi === "半" ? 30 : mi, ap);
+      return t ? " " + t + " " : all;
+    });
+    // 9am / 9 PM（前面要是空白或开头，避免吃掉日期里的数字）
+    s = s.replace(/(^|\s)(\d{1,2})\s*([AaPp]\.?[Mm]\.?)(?![A-Za-z])/g, function (all, pre, h, ap) {
+      var t = fixTime(h, 0, ap);
+      return t ? pre + t + " " : all;
+    });
+    s = s.replace(/\s*~\s*/g, " ~ ").replace(/\s*\uFF5E\s*/g, " ~ ");
+    s = s.replace(/(\d{4}-\d{2}-\d{2})\s*T\s*(\d{2}:\d{2})/g, "$1 $2");
+    s = s.replace(/\s+/g, " ").trim();
+    return s;
+  }
+
+  function isValidTime(t) {
+    if (!t) return true;
+    var m = /^(\d{2}):(\d{2})$/.exec(t);
+    return !!m && Number(m[1]) <= 23 && Number(m[2]) <= 59;
   }
 
   function isValidIsoDate(iso) {
@@ -269,7 +353,21 @@
     return "";
   }
 
+  /** 日期时间认不出来时：不丢这一行，记下原文、标「待确认」，能认出的日期放进 dateGuess 供修改时预填。 */
+  function markPending(item, rawText, normalized, reason) {
+    item.pendingDate = true;
+    item.dateRaw = String(rawText == null ? "" : rawText).trim();
+    var g = /(\d{4}-\d{2}-\d{2})/.exec(normalized || "");
+    if (g && isValidIsoDate(g[1])) item.dateGuess = g[1];
+    item.pendingReason = reason || "";
+    return item;
+  }
+
   function itemFromFields(fields, usedIds) {
+    var rawDateText = fields ? fields.datetime : "";
+    if (fields && fields.datetime != null) {
+      fields = Object.assign({}, fields, { datetime: normalizeDateTime(fields.datetime, activeYearHint) });
+    }
     var typeInfo = parseType(fields.type);
     if (typeInfo.error) return { error: typeInfo.error };
     var name = trim(fields.name);
@@ -288,7 +386,8 @@
         requiredMessage: "机票缺少日期时间",
         badMessage: "机票的日期时间应为「出发当地时间 ~ 到达当地时间」，例如 2026-12-01 09:30 ~ 2026-12-02 07:00"
       });
-      if (when.error) return { error: when.error };
+      var flightPending = !!when.error;
+      if (flightPending) when = { startDate: "", startTime: "", endDate: "", endTime: "", reason: when.error };
       item = {
         id: newId(slug(name, "flight"), usedIds),
         type: "flight",
@@ -308,13 +407,15 @@
         note: extra.note || "",
         example: false
       };
+      if (flightPending) markPending(item, rawDateText, fields.datetime, when.reason);
     } else if (typeInfo.kind === "hotel") {
       var stay = parseRangeDateTime(fields.datetime, {
         requireTimes: false,
         requiredMessage: "酒店缺少入住与退房日期",
         badMessage: "酒店的日期时间应为「入住日期 ~ 退房日期」，例如 2026-12-04 ~ 2026-12-07"
       });
-      if (stay.error) return { error: stay.error };
+      var stayPending = stay.error ? stay.error : "";
+      if (stayPending) stay = { startDate: "", endDate: "", startTime: "", endTime: "" };
       var hn = namesFrom(name);
       item = {
         id: newId(slug(name, "hotel"), usedIds),
@@ -330,9 +431,11 @@
         note: extra.note || "",
         example: false
       };
+      if (stayPending) markPending(item, rawDateText, fields.datetime, stayPending);
     } else {
       var whenP = parsePlaceDateTime(fields.datetime);
-      if (whenP.error) return { error: whenP.error };
+      var placePending = whenP.error || "";
+      if (placePending) whenP = { date: "", time: "" };
       var pn = namesFrom(name);
       item = {
         id: newId(slug(name, "place"), usedIds),
@@ -346,6 +449,7 @@
         note: trim(fields.note),
         example: false
       };
+      if (placePending) markPending(item, rawDateText, fields.datetime, placePending);
     }
 
     if (fields.map_url) item.map_url = trim(fields.map_url);
@@ -357,6 +461,7 @@
   }
 
   function parsePipe(text) {
+    if (!hintLocked) activeYearHint = findYearHint(text);
     var lines = normalizeImportText(text).split(/\r\n|\n|\r/);
     var usedIds = {};
     var items = [];
@@ -486,6 +591,7 @@
   }
 
   function parseJson(text) {
+    if (!hintLocked) activeYearHint = findYearHint(text);
     var data;
     try {
       data = JSON.parse(text);
@@ -551,6 +657,16 @@
 
   function parseImport(text) {
     var raw = normalizeImportText(String(text == null ? "" : text));
+    activeYearHint = findYearHint(raw);
+    hintLocked = true;
+    try {
+      return parseImportInner(raw);
+    } finally {
+      hintLocked = false;
+    }
+  }
+
+  function parseImportInner(raw) {
     if (!trim(raw)) {
       return { items: [], errors: ["没有可导入的内容。请粘贴管道格式或 JSON。"], notes: [], format: "" };
     }
@@ -627,6 +743,8 @@
     HEADER: HEADER,
     looksLikeJson: looksLikeJson,
     normalizeImportText: normalizeImportText,
+    normalizeDateTime: normalizeDateTime,
+    findYearHint: findYearHint,
     splitPipeLine: splitPipeLine,
     parseCoordsFromAddress: parseCoordsFromAddress,
     parseSeatAndConfirm: parseSeatAndConfirm,

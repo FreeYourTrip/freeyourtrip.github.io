@@ -285,6 +285,113 @@ check("leading bullets and full-width pipes parse", function () {
   assert.strictEqual(r.items[1].date, "2026-12-08");
 });
 
+check("date tolerance: 2026/12/11, 2026.12.11, 2026年12月11日, full-width digits -> YYYY-MM-DD", function () {
+  const N = ImportUtil.normalizeDateTime;
+  assert.strictEqual(N("2026/12/11"), "2026-12-11");
+  assert.strictEqual(N("2026.12.11"), "2026-12-11");
+  assert.strictEqual(N("2026年12月11日"), "2026-12-11");
+  assert.strictEqual(N("2026-1-5"), "2026-01-05");
+  assert.strictEqual(N("２０２６／１２／１１"), "2026-12-11");
+  assert.strictEqual(N("2026-12-11T09:00"), "2026-12-11 09:00");
+});
+
+check("time tolerance: 9:00, 9点, 9点半, 9:00 AM/PM, 12am, 下午3点, full-width colon", function () {
+  const N = ImportUtil.normalizeDateTime;
+  assert.strictEqual(N("2026/12/11 9:00"), "2026-12-11 09:00");
+  assert.strictEqual(N("2026/12/11 9点"), "2026-12-11 09:00");
+  assert.strictEqual(N("2026/12/11 9点半"), "2026-12-11 09:30");
+  assert.strictEqual(N("2026/12/11 9:00 AM"), "2026-12-11 09:00");
+  assert.strictEqual(N("2026/12/11 9:00 PM"), "2026-12-11 21:00");
+  assert.strictEqual(N("2026/12/11 12:15 am"), "2026-12-11 00:15");
+  assert.strictEqual(N("2026/12/11 9pm"), "2026-12-11 21:00");
+  assert.strictEqual(N("2026/12/11 下午3点"), "2026-12-11 15:00");
+  assert.strictEqual(N("2026年12月11日 ９：３０"), "2026-12-11 09:30");
+  assert.strictEqual(N("2026-12-11 25:00"), "2026-12-11 25:00", "impossible time left alone -> still an error later");
+});
+
+check("pipe rows with loose dates/times are imported, not dropped", function () {
+  const text = [
+    "类型 | 名称 | 地址 | 日期时间 | 备注",
+    "地点 | 示例咖啡馆 | Example St 1 | 2026/12/11 9:00 |",
+    "地点/景点 | 示例博物馆 | Example St 2 | 2026年12月12日 下午2点 |",
+    "酒店 | 示例酒店 | Example St 3 | 2026.12.11 ~ 2026.12.13 |",
+    "机票 | XX100 | LHR - CDG | 2026/12/13 9:00 AM ～ 2026/12/13 11:30 AM |"
+  ].join("\n");
+  const r = ImportUtil.parseImport(text);
+  assert.deepStrictEqual(r.errors, []);
+  assert.strictEqual(r.items.length, 4);
+  assert.strictEqual(r.items[0].date, "2026-12-11");
+  assert.strictEqual(r.items[0].time, "09:00");
+  assert.strictEqual(r.items[1].time, "14:00");
+  assert.strictEqual(r.items[2].checkIn, "2026-12-11");
+  assert.strictEqual(r.items[2].checkOut, "2026-12-13");
+  assert.strictEqual(r.items[3].departTime, "09:00");
+  assert.strictEqual(r.items[3].arriveTime, "11:30");
+});
+
+check("12月11日 uses the year from other rows; with no year anywhere it is kept as 待确认", function () {
+  const ok = ImportUtil.parseImport("地点 | 示例A | Example 1 | 2026/12/10 |\n地点 | 示例B | Example 2 | 12月11日 9点 |");
+  assert.deepStrictEqual(ok.errors, []);
+  assert.strictEqual(ok.items[1].date, "2026-12-11");
+  assert.strictEqual(ok.items[1].time, "09:00");
+  const bad = ImportUtil.parseImport("地点 | 示例B | Example 2 | 12月11日 9点 |");
+  assert.deepStrictEqual(bad.errors, []);
+  assert.strictEqual(bad.items.length, 1);
+  assert.strictEqual(bad.items[0].pendingDate, true);
+  assert.strictEqual(bad.items[0].dateRaw, "12月11日 9点");
+  assert.strictEqual(bad.items[0].date, "");
+});
+
+check("JSON records get the same date/time tolerance", function () {
+  const r = ImportUtil.parseImport(JSON.stringify([
+    { 类型: "地点", 名称: "示例咖啡馆", 地址: "Example St 1", 日期时间: "2026年12月11日 9:00 PM" },
+    { 类型: "地点", 名称: "示例餐厅", 地址: "Example St 2", 日期时间: "12月12日 9点" }
+  ]));
+  assert.deepStrictEqual(r.errors, []);
+  assert.strictEqual(r.items[0].date, "2026-12-11");
+  assert.strictEqual(r.items[0].time, "21:00");
+  assert.strictEqual(r.items[1].date, "2026-12-12");
+});
+
+check("unconvertible dates are kept as 待确认 (not dropped): 25:00, no-year, garbage; other fields kept", function () {
+  const text = [
+    "地点/餐厅 | 示例餐厅 | Example St 1 | 2026-12-11 25:00 | 订了窗边",
+    "地点 | 示例公园 | Example St 2 | 下周三下午 | ",
+    "酒店 | 示例酒店 | Example St 3 | 入住那天 | 确认号 FAKE-1",
+    "机票 | XX100 | LHR - CDG | 乱写的时间 | 座位 12A",
+    "地点 | 示例咖啡馆 | Example St 4 | 2026/12/12 9:00 |"
+  ].join("\n");
+  const r = ImportUtil.parseImport(text);
+  assert.deepStrictEqual(r.errors, []);
+  assert.strictEqual(r.items.length, 5);
+  const [a, b, h, f, ok] = r.items;
+  assert.strictEqual(a.pendingDate, true);
+  assert.strictEqual(a.dateRaw, "2026-12-11 25:00");
+  assert.strictEqual(a.dateGuess, "2026-12-11", "parseable part kept for prefill");
+  assert.strictEqual(a.date, "");
+  assert.strictEqual(a.subtype, "餐厅");
+  assert.strictEqual(a.address, "Example St 1");
+  assert.strictEqual(a.note, "订了窗边");
+  assert.strictEqual(b.pendingDate, true);
+  assert.strictEqual(b.dateRaw, "下周三下午");
+  assert.strictEqual(h.type, "hotel");
+  assert.strictEqual(h.pendingDate, true);
+  assert.strictEqual(h.checkIn, "");
+  assert.strictEqual(h.confirmationNo, "FAKE-1");
+  assert.strictEqual(f.type, "flight");
+  assert.strictEqual(f.pendingDate, true);
+  assert.strictEqual(f.flightNo, "XX100");
+  assert.strictEqual(f.seat, "12A");
+  assert.strictEqual(ok.pendingDate, undefined);
+  assert.strictEqual(ok.time, "09:00");
+});
+
+check("non-date problems are still errors (bad type, missing name, bad airport pair)", function () {
+  const r = ImportUtil.parseImport("火车 | X | y | 2026-12-11 |\n地点 |  | y | 2026-12-11 |\n机票 | XX1 | LHRCDG | 2026-12-11 09:00 ~ 2026-12-11 10:00 |");
+  assert.strictEqual(r.items.length, 0);
+  assert.strictEqual(r.errors.length, 3);
+});
+
 console.log("\n--- official pipe lines ---");
 console.log(PIPE_THREE);
 console.log("\n--- Dishoom JSON ---");

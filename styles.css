@@ -1663,3 +1663,45 @@ body.ios-guide-open .add-dock { visibility: hidden; }
 @media (prefers-reduced-motion: reduce) {
   .cal-scroll { scroll-behavior: auto; }
 }
+
+/* v5 补丁：窄屏顶栏（≤360px）品牌名 16px 不换行；右侧按钮只留图标（保留 aria-label），点击区 ≥44px */
+.top-help-btn .ico { display: none; }
+@media (max-width: 360px) {
+  .brand-name { font-size: 16px; white-space: nowrap; }
+  .top-actions .top-label,
+  .top-actions .top-optional-label { display: none !important; }
+  .top-help-btn .ico { display: inline-flex; }
+  .top-help-btn .ico,
+  .top-help-btn .ico svg { width: 22px; height: 22px; }
+  .topbar .top-action,
+  .topbar .top-help-btn,
+  .top-actions.is-compact #view-toggle-btn { min-width: 44px; width: 44px; min-height: 44px; padding: 0; }
+}
+
+/* v5 补丁：住宿段文字只截断地名，日期范围保持完整；放不下 72px 的只显示横条（点它弹出完整名称）；日期条末尾留 16px */
+.cal-grid { padding-right: 16px; }
+.cal-seg { cursor: pointer; min-height: 18px; }
+.cal-seg-text { display: flex; min-width: 72px; }
+.cal-seg-text .seg-city { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cal-seg-text .seg-range { flex: 0 0 auto; white-space: nowrap; margin-left: 0.3em; }
+.cal-seg.is-bar-only { justify-content: flex-start; }
+
+/* v5 补丁：日期待确认（导入时日期认不出来的条目） */
+.pending-block { margin-bottom: 12px; }
+.pending-head {
+  display: flex; align-items: center; gap: 6px;
+  margin: 4px 0 8px; font-size: 15px; font-weight: 700; color: #1F2329;
+}
+.pending-head .ico-sm { color: #F2B705; }
+.pending-count { font-size: 12px; font-weight: 600; color: #8A9099; }
+.card.is-pending { background: #FFF4CC; --type: #F2B705; box-shadow: inset 4px 0 0 #F2B705, var(--shadow); }
+.card.is-pending .card-stripe { background: #F2B705; }
+.card-raw { margin: 2px 0 0; font-size: 13px; font-weight: 600; color: #5C4A12; word-break: break-all; }
+.pending-banner {
+  display: flex; align-items: center; gap: 8px; width: 100%;
+  min-height: 44px; margin: 0 0 12px; padding: 0 12px;
+  border: 1px solid #F2B705; border-radius: 12px; background: #FFF4CC;
+  color: #5C4A12; font: inherit; font-size: 14px; font-weight: 700; cursor: pointer; text-align: left;
+}
+.pending-banner .ico-sm { color: #F2B705; }
+.pending-banner-go { margin-left: auto; font-size: 18px; }

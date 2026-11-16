@@ -173,7 +173,7 @@ check("flight edit shifts arrival date with departure date", function () {
   assert.strictEqual(res.item.lat, 1);
 });
 
-check("UI wiring: help text, undo 10s, no 无法恢复, sw v11 caches item-edit.js", function () {
+check("UI wiring: help text, undo 10s, no 无法恢复, sw v12 caches item-edit.js", function () {
   const tl = fs.readFileSync(__dirname + "/timeline.js", "utf8");
   const html = fs.readFileSync(__dirname + "/index.html", "utf8");
   const sw = fs.readFileSync(__dirname + "/sw.js", "utf8");
@@ -183,7 +183,7 @@ check("UI wiring: help text, undo 10s, no 无法恢复, sw v11 caches item-edit.
   assert.ok(tl.indexOf("确定删除这一项吗？") !== -1);
   assert.ok(tl.indexOf("window.confirm") === -1);
   assert.ok((tl + html).indexOf("无法恢复") === -1);
-  assert.ok(sw.indexOf('"xingcheng-map-shell-v11"') !== -1);
+  assert.ok(sw.indexOf('"xingcheng-map-shell-v12"') !== -1);
   assert.ok(sw.indexOf("./item-edit.js") !== -1);
   assert.ok(html.indexOf('src="./item-edit.js"') !== -1);
   assert.ok(html.indexOf('id="clear-all-btn"') !== -1);

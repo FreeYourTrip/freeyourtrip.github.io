@@ -2,7 +2,7 @@
 
 > **v5（2026-11-16，尚未上线）**：改名 Free Your Trip；单条修改/删除、清空全部（10 秒撤销）；「有新版本」横条和每次发版的更新公告；设置里显示版本号和更新记录（版本号只在 `version.js` 里改）。备份/分享文件名改为 `freeyourtrip-share-日期.json`、`freeyourtrip-full-backup-日期.json`，文件格式不变，旧文件照样能导入。
 >
-> **新网址（计划）**：https://freeyourtrip.github.io/ （仓库 `FreeYourTrip/freeyourtrip.github.io`，部署在根路径）。本项目全部用相对路径，`manifest` 的 `start_url` / `scope` 为 `./`，service worker 以 `./sw.js` 注册，放在根路径或子目录都能用。旧网址无人使用，新网址上线后注销；两个网址的浏览器数据互不相通。
+> **网址**：https://freeyourtrip.github.io/ （仓库 `FreeYourTrip/freeyourtrip.github.io`，部署在根路径；v5 已上线）。本项目全部用相对路径，`manifest` 的 `start_url` / `scope` 为 `./`，service worker 以 `./sw.js` 注册，放在根路径或子目录都能用。旧网址 chickenbb52-hub.github.io/Trip-Map 已停用（返回 404，不做跳转）；两个网址的浏览器数据互不相通。
 
 一份可直接在浏览器里打开的小工具。打开后是手机友好的行程列表：顶栏显示行程名称（可点按改名）和日期，右边用地图图标切换地图、用齿轮打开设置。用底部「＋ 添加」粘贴旅行顾问的清单或输入一个地名。相邻卡片之间的「带我去」胶囊会直接打开公共交通导航（中国大陆两端用高德，否则用谷歌地图）。首次打开是空行程。心愿清单逻辑仍保留在代码里，但界面上不再入口。
 
@@ -53,15 +53,16 @@ python3 -m http.server 8080 --directory .
 | `guess-type.js` | 按 OSM class/type 猜测地点类型 |
 | `install-env.js` | 判断独立窗口 / iOS Safari / 微信等，决定「添加到桌面」提示 |
 | `item-edit.js` | 单条删除 / 撤销 / 清空全部 / 修改的纯函数 |
+| `recommend.js` | 设置里的「推荐给朋友」：系统分享（`navigator.share`）或复制介绍文字和网址，不含任何行程数据 |
 | `calendar.js` | 顶部日期条与月历的纯函数：日期范围、默认选中哪天、过去变灰、类型圆点、住宿段（规则写在文件开头） |
 | `DESIGN.md` | 设计规范：从 `styles.css` 整理的颜色、字号、间距、圆角和组件规格，以及重复颜色清单 |
 | `update-banner.js` | 注册 service worker；有新版本时显示「有新版本」横条（不强制更新） |
 | `DEVLOG.md` | 开发决策与改动记录 |
 | `vendor/` | 本地 Leaflet 1.9.4 脚本、样式与标记图 |
 | `manifest.webmanifest` / `sw.js` / `icons/` | 可安装到手机主屏幕（相对路径，根路径或子目录都能用）。`icons/` 为 v5 新图标：16、32、120、152、167、180、192、512 和 `icon-maskable-512.png`，换图时保持文件名不变 |
-| `cover-1200x630.png` / `splash-1290x2796.png` | 链接预览封面（og:image）和 iPhone 430×932 @3x 启动图，不进预缓存 |
+| `cover-1200x630.png` / `splash-*.png` | 链接预览封面（og:image）和 iPhone 启动图（9 张：1290×2796、1179×2556、1170×2532、1284×2778、1125×2436、1242×2688、828×1792、1080×2340、750×1334，按 device-width / device-height / 像素比 / 竖屏匹配），都不进预缓存 |
 | `导入格式说明.txt` | 导入格式说明（推荐管道格式） |
-| `check.js` / `check-import.js` / `check-privacy.js` / `check-legs.js` / `check-guess-type.js` / `check-install-env.js` / `check-edit.js` / `check-update.js` / `check-version.js` / `check-calendar.js` | 可选的离线校验 |
+| `check.js` / `check-import.js` / `check-privacy.js` / `check-legs.js` / `check-guess-type.js` / `check-install-env.js` / `check-edit.js` / `check-update.js` / `check-version.js` / `check-calendar.js` / `check-patch.js` / `check-pending.js` | 可选的离线校验 |
 
 ## 心愿清单字段（`DESTINATIONS`）
 
@@ -132,7 +133,7 @@ flightFromLondon: {
 
 地址搜索默认使用 OpenStreetMap Nominatim，**不必申请密钥**。若希望对中国大陆地址用高德：
 
-1. 到[高德开放平台](https://console.amap.com/)申请「Web 端（JS API）」Key，并把使用该站点的域名加入白名单（新网址的域名为 `freeyourtrip.github.io`；旧网址 `chickenbb52-hub.github.io` 在迁移期间也可以保留）。同时创建安全密钥（`securityJsCode`）。
+1. 到[高德开放平台](https://console.amap.com/)申请「Web 端（JS API）」Key，并把使用该站点的域名加入白名单（域名为 `freeyourtrip.github.io`）。同时创建安全密钥（`securityJsCode`）。
 2. 把 Key 填进 `config.js` 的 `AMAP_JS_KEY`，把安全密钥填进 `AMAP_SECURITY_CODE`。不要把这两项写进要发给朋友的分享文件里（该文件本就不含密钥）。
 3. 仅当两项都非空、且查询词看起来像中国大陆地址（含汉字，且不含港澳台常见词）时，才会按需懒加载 `https://webapi.amap.com/maps?v=2.0&key=…&plugin=AMap.PlaceSearch,AMap.AutoComplete`，并先设置 `window._AMapSecurityConfig`。加载后用 PlaceSearch（空结果再试 AutoComplete）。
 4. 高德返回的是 GCJ-02，入库前**只转换一次**成 WGS-84。导航里发给高德的大陆坐标会再从存储的 WGS-84 转回 GCJ-02。不要对已经入库存成 WGS-84 的点再转一次。

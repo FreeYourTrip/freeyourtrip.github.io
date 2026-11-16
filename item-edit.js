@@ -78,7 +78,7 @@
         type: "机票",
         name: item.flightNo || "",
         address: "",
-        date: item.departDate || "",
+        date: item.departDate || item.dateGuess || "",
         time: item.departTime || "",
         endDate: item.arriveDate || "",
         endTime: item.arriveTime || "",
@@ -90,7 +90,7 @@
         type: "酒店",
         name: item.nameZh || item.nameEn || "",
         address: item.address || "",
-        date: item.checkIn || "",
+        date: item.checkIn || item.dateGuess || "",
         time: item.checkInTime || "",
         endDate: item.checkOut || "",
         endTime: "",
@@ -101,7 +101,7 @@
       type: typeValue(item),
       name: item.nameZh || item.nameEn || "",
       address: item.address || "",
-      date: item.date || "",
+      date: item.date || item.dateGuess || "",
       time: item.time || "",
       endDate: "",
       endTime: "",
@@ -142,6 +142,7 @@
         next.arriveDate = newDepart;
       }
       setOrDelete(next, "note", clean(form.note));
+      clearPendingIfDated(next);
       return { item: next, addressChanged: false, error: "" };
     }
 
@@ -180,8 +181,50 @@
       setOrDelete(next, "time", time);
     }
     setOrDelete(next, "note", clean(form.note));
+    clearPendingIfDated(next);
     return { item: next, addressChanged: addressChanged, error: "" };
   }
+
+  function isIso(v) {
+
+    return /^\d{4}-\d{2}-\d{2}$/.test(v || "");
+
+  }
+
+
+  /** 「日期待确认」的条目：修改后有了有效日期就去掉标记、原文和猜测日期。 */
+
+  function clearPendingIfDated(next) {
+
+    if (!next || !next.pendingDate) return next;
+
+    var d = next.type === "flight" ? next.departDate : next.type === "hotel" ? next.checkIn : next.date;
+
+    if (isIso(d)) {
+
+      delete next.pendingDate;
+
+      delete next.dateRaw;
+
+      delete next.dateGuess;
+
+      delete next.pendingReason;
+
+    }
+
+    return next;
+
+  }
+
+
+  /** 是否「日期待确认」。 */
+
+  function isPendingDate(item) {
+
+    return !!(item && item.pendingDate);
+
+  }
+
 
   /** 原地替换同 id 的一条（位置不变）。 */
   function updateItem(items, id, nextItem) {
@@ -201,7 +244,9 @@
     typeValue: typeValue,
     formFields: formFields,
     applyForm: applyForm,
-    updateItem: updateItem
+    updateItem: updateItem,
+    isPendingDate: isPendingDate,
+    clearPendingIfDated: clearPendingIfDated
   };
   root.ItemEdit = api;
   if (typeof module !== "undefined" && module.exports) module.exports = api;

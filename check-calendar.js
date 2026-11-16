@@ -145,7 +145,7 @@ check("UI wiring: strip, month sheet, 今天, 全部, help text, sw precache", f
   const v = require("./version.js");
   assert.ok(html.indexOf('src="./calendar.js"') !== -1 && html.indexOf('src="./calendar.js"') < html.indexOf('src="./timeline.js"'));
   assert.ok(html.indexOf('id="month-sheet"') !== -1 && html.indexOf('id="month-prev"') !== -1 && html.indexOf('id="month-next"') !== -1);
-  assert.ok(sw.indexOf('"./calendar.js"') !== -1 && sw.indexOf('"xingcheng-map-shell-v11"') !== -1);
+  assert.ok(sw.indexOf('"./calendar.js"') !== -1 && sw.indexOf('"xingcheng-map-shell-v12"') !== -1);
   assert.ok(tl.indexOf('id="cal-today"') !== -1 && tl.indexOf('data-day="all"') !== -1 && tl.indexOf('id="cal-month"') !== -1);
   assert.ok(tl.indexOf("prefers-reduced-motion") !== -1);
   assert.ok(tl.indexOf("顶部日期条左右滑") !== -1 && tl.indexOf("第1天、第2天") === -1);

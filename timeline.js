@@ -301,14 +301,16 @@
         { id: "j-h1", type: "hotel", nameZh: "东京示例酒店", city: "东京", address: "Shinjuku, Tokyo", checkIn: "2026-11-10", checkInTime: "18:00", checkOut: "2026-11-14", lat: 35.6938, lng: 139.7034, example: true },
         place("j-p1", "景点", "浅草寺", "2026-11-11", "10:00", 35.7148, 139.7967),
         place("j-p2", "餐厅", "筑地场外市场", "2026-11-12", "09:00", 35.6655, 139.7707),
-        { id: "j-h2", type: "hotel", nameZh: "京都示例旅馆", city: "京都", address: "Higashiyama, Kyoto", checkIn: "2026-11-14", checkInTime: "16:00", checkOut: "2026-11-18", lat: 34.9961, lng: 135.7786, example: true },
+        { id: "j-h2", type: "hotel", nameZh: "京都示例旅馆", city: "京都", address: "Higashiyama, Kyoto", checkIn: "2026-11-14", checkInTime: "16:00", checkOut: "2026-11-17", lat: 34.9961, lng: 135.7786, example: true },
         place("j-p3", "景点", "伏见稻荷大社", "2026-11-15", "09:00", 34.9671, 135.7727),
         place("j-p4", "景点", "清水寺", "2026-11-16", "10:00", 34.9949, 135.785),
         place("j-p5", "街道", "花见小路", "2026-11-16", "17:00", 35.0025, 135.7751),
-        { id: "j-h3", type: "hotel", nameZh: "大阪示例酒店", city: "大阪", address: "Namba, Osaka", checkIn: "2026-11-18", checkInTime: "15:00", checkOut: "2026-11-21", lat: 34.6659, lng: 135.5013, example: true },
+        { id: "j-h4", type: "hotel", nameZh: "奈良示例民宿", city: "奈良", address: "Nara", checkIn: "2026-11-17", checkInTime: "16:00", checkOut: "2026-11-18", lat: 34.6851, lng: 135.8048, example: true },
+        place("j-p7", "景点", "奈良公园", "2026-11-17", "11:00", 34.685, 135.843),
+        { id: "j-h3", type: "hotel", nameZh: "大阪示例酒店", city: "大阪难波心斋桥一带", address: "Namba, Osaka", checkIn: "2026-11-18", checkInTime: "15:00", checkOut: "2026-11-20", lat: 34.6659, lng: 135.5013, example: true },
         place("j-p6", "餐厅", "道顿堀", "2026-11-19", "19:00", 34.6687, 135.5013),
         { id: "j-f2", type: "flight", flightNo: "XX102", fromAirport: "KIX", toAirport: "LHR", fromNameZh: "关西机场", nameZh: "希思罗机场",
-          fromLat: 34.4347, fromLng: 135.244, lat: 51.47, lng: -0.4543, departDate: "2026-11-21", departTime: "11:00", arriveDate: "2026-11-21", arriveTime: "16:00", example: true }
+          fromLat: 34.4347, fromLng: 135.244, lat: 51.47, lng: -0.4543, departDate: "2026-11-20", departTime: "11:00", arriveDate: "2026-11-20", arriveTime: "16:00", example: true }
       ]
     };
   }
@@ -384,6 +386,7 @@
 
   /* ---------- 顶部日期条（规则见 calendar.js） ---------- */
   var CAL_CELL = 52;
+  var SEG_LABEL_MIN = 72; // 住宿段文字最小宽度；放不下就只显示 4px 横条，点它弹出完整名称
   var monthView = null;
 
   function reducedMotion() {
@@ -429,8 +432,14 @@
       var room = (next && col[next.start] ? col[next.start] : days.length + 2) - start;
       var textW = Math.max(span, room) * CAL_CELL - 8;
       return (
-        '<div class="cal-seg' + (sg.past ? " is-past" : "") + '" style="grid-column:' + start + " / span " + span + '" title="' + escapeHtml(sg.label) + '">' +
-        '<span class="cal-seg-bar"></span><span class="cal-seg-text" style="max-width:' + textW + 'px">' + escapeHtml(sg.label) + "</span></div>"
+        '<div class="cal-seg' + (sg.past ? " is-past" : "") + (textW < SEG_LABEL_MIN ? " is-bar-only" : "") + '" style="grid-column:' + start + " / span " + span +
+        '" title="' + escapeHtml(sg.label) + '" data-seg-label="' + escapeHtml(sg.label) + '" role="button" tabindex="0" aria-label="' + escapeHtml(sg.label) + '">' +
+        '<span class="cal-seg-bar"></span>' +
+        (textW < SEG_LABEL_MIN
+          ? ""
+          : '<span class="cal-seg-text" style="max-width:' + textW + 'px"><span class="seg-city">' + escapeHtml(sg.city) +
+            '</span><span class="seg-range">' + escapeHtml(sg.label.slice(sg.city.length).replace(/^\s+/, "")) + "</span></span>") +
+        "</div>"
       );
     }).join("");
     var cells =
@@ -535,8 +544,20 @@
           selectDay(today);
           return;
         }
+        var seg = ev.target.closest && ev.target.closest("[data-seg-label]");
+        if (seg) {
+          showToast(seg.getAttribute("data-seg-label"), null, 3000);
+          return;
+        }
         var cell = ev.target.closest && ev.target.closest("[data-day]");
         if (cell) selectDay(cell.getAttribute("data-day"));
+      });
+      box.addEventListener("keydown", function (ev) {
+        if (ev.key !== "Enter" && ev.key !== " ") return;
+        var seg = ev.target.closest && ev.target.closest("[data-seg-label]");
+        if (!seg) return;
+        ev.preventDefault();
+        showToast(seg.getAttribute("data-seg-label"), null, 3000);
       });
     }
     var body = $("month-body");
@@ -649,8 +670,15 @@
     );
   }
 
+  function isPendingItem(item) {
+    return !!(item && item.pendingDate);
+  }
+
   function cardHtml(item) {
     var meta = typeStyle(item);
+    var pendingLine = isPendingItem(item)
+      ? '<p class="card-raw">原文：' + escapeHtml(item.dateRaw || "（没写日期）") + "</p>"
+      : "";
     var open = expanded[item.id] ? " is-open" : "";
     var extra = [];
     if (item.address) extra.push("<p>" + escapeHtml(item.address) + "</p>");
@@ -675,6 +703,7 @@
     return (
       '<article class="card' +
       open +
+      (pendingLine ? " is-pending" : "") +
       '" data-item="' +
       escapeHtml(item.id) +
       '" style="--type:' +
@@ -694,7 +723,8 @@
       '<h3 class="card-name">' +
       escapeHtml(itemTitle(item)) +
       "</h3>" +
-      (itemTimeLabel(item) ? '<p class="card-time">' + escapeHtml(itemTimeLabel(item)) + "</p>" : "") +
+      (pendingLine ? "" : itemTimeLabel(item) ? '<p class="card-time">' + escapeHtml(itemTimeLabel(item)) + "</p>" : "") +
+      pendingLine +
       "</div>" +
       '<button type="button" class="expand-btn" data-expand="' +
       escapeHtml(item.id) +
@@ -750,18 +780,33 @@
       root.innerHTML = '<div class="empty-state">点＋添加你的第一个地方</div>';
       return;
     }
-    var groups = Legs.groupByDay(items);
+    var pending = items.filter(isPendingItem);
+    var dated = items.filter(function (it) { return !isPendingItem(it); });
+    var pendingBanner = pending.length && selectedDay !== "all"
+      ? '<button type="button" class="pending-banner" data-pending-show="1">' + ico("calendar", "ico-sm") +
+        "<span>有 " + pending.length + " 条日期待确认</span><span class=\"pending-banner-go\" aria-hidden=\"true\">›</span></button>"
+      : "";
+    var groups = Legs.groupByDay(dated);
     if (selectedDay !== "all" && !groups.some(function (g) { return g.date === selectedDay; })) {
-      root.innerHTML =
+      root.innerHTML = pendingBanner +
         '<div class="empty-state empty-day">' + escapeHtml(formatMd(selectedDay)) + ' 没有安排' +
         '<button type="button" class="text-link-btn" data-day-all="1">看全部日子</button></div>';
       var allBtn = root.querySelector("[data-day-all]");
       if (allBtn) allBtn.addEventListener("click", function () { selectDay("all"); });
+      bindListEvents(root);
       return;
     }
-    var connectors = Legs.buildConnectors(items);
-    var all = Legs.sortedItems(items);
-    var html = "";
+    var connectors = Legs.buildConnectors(dated);
+    var all = Legs.sortedItems(dated);
+    var html = pendingBanner;
+    if (pending.length && selectedDay === "all") {
+      html += '<section class="day-block pending-block" id="day-pending" aria-label="待确认日期">';
+      html += '<h3 class="pending-head">' + ico("calendar", "ico-sm") + "<span>待确认日期</span><span class=\"pending-count\">" + pending.length + " 条 · 点一下改日期</span></h3>";
+      pending.forEach(function (item) {
+        html += cardHtml(item);
+      });
+      html += "</section>";
+    }
     groups.forEach(function (g) {
       if (selectedDay !== "all" && g.date !== selectedDay) return;
       html += '<section class="day-block" id="day-' + escapeHtml(g.date) + '">';
@@ -837,9 +882,17 @@
         openPickForItem(findItem(pick.getAttribute("data-pick")));
         return;
       }
+      var pb = ev.target.closest && ev.target.closest("[data-pending-show]");
+      if (pb) {
+        selectDay("all");
+        var blk = $("day-pending");
+        if (blk && blk.scrollIntoView) blk.scrollIntoView({ block: "start" });
+        return;
+      }
       var card = ev.target.closest && ev.target.closest(".card");
       if (card && !ev.target.closest("a, button")) {
-        openDetail(card.getAttribute("data-item"));
+        if (card.classList.contains("is-pending")) enterEditMode(card.getAttribute("data-item"));
+        else openDetail(card.getAttribute("data-item"));
       }
     });
   }
@@ -2003,7 +2056,14 @@
     var settings = $("settings-btn");
     var help = $("help-top-btn");
     var isMap = currentView === "map";
-    if (help) help.classList.add("top-action");
+    if (help) {
+      help.classList.add("top-action");
+      help.setAttribute("aria-label", "使用说明");
+      if (help.getAttribute("data-iconified") !== "1") {
+        help.setAttribute("data-iconified", "1");
+        help.innerHTML = ico("help") + '<span class="top-label">使用说明</span>';
+      }
+    }
     if (view) {
       view.classList.add("top-action");
       view.classList.remove("icon-btn");
@@ -2018,7 +2078,7 @@
       settings.classList.add("top-action");
       settings.classList.remove("icon-btn");
       settings.setAttribute("aria-label", "设置");
-      settings.innerHTML = ico("gear") + "<span>设置</span>";
+      settings.innerHTML = ico("gear") + '<span class="top-label">设置</span>';
     }
     fitTopActions();
   }
@@ -2054,6 +2114,7 @@
     put("help-open-btn", "help");
     put("install-btn", "device");
     put("backup-export-share", "share");
+    put("recommend-btn", "heart");
     put("backup-import", "import");
     put("backup-export-full", "backup");
     put("backup-clear", "trash");
@@ -2192,7 +2253,12 @@
     applyResolutions(items, resolutions || []);
     if (items.length) appendItems(items);
     var parts = [];
-    if (items.length) parts.push('<p class="ok">已添加 ' + items.length + " 条</p>");
+    var pendingN = items.filter(isPendingItem).length;
+    var addedMsg = "已添加 " + items.length + " 条" + (pendingN ? "，" + pendingN + " 条日期待确认" : "");
+    if (items.length) {
+      parts.push('<p class="ok">' + escapeHtml(addedMsg) + "</p>");
+      showToast(addedMsg, null, 5000);
+    }
     (errors || []).forEach(function (e) {
       parts.push('<p class="err">' + escapeHtml(e) + "</p>");
     });
@@ -2427,7 +2493,10 @@
     openDetail: openDetail,
     confirm: openConfirm,
     openAnnouncement: openAnnouncement,
-    openIosGuide: openIosGuide
+    openIosGuide: openIosGuide,
+    toast: function (msg) {
+      showToast(msg, null, 5000);
+    }
   };
 
   function applyDemo(which) {
