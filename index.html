@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="zh-Hans">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#1f4d4a">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="行程地图">
+  <title>行程地图</title>
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="./icons/icon-192.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&family=Noto+Serif+SC:wght@700&family=Source+Sans+3:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+        crossorigin="">
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <div class="example-banner" id="example-banner" hidden role="status">
+    <strong>示例数据</strong>
+    当前显示的是功能演示内容，不是你的真实行程。
+  </div>
+
+  <header class="site-header">
+    <div class="brand">
+      <h1>行程地图</h1>
+      <p>把机票、酒店和地点排成时间线，点一下就能打开导航。</p>
+    </div>
+    <div class="header-right">
+      <div class="backup-btns">
+        <button type="button" class="backup-btn" id="backup-export">导出备份</button>
+        <button type="button" class="backup-btn" id="backup-import">导入备份</button>
+        <input type="file" id="backup-file" accept="application/json,.json" hidden>
+      </div>
+      <div class="stats" id="result-count"></div>
+      <nav class="view-switch" role="tablist" aria-label="视图切换">
+        <button type="button" role="tab" id="view-timeline" class="is-active" aria-selected="true">行程</button>
+        <button type="button" role="tab" id="view-wishlist" aria-selected="false">心愿清单</button>
+      </nav>
+    </div>
+  </header>
+
+  <div id="view-timeline-panel">
+    <div class="trip-toolbar">
+      <div class="trip-toolbar-row">
+        <div class="trip-tabs" id="trip-tabs" role="tablist" aria-label="行程"></div>
+        <div class="trip-actions">
+          <button type="button" class="import-toggle" id="load-examples">载入示例</button>
+          <button type="button" class="import-toggle" id="import-toggle">导入行程</button>
+        </div>
+      </div>
+      <p class="trip-lead">在相邻地点之间会自动出现「起点 —— 终点」连接条。点击后选择出行方式，用链接打开谷歌地图或高德。地址会通过 OpenStreetMap Nominatim 查找坐标（无需密钥，结果缓存在本机）。</p>
+      <form class="add-place" id="add-place-form">
+        <label for="add-place-q">按名称添加</label>
+        <div class="add-place-row">
+          <input type="search" id="add-place-q" placeholder="例如：大英博物馆" autocomplete="off">
+          <button type="submit" id="add-place-go">查找</button>
+        </div>
+        <div id="add-place-results" class="add-place-results" hidden></div>
+      </form>
+      <div class="import-panel" id="import-panel" hidden>
+        <label for="import-text">粘贴行程（推荐管道格式，也可粘贴 JSON，同一框会自动识别，可混合）</label>
+        <textarea id="import-text" rows="8" spellcheck="false" placeholder="类型 | 名称 | 地址 | 日期时间 | 备注&#10;地点 | 大英博物馆 | Great Russell St, London WC1B 3DG | 2026-12-05 10:00 | 免费，建议预约"></textarea>
+        <div class="import-actions">
+          <label class="import-append"><input type="checkbox" id="import-append" checked> 追加到当前行程</label>
+          <button type="button" id="import-run">导入并预览</button>
+          <a href="./导入格式说明.txt" target="_blank" rel="noopener">导入格式说明</a>
+        </div>
+        <div class="import-result" id="import-result" role="status"></div>
+        <div class="import-preview" id="import-preview" hidden></div>
+      </div>
+    </div>
+    <div class="layout layout-trip">
+      <div class="map-pane">
+        <div id="trip-map" role="application" aria-label="行程地图"></div>
+      </div>
+      <div class="list-pane">
+        <div id="timeline" class="timeline"></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="view-wishlist-panel" hidden>
+    <section class="toolbar" aria-label="筛选与排序">
+      <label class="search-wrap">
+        搜索
+        <input type="search" id="filter-q" placeholder="名称、国家、标签或备注…" autocomplete="off">
+      </label>
+      <label>
+        大洲
+        <select id="filter-continent">
+          <option value="">全部</option>
+        </select>
+      </label>
+      <label>
+        标签
+        <select id="filter-tag">
+          <option value="">全部</option>
+        </select>
+      </label>
+      <label>
+        状态
+        <select id="filter-status">
+          <option value="">全部</option>
+        </select>
+      </label>
+      <label>
+        宜游月份
+        <select id="filter-month">
+          <option value="">全部月份</option>
+        </select>
+      </label>
+      <label>
+        预算
+        <select id="filter-budget">
+          <option value="">全部</option>
+          <option value="1">£ 较省</option>
+          <option value="2">££ 中等</option>
+          <option value="3">£££ 较贵</option>
+        </select>
+      </label>
+      <label>
+        排序
+        <select id="sort-by">
+          <option value="priority">优先级（高到低）</option>
+          <option value="name">名称（拼音/字母）</option>
+          <option value="budget-asc">预算（低到高）</option>
+          <option value="budget-desc">预算（高到低）</option>
+          <option value="flight">大约航程（短到长）</option>
+        </select>
+      </label>
+      <button type="button" class="reset-btn" id="reset-filters">清除筛选</button>
+    </section>
+
+    <main class="layout">
+      <div class="map-pane">
+        <div id="map" role="application" aria-label="目的地地图"></div>
+      </div>
+      <div class="list-pane">
+        <div class="card-list" id="card-list"></div>
+      </div>
+    </main>
+  </div>
+
+  <footer class="site-footer">
+    <p class="settings-note">数据只保存在本浏览器，换手机或清缓存前请先导出备份。</p>
+    <p>地图图块来自 OpenStreetMap；地理编码来自 Nominatim。可安装到手机主屏幕。相对路径部署，适用于 GitHub Pages 子目录。</p>
+  </footer>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+          integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+          crossorigin=""></script>
+  <script src="./data.js"></script>
+  <script src="./airports.js"></script>
+  <script src="./geo.js"></script>
+  <script src="./geocode.js"></script>
+  <script src="./import.js"></script>
+  <script src="./backup.js"></script>
+  <script src="./app.js"></script>
+  <script src="./timeline.js"></script>
+  <script>
+    if ("serviceWorker" in navigator && (location.protocol === "http:" || location.protocol === "https:")) {
+      navigator.serviceWorker.register("./sw.js").catch(function () {});
+    }
+  </script>
+</body>
+</html>
