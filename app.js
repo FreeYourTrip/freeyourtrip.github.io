@@ -641,6 +641,7 @@
   /* ---------- 启动 ---------- */
 
   function init() {
+    if (!$("map") || !$("card-list")) return;
     var flag = false;
     try { flag = localStorage.getItem("wishlist-map-examples-loaded-v1") === "1"; } catch (e) {}
     initMap();

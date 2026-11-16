@@ -3,10 +3,10 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#1f4d4a">
+  <meta name="theme-color" content="#0F9D8A">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
-  <meta name="apple-mobile-web-app-title" content="行程地图">
+  <meta name="apple-mobile-web-app-title" content="我的行程">
   <title>行程地图</title>
   <link rel="manifest" href="./manifest.webmanifest">
   <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png">
@@ -15,147 +15,161 @@
   <link rel="stylesheet" href="./styles.css">
 </head>
 <body>
-  <div class="example-banner" id="example-banner" hidden role="status">
-    <strong>示例数据</strong>
-    当前显示的是功能演示内容，不是你的真实行程。
-  </div>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand-block">
+        <button type="button" class="trip-name" id="trip-name-btn">我的行程</button>
+        <input type="text" class="trip-name-input" id="trip-name-input" maxlength="40" hidden aria-label="行程名称">
+        <p class="trip-dates" id="trip-dates" hidden></p>
+      </div>
+      <div class="top-actions">
+        <button type="button" class="top-help-btn" id="help-top-btn">使用说明</button>
+        <button type="button" class="top-action" id="view-toggle-btn" aria-label="地图">
+        </button>
+        <button type="button" class="top-action" id="settings-btn" aria-label="设置" aria-haspopup="dialog" aria-controls="settings-sheet">
+        </button>
+      </div>
+    </header>
 
-  <header class="site-header">
-    <div class="brand">
-      <h1>行程地图</h1>
-      <p>把机票、酒店和地点排成时间线，点一下就能打开导航。</p>
+    <div class="day-chips" id="day-chips" hidden role="tablist" aria-label="按天查看"></div>
+    <div class="install-banner" id="install-banner" hidden>
+      <button type="button" class="install-banner-go" id="install-banner-go"></button>
+      <button type="button" class="install-banner-x" id="install-banner-dismiss" aria-label="关闭"></button>
     </div>
-    <div class="header-right">
-      <div class="backup-btns">
-        <button type="button" class="backup-btn" id="backup-export-share" title="导出后发给朋友，对方点导入即可">分享给朋友（隐藏订单号）</button>
-        <button type="button" class="backup-btn backup-btn-secondary" id="backup-export-full" title="含确认号和座位，仅自己保存">完整备份（仅自己保存）</button>
-        <button type="button" class="backup-btn backup-btn-secondary" id="backup-import">导入备份</button>
-        <input type="file" id="backup-file" accept="application/json,.json" hidden>
-      </div>
-      <div class="stats" id="result-count"></div>
-      <nav class="view-switch" role="tablist" aria-label="视图切换">
-        <button type="button" role="tab" id="view-timeline" class="is-active" aria-selected="true">行程</button>
-        <button type="button" role="tab" id="view-wishlist" aria-selected="false">心愿清单</button>
-      </nav>
-    </div>
-  </header>
 
-  <div id="view-timeline-panel">
-    <div class="trip-toolbar">
-      <div class="trip-toolbar-row">
-        <div class="trip-tabs" id="trip-tabs" role="tablist" aria-label="行程"></div>
-        <div class="trip-actions">
-          <button type="button" class="import-toggle" id="load-examples">载入示例</button>
-          <button type="button" class="import-toggle" id="import-toggle">导入行程</button>
-        </div>
-      </div>
-      <p class="trip-lead">在相邻地点之间会自动出现「起点 —— 终点」连接条。点击后选择出行方式，用链接打开谷歌地图或高德。地址会通过 OpenStreetMap Nominatim 查找坐标（无需密钥，结果缓存在本机）。</p>
-      <form class="add-place" id="add-place-form">
-        <label for="add-place-q">按名称添加</label>
-        <div class="add-place-row">
-          <input type="search" id="add-place-q" placeholder="例如：大英博物馆" autocomplete="off">
-          <button type="submit" id="add-place-go">查找</button>
-        </div>
-        <div id="add-place-results" class="add-place-results" hidden></div>
-      </form>
-      <div class="import-panel" id="import-panel" hidden>
-        <label for="import-text">粘贴行程（推荐管道格式，也可粘贴 JSON，同一框会自动识别，可混合）</label>
-        <textarea id="import-text" rows="8" spellcheck="false" placeholder="类型 | 名称 | 地址 | 日期时间 | 备注&#10;地点 | 大英博物馆 | Great Russell St, London WC1B 3DG | 2026-12-05 10:00 | 免费，建议预约"></textarea>
-        <div class="import-actions">
-          <label class="import-append"><input type="checkbox" id="import-append" checked> 追加到当前行程</label>
-          <button type="button" id="import-run">导入并预览</button>
-          <a href="./导入格式说明.txt" target="_blank" rel="noopener">导入格式说明</a>
-        </div>
-        <div class="import-result" id="import-result" role="status"></div>
-        <div class="import-preview" id="import-preview" hidden></div>
-      </div>
-    </div>
-    <div class="layout layout-trip">
-      <div class="map-pane">
-        <div id="trip-map" role="application" aria-label="行程地图"></div>
-      </div>
-      <div class="list-pane">
+    <main class="main">
+      <section id="list-view" class="panel">
         <div id="timeline" class="timeline"></div>
+      </section>
+      <section id="map-view" class="panel panel-map" hidden>
+        <div id="trip-map" role="application" aria-label="行程地图"></div>
+      </section>
+    </main>
+
+    <div class="add-dock">
+      <button type="button" class="add-bar" id="add-fab" aria-haspopup="dialog" aria-controls="add-sheet">＋ 添加</button>
+    </div>
+  </div>
+
+  <div class="sheet" id="add-sheet" hidden>
+    <div class="sheet-backdrop" data-close="add-sheet"></div>
+    <div class="sheet-panel" role="dialog" aria-labelledby="add-sheet-title">
+      <div class="sheet-handle" aria-hidden="true"></div>
+      <div class="sheet-head">
+        <h2 id="add-sheet-title">添加</h2>
+        <button type="button" class="icon-btn sheet-close" data-close="add-sheet" aria-label="关闭"></button>
+      </div>
+      <label class="sr-only" for="place-search">输入地名</label>
+      <input type="search" id="place-search" placeholder="输入地名，比如 大英博物馆" autocomplete="off" enterkeyhint="search" spellcheck="false">
+      <div class="search-status" id="search-status" role="status"></div>
+      <ul class="search-results" id="search-results" hidden></ul>
+      <button type="button" class="search-fallback" id="search-fallback" hidden>找不到？直接用这个名字添加</button>
+
+      <details class="fold" id="ai-help">
+        <summary>用 AI 帮我整理（截图也行）</summary>
+        <div class="fold-body">
+          <ol class="fold-steps">
+            <li>点「复制给 AI 的话」</li>
+            <li>打开任意 AI（豆包、Kimi、ChatGPT 等），粘贴提示词，再发机票/酒店/餐厅截图或文字</li>
+            <li>复制 AI 回复的内容，粘贴到下面的框里点「添加」</li>
+          </ol>
+          <button type="button" class="primary-btn copy-btn" id="ai-copy-btn">复制给 AI 的话</button>
+          <button type="button" class="text-link-btn" id="ai-preview-toggle">查看提示词</button>
+          <pre class="prompt-view" id="ai-prompt-view" hidden></pre>
+          <p class="fold-tip">发截图之前，可以先把护照号、电话这些用不上的信息裁掉。</p>
+          <label class="sr-only" for="add-text">粘贴 AI 整理的行程</label>
+          <textarea id="add-text" rows="5" spellcheck="false" placeholder="把 AI 回复的内容粘贴到这里"></textarea>
+          <button type="button" class="primary-btn" id="add-go">添加</button>
+          <div class="add-status" id="add-status" role="status"></div>
+          <div class="add-pick" id="add-pick" hidden></div>
+        </div>
+      </details>
+
+      <details class="fold" id="manual-fold">
+        <summary>手动填写</summary>
+        <div class="fold-body manual-form">
+          <label for="manual-type">类型</label>
+          <select id="manual-type">
+            <option value="地点" selected>地点</option>
+            <option value="地点/餐厅">地点/餐厅</option>
+            <option value="地点/景点">地点/景点</option>
+            <option value="地点/街道">地点/街道</option>
+            <option value="酒店">酒店</option>
+            <option value="机票">机票</option>
+          </select>
+          <label for="manual-name">名称</label>
+          <input type="text" id="manual-name" placeholder="比如「大英博物馆」" autocomplete="off">
+          <button type="button" class="primary-btn" id="manual-save">保存</button>
+          <div class="add-status" id="manual-status" role="status"></div>
+        </div>
+      </details>
+    </div>
+  </div>
+
+  <div class="sheet" id="settings-sheet" hidden>
+    <div class="sheet-backdrop" data-close="settings-sheet"></div>
+    <div class="sheet-panel" role="dialog" aria-labelledby="settings-sheet-title">
+      <div class="sheet-handle" aria-hidden="true"></div>
+      <div class="sheet-head">
+        <h2 id="settings-sheet-title">设置</h2>
+        <button type="button" class="icon-btn sheet-close" data-close="settings-sheet" aria-label="关闭"></button>
+      </div>
+      <div class="more-actions">
+        <button type="button" class="more-btn" id="help-open-btn">使用说明</button>
+        <button type="button" class="more-btn" id="install-btn">添加到桌面</button>
+        <button type="button" class="more-btn" id="backup-export-share" title="导出后发给朋友，对方点导入即可">分享给朋友</button>
+        <button type="button" class="more-btn" id="backup-import">导入</button>
+        <input type="file" id="backup-file" accept="application/json,.json" hidden>
+        <button type="button" class="more-btn" id="backup-export-full" title="含确认号和座位，仅自己保存">完整备份</button>
+        <button type="button" class="more-btn more-btn-danger" id="backup-clear">清空本机数据</button>
+      </div>
+      <p class="settings-note">行程只存在你的手机里，没有账号，也没有服务器，我们看不到。只有搜索、显示地图和导航时，地名或地址会发给地图服务（OpenStreetMap、高德或 Google 地图）。</p>
+    </div>
+  </div>
+
+  <div class="sheet help-sheet" id="help-sheet" hidden>
+    <div class="sheet-panel" role="dialog" aria-labelledby="help-sheet-title">
+      <div class="help-head">
+        <h2 id="help-sheet-title">使用说明</h2>
+      </div>
+      <div class="help-body" id="help-body"></div>
+      <div class="help-foot">
+        <label><input type="checkbox" id="help-dont-show"> 不再自动弹出</label>
+        <button type="button" class="help-ok" id="help-ok">知道了</button>
       </div>
     </div>
   </div>
 
-  <div id="view-wishlist-panel" hidden>
-    <section class="toolbar" aria-label="筛选与排序">
-      <label class="search-wrap">
-        搜索
-        <input type="search" id="filter-q" placeholder="名称、国家、标签或备注…" autocomplete="off">
-      </label>
-      <label>
-        大洲
-        <select id="filter-continent">
-          <option value="">全部</option>
-        </select>
-      </label>
-      <label>
-        标签
-        <select id="filter-tag">
-          <option value="">全部</option>
-        </select>
-      </label>
-      <label>
-        状态
-        <select id="filter-status">
-          <option value="">全部</option>
-        </select>
-      </label>
-      <label>
-        宜游月份
-        <select id="filter-month">
-          <option value="">全部月份</option>
-        </select>
-      </label>
-      <label>
-        预算
-        <select id="filter-budget">
-          <option value="">全部</option>
-          <option value="1">£ 较省</option>
-          <option value="2">££ 中等</option>
-          <option value="3">£££ 较贵</option>
-        </select>
-      </label>
-      <label>
-        排序
-        <select id="sort-by">
-          <option value="priority">优先级（高到低）</option>
-          <option value="name">名称（拼音/字母）</option>
-          <option value="budget-asc">预算（低到高）</option>
-          <option value="budget-desc">预算（高到低）</option>
-          <option value="flight">大约航程（短到长）</option>
-        </select>
-      </label>
-      <button type="button" class="reset-btn" id="reset-filters">清除筛选</button>
-    </section>
-
-    <main class="layout">
-      <div class="map-pane">
-        <div id="map" role="application" aria-label="目的地地图"></div>
+  <div class="sheet" id="install-sheet" hidden>
+    <div class="sheet-backdrop" data-close="install-sheet"></div>
+    <div class="sheet-panel" role="dialog" aria-labelledby="install-sheet-title">
+      <div class="sheet-handle" aria-hidden="true"></div>
+      <div class="sheet-head">
+        <h2 id="install-sheet-title">添加到桌面</h2>
+        <button type="button" class="icon-btn sheet-close" data-close="install-sheet" aria-label="关闭"></button>
       </div>
-      <div class="list-pane">
-        <div class="card-list" id="card-list"></div>
-      </div>
-    </main>
+      <div id="install-body"></div>
+    </div>
   </div>
 
-  <footer class="site-footer">
-    <p class="settings-note">数据只保存在本浏览器，不上传任何服务器。搜索地址时仅把搜索词发给 OpenStreetMap。想分享行程：点“分享给朋友”导出文件发给对方，对方点“导入备份”即可。换手机或清缓存前请先做“完整备份”。</p>
-    <p class="full-backup-warn">「完整备份」含机票/酒店确认号和座位，请仅自己保存。</p>
-    <p>地图图块来自 OpenStreetMap；查找地址时使用 Nominatim。可安装到手机主屏幕。相对路径部署，适用于 GitHub Pages 子目录。</p>
-    <p><button type="button" class="clear-data-btn" id="backup-clear">清空本机数据</button></p>
-  </footer>
+  <div class="toast" id="toast" hidden>
+    <span id="toast-msg"></span>
+    <button type="button" id="toast-undo">撤销</button>
+  </div>
 
   <script src="./vendor/leaflet.js"></script>
   <script src="./data.js"></script>
   <script src="./airports.js"></script>
+  <script src="./config.js"></script>
   <script src="./geo.js"></script>
   <script src="./geocode.js"></script>
   <script src="./import.js"></script>
+  <script src="./guess-type.js"></script>
+  <script src="./install-env.js"></script>
+  <script src="./ai-prompt.js"></script>
   <script src="./backup.js"></script>
+  <script src="./legs.js"></script>
+  <script src="./icons.js"></script>
   <script src="./app.js"></script>
   <script src="./timeline.js"></script>
   <script>

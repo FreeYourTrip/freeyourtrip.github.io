@@ -216,6 +216,75 @@ check("empty input error is in Chinese", function () {
   assert.ok(/没有可导入/.test(r.errors[0]));
 });
 
+const AiPrompt = require("./ai-prompt.js");
+
+check("team prompt example block parses into correct items", function () {
+  const r = ImportUtil.parseImport(AiPrompt.EXAMPLE);
+  assert.deepStrictEqual(r.errors, [], (r.errors || []).join("; "));
+  assert.strictEqual(r.items.length, 3);
+
+  const flight = r.items[0];
+  assert.strictEqual(flight.type, "flight");
+  assert.strictEqual(flight.flightNo, "BA123");
+  assert.strictEqual(flight.fromAirport, "LHR");
+  assert.strictEqual(flight.toAirport, "HND");
+  assert.strictEqual(flight.departDate, "2026-12-01");
+  assert.strictEqual(flight.departTime, "09:30");
+  assert.strictEqual(flight.arriveDate, "2026-12-02");
+  assert.strictEqual(flight.arriveTime, "07:00");
+  assert.strictEqual(flight.seat, "32A");
+  assert.strictEqual(flight.confirmationNo || "", "");
+
+  const hotel = r.items[1];
+  assert.strictEqual(hotel.type, "hotel");
+  assert.strictEqual(hotel.nameZh, "某某酒店");
+  assert.strictEqual(hotel.address, "酒店地址");
+  assert.strictEqual(hotel.checkIn, "2026-12-04");
+  assert.strictEqual(hotel.checkOut, "2026-12-07");
+  assert.strictEqual(hotel.checkInTime || "", "");
+  assert.strictEqual(hotel.checkOutTime || "", "");
+  assert.strictEqual(hotel.confirmationNo, "ABC123");
+
+  const place = r.items[2];
+  assert.strictEqual(place.type, "place");
+  assert.strictEqual(place.subtype, "餐厅");
+  assert.strictEqual(place.nameEn, "Dishoom Covent Garden");
+  assert.strictEqual(place.address, "12 Upper St Martin's Ln, London WC2H 9FB");
+  assert.strictEqual(place.date, "2026-12-05");
+  assert.strictEqual(place.time, "13:00");
+  assert.strictEqual(place.note, "排队的人多");
+});
+
+check("prompt example inside code fences with leading text still imports", function () {
+  const wrapped =
+    "好的，这是整理结果：\n\n```\n\n" +
+    AiPrompt.EXAMPLE +
+    "\n```\n\n祝旅途愉快！\n";
+  const r = ImportUtil.parseImport(wrapped);
+  assert.strictEqual(r.items.length, 3, "items: " + r.items.length + " errors: " + (r.errors || []).join("; "));
+  assert.deepStrictEqual(r.errors, [], (r.errors || []).join("; "));
+  assert.strictEqual(r.items[0].flightNo, "BA123");
+  assert.strictEqual(r.items[0].seat, "32A");
+  assert.strictEqual(r.items[1].confirmationNo, "ABC123");
+  assert.strictEqual(r.items[1].checkIn, "2026-12-04");
+  assert.strictEqual(r.items[2].subtype, "餐厅");
+  assert.ok((r.notes || []).length >= 1, "should gently note skipped explanation lines");
+  assert.ok(r.notes.every(function (n) { return /跳过/.test(n); }));
+});
+
+check("leading bullets and full-width pipes parse", function () {
+  const text = [
+    "- 地点｜无名处｜｜｜",
+    "* 地点 | 保留空列 |  | 2026-12-08 | "
+  ].join("\n");
+  const r = ImportUtil.parseImport(text);
+  assert.deepStrictEqual(r.errors, [], (r.errors || []).join("; "));
+  assert.strictEqual(r.items.length, 2);
+  assert.strictEqual(r.items[0].nameZh, "无名处");
+  assert.strictEqual(r.items[0].address, "");
+  assert.strictEqual(r.items[1].date, "2026-12-08");
+});
+
 console.log("\n--- official pipe lines ---");
 console.log(PIPE_THREE);
 console.log("\n--- Dishoom JSON ---");

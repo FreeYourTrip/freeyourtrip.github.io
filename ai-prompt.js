@@ -1,0 +1,14 @@
+/**
+ * 发给任意 AI（豆包、Kimi、ChatGPT、Gemini、Claude 等）的整理提示词。
+ * 文案由团队审定，请勿改写。
+ */
+(function (root) {
+  "use strict";
+  var TEXT = "请把我发给你的截图或文字（机票、酒店订单、餐厅、景点、攻略等）整理成下面的格式，方便我粘贴进行程 App。\n\n规则：\n1. 每个地方或每段行程占一行，格式为：类型 | 名称 | 地址 | 日期时间 | 备注\n2. 类型只能用：机票、酒店、地点/餐厅、地点/景点、地点/街道、地点\n3. 机票：名称写航班号；地址写出发和到达机场的三字代码，如 LHR - HND；日期时间写“起飞 ~ 落地”，都用各自机场的当地时间，如 2026-12-01 09:30 ~ 2026-12-02 07:00；座位和确认号写在备注里\n4. 酒店：日期时间写“入住日期 ~ 退房日期”，如 2026-12-04 ~ 2026-12-07；确认号写在备注里\n5. 地址尽量写完整，带城市和国家；国内地点用中文名称和中文地址\n6. 日期格式统一为 YYYY-MM-DD HH:mm；不知道的内容留空，但竖线 | 要保留\n7. 不要编造截图里没有的信息，看不清的就留空\n8. 只输出这些行，放在一个代码块里，不要加任何解释\n\n示例：\n机票 | BA123 | LHR - HND | 2026-12-01 09:30 ~ 2026-12-02 07:00 | 座位 32A\n酒店 | 某某酒店 | 酒店地址 | 2026-12-04 ~ 2026-12-07 | 确认号 ABC123\n地点/餐厅 | Dishoom Covent Garden | 12 Upper St Martin's Ln, London WC2H 9FB | 2026-12-05 13:00 | 排队的人多\n";
+  var EXAMPLE = "机票 | BA123 | LHR - HND | 2026-12-01 09:30 ~ 2026-12-02 07:00 | 座位 32A\n酒店 | 某某酒店 | 酒店地址 | 2026-12-04 ~ 2026-12-07 | 确认号 ABC123\n地点/餐厅 | Dishoom Covent Garden | 12 Upper St Martin's Ln, London WC2H 9FB | 2026-12-05 13:00 | 排队的人多\n";
+  var api = { TEXT: TEXT, EXAMPLE: EXAMPLE };
+  root.AiPrompt = api;
+  if (typeof module !== "undefined" && module.exports) {
+    module.exports = api;
+  }
+})(typeof window !== "undefined" ? window : globalThis);

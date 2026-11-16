@@ -6,6 +6,8 @@
 
 const assert = require("assert");
 const GeoUtil = require("./geo.js");
+global.GeoUtil = GeoUtil;
+const Geocode = require("./geocode.js");
 const fs = require("fs");
 const vm = require("vm");
 
@@ -61,6 +63,46 @@ check("inMainlandChina: excludes HK / Macau / Taiwan", function () {
   assert.strictEqual(GeoUtil.inMainlandChina(22.3193, 114.1694), false, "Hong Kong");
   assert.strictEqual(GeoUtil.inMainlandChina(22.1987, 113.5439), false, "Macau");
   assert.strictEqual(GeoUtil.inMainlandChina(25.033, 121.5654), false, "Taipei");
+});
+
+check("gcj02ToWgs84 inverts the published Shanghai vector (1e-6°)", function () {
+  const got = GeoUtil.gcj02ToWgs84(KNOWN.gcjLat, KNOWN.gcjLng);
+  if (!almostEqual(got.lat, KNOWN.wgsLat, 1e-6) || !almostEqual(got.lng, KNOWN.wgsLng, 1e-6)) {
+    throw new Error(
+      "expected " + KNOWN.wgsLat + "," + KNOWN.wgsLng + " got " + got.lat + "," + got.lng
+    );
+  }
+});
+
+check("Amap JS results convert GCJ-02 to WGS-84 only once", function () {
+  assert.strictEqual(Geocode.amapConfigured(), false, "empty keys must look unconfigured");
+  const once = Geocode.gcjResultToWgs(KNOWN.gcjLat, KNOWN.gcjLng);
+  if (!almostEqual(once.lat, KNOWN.wgsLat, 1e-6) || !almostEqual(once.lng, KNOWN.wgsLng, 1e-6)) {
+    throw new Error("single conversion missed the published WGS vector: " + once.lat + "," + once.lng);
+  }
+  const twice = Geocode.gcjResultToWgs(once.lat, once.lng);
+  const dOnce = Math.abs(once.lat - KNOWN.wgsLat) + Math.abs(once.lng - KNOWN.wgsLng);
+  const dTwice = Math.abs(twice.lat - KNOWN.wgsLat) + Math.abs(twice.lng - KNOWN.wgsLng);
+  if (!(dTwice > dOnce + 1e-6)) {
+    throw new Error("a second conversion should drift off WGS-84, dOnce=" + dOnce + " dTwice=" + dTwice);
+  }
+  const mapped = Geocode.mapAmapJsPois(
+    [{ name: "外滩", address: "上海", type: "风景名胜", location: { lng: KNOWN.gcjLng, lat: KNOWN.gcjLat } }],
+    "外滩"
+  );
+  assert.strictEqual(mapped.length, 1);
+  if (!almostEqual(mapped[0].lat, KNOWN.wgsLat, 1e-6) || !almostEqual(mapped[0].lng, KNOWN.wgsLng, 1e-6)) {
+    throw new Error("mapAmapJsPois must convert once, got " + mapped[0].lat + "," + mapped[0].lng);
+  }
+  assert.strictEqual(mapped[0].coordSystem, "wgs84");
+  assert.strictEqual(mapped[0].source, "amap");
+});
+
+check("looksChineseMainlandQuery distinguishes mainland vs HK/TW terms", function () {
+  assert.strictEqual(GeoUtil.looksChineseMainlandQuery("外滩，上海"), true);
+  assert.strictEqual(GeoUtil.looksChineseMainlandQuery("The Savoy, London"), false);
+  assert.strictEqual(GeoUtil.looksChineseMainlandQuery("台北101"), false);
+  assert.strictEqual(GeoUtil.looksChineseMainlandQuery("香港国际机场"), false);
 });
 
 function findTrip(id) {

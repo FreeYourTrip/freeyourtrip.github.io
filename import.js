@@ -23,12 +23,28 @@
   }
 
   function looksLikeJson(text) {
-    var t = trim(text);
+    var t = trim(normalizeImportText(text));
     return t.charAt(0) === "{" || t.charAt(0) === "[";
   }
 
+  /** 去掉 Markdown 代码块围栏，便于粘贴 AI 回复。 */
+  function normalizeImportText(text) {
+    var t = String(text == null ? "" : text);
+    t = t.replace(/```[\w-]*[ \t]*\n?([\s\S]*?)```/g, function (_, inner) {
+      return "\n" + inner + "\n";
+    });
+    t = t.replace(/^[ \t]*```[\w-]*[ \t]*$/gm, "");
+    return t;
+  }
+
+  function tidyPipeLine(raw) {
+    var line = trim(raw);
+    line = line.replace(/^[-*•●]\s+/, "");
+    return trim(line);
+  }
+
   function splitPipeLine(line) {
-    return line.replace(/\uFF5C/g, "|").split("|").map(trim);
+    return tidyPipeLine(line).replace(/\uFF5C/g, "|").split("|").map(trim);
   }
 
   function isHeaderRow(cols) {
@@ -341,20 +357,25 @@
   }
 
   function parsePipe(text) {
-    var lines = String(text).split(/\r\n|\n|\r/);
+    var lines = normalizeImportText(text).split(/\r\n|\n|\r/);
     var usedIds = {};
     var items = [];
     var errors = [];
+    var notes = [];
     var i;
     for (i = 0; i < lines.length; i++) {
       var lineNo = i + 1;
-      var raw = lines[i];
-      if (!trim(raw)) continue;
-      if (/^\s*#/.test(raw)) continue;
+      var raw = tidyPipeLine(lines[i]);
+      if (!raw) continue;
+      if (/^#/.test(raw)) continue;
       var cols = splitPipeLine(raw);
       if (isHeaderRow(cols)) continue;
       if (cols.length !== 5) {
-        errors.push("第 " + lineNo + " 行：列数不是 5 列（分割后得到 " + cols.length + " 列）。应为「类型 | 名称 | 地址 | 日期时间 | 备注」，空单元格也请保留竖线。");
+        if (!/[|｜]/.test(raw)) {
+          notes.push("第 " + lineNo + " 行不像行程条目，已跳过。");
+        } else {
+          errors.push("第 " + lineNo + " 行：列数不是 5 列（分割后得到 " + cols.length + " 列）。应为「类型 | 名称 | 地址 | 日期时间 | 备注」，空单元格也请保留竖线。");
+        }
         continue;
       }
       var result = itemFromFields(
@@ -367,7 +388,7 @@
         items.push(result.item);
       }
     }
-    return { items: items, errors: errors, format: "pipe" };
+    return { items: items, errors: errors, notes: notes, format: "pipe" };
   }
 
   function extractJsonRecords(data) {
@@ -529,9 +550,9 @@
   }
 
   function parseImport(text) {
-    var raw = String(text == null ? "" : text);
+    var raw = normalizeImportText(String(text == null ? "" : text));
     if (!trim(raw)) {
-      return { items: [], errors: ["没有可导入的内容。请粘贴管道格式或 JSON。"], format: "" };
+      return { items: [], errors: ["没有可导入的内容。请粘贴管道格式或 JSON。"], notes: [], format: "" };
     }
     if (looksLikeJson(raw)) return parseJson(raw);
 
@@ -561,6 +582,7 @@
     var usedIds = {};
     var items = [];
     var errors = [];
+    var notes = [];
     var formats = [];
     var tripName = "";
     if (trim(rest)) {
@@ -570,7 +592,8 @@
         items.push(it);
       });
       errors = errors.concat(pipe.errors || []);
-      if (pipe.items.length || (pipe.errors && pipe.errors.length)) formats.push("pipe");
+      notes = notes.concat(pipe.notes || []);
+      if (pipe.items.length || (pipe.errors && pipe.errors.length) || (pipe.notes && pipe.notes.length)) formats.push("pipe");
     }
     jsonBlocks.forEach(function (data, idx) {
       var one = parseJsonData(data, usedIds);
@@ -584,7 +607,7 @@
       formats.push("json");
     });
     var format = formats.indexOf("json") !== -1 && formats.indexOf("pipe") !== -1 ? "mixed" : formats[0] || "pipe";
-    return { items: items, errors: errors, format: format, tripName: tripName };
+    return { items: items, errors: errors, notes: notes, format: format, tripName: tripName };
   }
 
   function tripFromImport(result, fallbackName) {
@@ -603,6 +626,7 @@
   var api = {
     HEADER: HEADER,
     looksLikeJson: looksLikeJson,
+    normalizeImportText: normalizeImportText,
     splitPipeLine: splitPipeLine,
     parseCoordsFromAddress: parseCoordsFromAddress,
     parseSeatAndConfirm: parseSeatAndConfirm,

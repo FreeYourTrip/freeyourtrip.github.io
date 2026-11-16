@@ -1,5 +1,5 @@
 /**
- * 地理与导航链接工具（无路线计算、无 API Key）。
+ * 地理与导航链接工具（无路线计算；高德地理编码 Key 在 config.js，导航链接仍不需要 Key）。
  * - 坐标在数据里一律按 WGS-84 存放。
  * - 高德链接在中国大陆点上先转成 GCJ-02；境外点保持 WGS-84。
  * - 推荐应用：两端都在中国大陆（不含港澳台）用高德，否则用谷歌地图。
@@ -91,6 +91,25 @@
     return { lat: lat + dLat, lng: lng + dLng };
   }
 
+  /**
+   * 标准 GCJ-02 → WGS-84（迭代求逆）。高德返回的是 GCJ-02，入库前要转回 WGS-84。
+   * 不在转换范围内则原样返回。
+   */
+  function gcj02ToWgs84(lat, lng) {
+    if (outOfChinaBBox(lat, lng)) {
+      return { lat: lat, lng: lng };
+    }
+    var wgsLat = lat;
+    var wgsLng = lng;
+    var i;
+    for (i = 0; i < 6; i++) {
+      var got = wgs84ToGcj02(wgsLat, wgsLng);
+      wgsLat -= got.lat - lat;
+      wgsLng -= got.lng - lng;
+    }
+    return { lat: wgsLat, lng: wgsLng };
+  }
+
   function formatCoord(n) {
     return Number(n).toFixed(6);
   }
@@ -157,6 +176,110 @@
   }
 
   /** 两点直线距离（公里）。不是路线距离，页面不得据此当导航路线。 */
+  /**
+   * 粗略判断查询词是否像中国大陆地址（含汉字，且不含港澳台常见词）。
+   * 用于决定要不要走高德地理编码。
+   */
+  function looksChineseMainlandQuery(text) {
+    var t = String(text || "");
+    if (!/[\u3400-\u9fff]/.test(t)) return false;
+    if (/香港|澳门|澳門|台湾|台灣|台北|高雄|台中|台南|台东|台東|新北|基隆|九龙|九龍|新界|旺角|铜锣湾|銅鑼灣/.test(t)) {
+      return false;
+    }
+    return true;
+  }
+
+  function hasPointCoords(p) {
+    return !!(p && typeof p.lat === "number" && typeof p.lng === "number");
+  }
+
+  function pointLabel(p) {
+    if (!p) return "";
+    return String(p.name || p.address || p.airport || "");
+  }
+
+  function googleDirUrl(origin, dest, modeId) {
+    var info = modeInfo(modeId);
+    var url = "https://www.google.com/maps/dir/?api=1";
+    if (origin) {
+      if (hasPointCoords(origin)) {
+        url += "&origin=" + formatCoord(origin.lat) + "," + formatCoord(origin.lng);
+      } else if (pointLabel(origin)) {
+        url += "&origin=" + encodeURIComponent(pointLabel(origin));
+      }
+    }
+    if (hasPointCoords(dest)) {
+      url += "&destination=" + formatCoord(dest.lat) + "," + formatCoord(dest.lng);
+    } else {
+      url += "&destination=" + encodeURIComponent(pointLabel(dest));
+    }
+    url += "&travelmode=" + info.google;
+    return url;
+  }
+
+  function amapNavUrl(origin, dest, modeId) {
+    var info = modeInfo(modeId);
+    if (!hasPointCoords(dest)) {
+      return (
+        "https://uri.amap.com/search?keyword=" +
+        encodeURIComponent(pointLabel(dest)) +
+        "&callnative=1"
+      );
+    }
+    var to = amapCoord(dest.lat, dest.lng);
+    var url = "https://uri.amap.com/navigation?";
+    if (origin && hasPointCoords(origin)) {
+      var from = amapCoord(origin.lat, origin.lng);
+      url +=
+        "from=" +
+        formatCoord(from.lng) +
+        "," +
+        formatCoord(from.lat) +
+        "," +
+        encodeURIComponent(pointLabel(origin)) +
+        "&";
+    }
+    url +=
+      "to=" +
+      formatCoord(to.lng) +
+      "," +
+      formatCoord(to.lat) +
+      "," +
+      encodeURIComponent(pointLabel(dest)) +
+      "&mode=" +
+      info.amap +
+      "&callnative=1";
+    return url;
+  }
+
+  function recommendFlexible(origin, dest) {
+    if (origin && hasPointCoords(origin) && hasPointCoords(dest)) {
+      return recommendApp(origin, dest);
+    }
+    if (hasPointCoords(dest) && inMainlandChina(dest.lat, dest.lng)) return "amap";
+    var text = pointLabel(dest) || pointLabel(origin);
+    if (looksChineseMainlandQuery(text)) return "amap";
+    return "google";
+  }
+
+  /** 带我去 / 从我的位置出发：可只有终点；无坐标时用名称或地址文本。 */
+  function buildPlaceNavLinks(dest, modeId) {
+    return buildFlexibleNavLinks(null, dest, modeId);
+  }
+
+  /** 两点连接；任一点缺坐标时退回文本导航。 */
+  function buildFlexibleNavLinks(origin, dest, modeId) {
+    var rec = recommendFlexible(origin, dest);
+    var google = googleDirUrl(origin, dest, modeId);
+    var amap = amapNavUrl(origin, dest, modeId);
+    return {
+      google: google,
+      amap: amap,
+      recommended: rec,
+      href: rec === "amap" ? amap : google
+    };
+  }
+
   function haversineKm(a, b) {
     var R = 6371;
     var toRad = function (d) {
@@ -175,7 +298,12 @@
     modeInfo: modeInfo,
     inMainlandChina: inMainlandChina,
     wgs84ToGcj02: wgs84ToGcj02,
+    gcj02ToWgs84: gcj02ToWgs84,
     amapCoord: amapCoord,
+    looksChineseMainlandQuery: looksChineseMainlandQuery,
+    hasPointCoords: hasPointCoords,
+    buildPlaceNavLinks: buildPlaceNavLinks,
+    buildFlexibleNavLinks: buildFlexibleNavLinks,
     formatCoord: formatCoord,
     buildGoogleMapsUrl: buildGoogleMapsUrl,
     buildAmapUrl: buildAmapUrl,

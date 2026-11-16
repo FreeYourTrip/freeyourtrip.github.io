@@ -1,14 +1,20 @@
 /* 行程地图：缓存应用外壳。全部使用相对路径，可部署在 GitHub Pages 子目录（如 /repo-name/）。 */
-var CACHE = "xingcheng-map-shell-v2";
+var CACHE = "xingcheng-map-shell-v10";
 var SHELL = [
   "./",
   "./index.html",
   "./styles.css",
   "./data.js",
   "./airports.js",
+  "./config.js",
   "./geo.js",
+  "./legs.js",
+  "./icons.js",
   "./geocode.js",
   "./import.js",
+  "./guess-type.js",
+  "./install-env.js",
+  "./ai-prompt.js",
   "./backup.js",
   "./app.js",
   "./timeline.js",

@@ -1,12 +1,12 @@
 # 旅行心愿地图（第一版）
 
-一份可直接在浏览器里打开的小工具。默认进入**行程时间线**：导入或按名称添加机票、酒店和地点，按日期排列，并在相邻地点之间生成交通连接。心愿清单是次要页。首次打开是空行程，需要演示数据时再点「载入示例」。
+一份可直接在浏览器里打开的小工具。打开后是手机友好的行程列表：顶栏显示行程名称（可点按改名）和日期，右边用地图图标切换地图、用齿轮打开设置。用底部「＋ 添加」粘贴旅行顾问的清单或输入一个地名。相邻卡片之间的「带我去」胶囊会直接打开公共交通导航（中国大陆两端用高德，否则用谷歌地图）。首次打开是空行程。心愿清单逻辑仍保留在代码里，但界面上不再入口。
 
 **当前数据全部是示例**（`example: true`，页面顶部有「示例数据」横幅），用来跑通功能，不是你的真实心愿清单或已订行程。换成自己的数据时，编辑 `data.js` 即可。
 
 ## 如何打开
 
-无需安装、无需构建。用浏览器直接打开 `index.html`（需要能访问 Leaflet / OpenStreetMap 与字体的 CDN）。
+无需安装、无需构建。用浏览器直接打开 `index.html` 即可。地图库使用本地 `vendor/` 中的 Leaflet 1.9.4，界面用系统字体栈，不加载外部字体或第三方脚本，并且没有统计或追踪脚本。地图图块默认来自 OpenStreetMap（需能访问 OSM）。可选的高德 JS API 仅在 `config.js` 填写了 Key 和安全密钥之后，才会在大陆搜索时按需加载。
 
 也可以用本地静态服务：
 
@@ -14,26 +14,33 @@
 python3 -m http.server 8080 --directory .
 ```
 
-然后访问 `http://localhost:8080`。示例行程视图：`http://localhost:8080/?view=timeline`（可再加 `&trip=london-example` 或 `&trip=shanghai-example`）。
+然后访问 `http://localhost:8080`。
 
 ## 文件
 
 | 文件 | 作用 |
 | --- | --- |
-| `index.html` | 页面结构 |
-| `styles.css` | 样式（桌面左右分栏，手机上地图在上、列表在下） |
+| `index.html` | 页面结构（列表 / 地图、添加与设置面板） |
+| `styles.css` | 移动优先样式（约 390px 宽、大按钮、系统字体） |
 | `data.js` | 心愿目的地 `DESTINATIONS` 与示例行程 `EXAMPLE_TRIPS` |
-| `geo.js` | 中国大陆判断、WGS-84→GCJ-02、谷歌/高德导航链接（无路线计算） |
-| `app.js` | 心愿地图、卡片、筛选、排序、状态保存 |
-| `timeline.js` | 示例行程时间线与交通连接条 |
+| `config.js` | 可选高德 Web 端 JS API（`AMAP_JS_KEY` / `AMAP_SECURITY_CODE`，默认都为空） |
+| `geo.js` | 中国大陆判断、WGS-84↔GCJ-02、谷歌/高德导航链接（无路线计算） |
+| `legs.js` | 航班前后路段端点、「转机」、当天第一段「从我的位置出发」规则 |
+| `icons.js` | 统一线性 SVG 图标（界面不使用系统 emoji） |
+| `app.js` | 心愿清单逻辑（界面已隐藏，代码保留） |
+| `timeline.js` | 行程列表、地图、添加与导航 |
 | `airports.js` | 约 180 个主要机场的 WGS-84 坐标（机票解析用） |
-| `geocode.js` | Nominatim 地理编码（1 次/秒，localStorage 缓存） |
+| `geocode.js` | Nominatim 地理编码（1 次/秒，8 秒超时）；已配置高德时，大陆查询按需走 JS API |
 | `import.js` | 行程导入（自动识别管道格式 / JSON，支持中英文字段） |
-| `backup.js` | 导出 / 导入全部数据备份 |
-| `vendor/` | 本地 Leaflet 脚本、样式与标记图，避免再请求脚本 CDN |
+| `backup.js` | 分享导出、完整备份、导入与清空本机数据 |
+| `ai-prompt.js` | 「复制给 AI 的话」的提示词正文 |
+| `guess-type.js` | 按 OSM class/type 猜测地点类型 |
+| `install-env.js` | 判断独立窗口 / iOS Safari / 微信等，决定「添加到桌面」提示 |
+| `DEVLOG.md` | 开发决策与改动记录 |
+| `vendor/` | 本地 Leaflet 1.9.4 脚本、样式与标记图 |
 | `manifest.webmanifest` / `sw.js` / `icons/` | 可安装到手机主屏幕（相对路径，适合 GitHub Pages 子目录） |
 | `导入格式说明.txt` | 导入格式说明（推荐管道格式） |
-| `check.js` / `check-import.js` | 可选的离线校验（`node check.js`、`node check-import.js`） |
+| `check.js` / `check-import.js` / `check-privacy.js` / `check-legs.js` / `check-guess-type.js` / `check-install-env.js` | 可选的离线校验 |
 
 ## 心愿清单字段（`DESTINATIONS`）
 
@@ -82,7 +89,7 @@ flightFromLondon: {
 
 酒店字段：`nameZh` / `nameEn`、`address`、`checkIn` / `checkOut`（当地日历日）、可选 `confirmationNo`，以及 WGS-84 的 `lat` / `lng`。
 
-**交通连接条**会自动出现在每两个相邻、且都有坐标的条目之间，文案为「起点名 —— 终点名」。点击后可选择出行方式（公共交通 / 驾车 / 步行 / 打车），并用链接打开导航应用：
+相邻卡片之间会出现品牌色的「带我去 → 下一项」胶囊（每天第一项之前是「从我的位置 带我去」；两段航班相邻则为不可点击的「转机」）。点一下即用公共交通打开导航应用：
 
 - 谷歌地图：`https://www.google.com/maps/dir/?api=1&origin=LAT,LNG&destination=LAT,LNG&travelmode=transit|driving|walking`（打车使用 `driving`）
 - 高德：`https://uri.amap.com/navigation?from=LNG,LAT,NAME&to=LNG,LAT,NAME&mode=bus|car|walk&callnative=1`（打车使用 `car`，因官方 URI 未单独列出 taxi）
@@ -99,9 +106,33 @@ flightFromLondon: {
 2. 上海浦东国际机场 → 外滩
 
 
+
+## 高德地理编码（可选）
+
+地址搜索默认使用 OpenStreetMap Nominatim，**不必申请密钥**。若希望对中国大陆地址用高德：
+
+1. 到[高德开放平台](https://console.amap.com/)申请「Web 端（JS API）」Key，并把使用该站点的域名加入白名单（本项目的 GitHub Pages 域名为 `chickenbb52-hub.github.io`）。同时创建安全密钥（`securityJsCode`）。
+2. 把 Key 填进 `config.js` 的 `AMAP_JS_KEY`，把安全密钥填进 `AMAP_SECURITY_CODE`。不要把这两项写进要发给朋友的分享文件里（该文件本就不含密钥）。
+3. 仅当两项都非空、且查询词看起来像中国大陆地址（含汉字，且不含港澳台常见词）时，才会按需懒加载 `https://webapi.amap.com/maps?v=2.0&key=…&plugin=AMap.PlaceSearch,AMap.AutoComplete`，并先设置 `window._AMapSecurityConfig`。加载后用 PlaceSearch（空结果再试 AutoComplete）。
+4. 高德返回的是 GCJ-02，入库前**只转换一次**成 WGS-84。导航里发给高德的大陆坐标会再从存储的 WGS-84 转回 GCJ-02。不要对已经入库存成 WGS-84 的点再转一次。
+5. 两项都为空时不会加载任何高德脚本，行为与只用 Nominatim 相同。出错、超时或配额用尽时回退 Nominatim / OSM，页面不会因此中断。底图仍用 Leaflet + OpenStreetMap 图块。
+
+查找失败或超过 8 秒时，条目仍会留下，并提示「暂时找不到位置，不影响「带我去」导航」。「带我去」在没有坐标时会改用名称或地址文本打开地图。
+
+本页没有 Content-Security-Policy 元标签。若自行加上 CSP，需要放行 `https://webapi.amap.com`（以及其回源与图块域名），否则可选的高德脚本会被挡住。
+
+## 航班之间怎么走
+
+- 航班**之前**的地面段，终点是**出发机场**。
+- 航班**之后**的地面段，起点是**到达机场**。
+- 两段航班相邻时，中间显示不可点击的「转机」（可附中转时长），不是「带我去」。
+- 每天第一段「从我的位置出发」若指向航班，目标是出发机场。
+
+图标全部使用同一套线性 SVG（相同描边粗细），不用系统 emoji。转机段使用连接箭头图标。
+
 ## 导入行程（推荐管道格式）
 
-在「示例行程」页点击「导入行程」，把文本粘贴进同一个输入框。工具会自动识别：
+点底部「添加」，把文本粘贴进同一个输入框（也可以只输入一个地名）。工具会自动识别：
 
 1. **管道格式（推荐）**：固定 5 列 `类型 | 名称 | 地址 | 日期时间 | 备注`（空单元格保留竖线；也可用全角 ｜）。类型为 机票 / 酒店 / 地点，地点可写成 `地点/餐厅`、`地点/景点`、`地点/街道`。
 2. **JSON**：以 `[` 或 `{` 开头。约定英文字段：机票 `type, flight_no, from, to, depart, arrive, confirmation?, seat?`；酒店 `type, name, address, check_in, check_out, confirmation?`；地点 `type, subtype?, name, address?, map_url?, date?, note?`。中文键仍然可用。同一框可混合粘贴管道和 JSON。
@@ -110,7 +141,7 @@ flightFromLondon: {
 
 航班的日期时间按**各自身机场的当地墙钟时间**书写，例如 `2026-12-01 09:30 ~ 2026-12-02 07:00`。文字地址和名称会通过 OpenStreetMap Nominatim 查找坐标（无需密钥，每秒 1 次，结果缓存在本机）。机票先查内置机场表。找不到或多个候选时，预览行会标成黄色，可挑选或重试；不会因此中断整批导入。页面不计算导航路线。
 
-行程数据只保存在本机浏览器（`localStorage` 键 `wishlist-map-trips-v1` 等），不上传到我们的服务器。页眉提供两种导出：「分享给朋友（隐藏订单号）」会去掉确认号、座位及备注里的对应字样，也不含地理编码缓存，文件名如 `行程分享-YYYYMMDD.json`；「完整备份（仅自己保存）」保留全部内容（含预订号），文件名如 `行程完整备份-YYYYMMDD.json`，请不要把完整备份发给别人。两种文件都可以用「导入备份」合并或替换。换手机或清缓存前请先做完整备份；也可以在页脚「清空本机数据」。
+行程只存在你的手机里，没有账号，也没有服务器，我们看不到。数据保存在本机浏览器（`localStorage` 键 `wishlist-map-trips-v1` 等）。只有搜索、显示地图和导航时，地名或地址会发给地图服务（OpenStreetMap、高德或 Google 地图）。在「设置」里可以「分享给朋友」（去掉确认号、座位及备注里的对应字样，也不含地理编码缓存，文件名如 `行程分享-YYYYMMDD.json`）或做「完整备份」（保留全部内容，仅自己保存，文件名如 `行程完整备份-YYYYMMDD.json`）。两种文件都可以用「导入」合并或替换。换手机或清缓存前请先做完整备份；也可以「清空本机数据」。
 
 把站点放到 GitHub Pages 时，所有本地资源都使用相对路径（`./styles.css`、`./sw.js`、`start_url: "./"`），可部署在子目录如 `/repo-name/`。可用浏览器「添加到主屏幕」安装。service worker 只在 http/https 下注册，用 file:// 直接打开时不会启用，但不影响基本功能。
 

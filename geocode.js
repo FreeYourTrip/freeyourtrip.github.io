@@ -1,17 +1,75 @@
 /**
- * OpenStreetMap Nominatim 地理编码（无需 API Key）。
- * 限制：每秒最多 1 次请求；结果缓存在 localStorage。
+ * 地理编码：默认使用 OpenStreetMap Nominatim（无需 API Key）。
+ * 若 config.js 同时填写了 AMAP_JS_KEY 与 AMAP_SECURITY_CODE，且查询词像中国大陆
+ * 地址，则按需懒加载高德 Web 端 JS API（PlaceSearch / AutoComplete），把返回的
+ * GCJ-02 只转换一次成 WGS-84 再入库。两个配置都为空时不会加载任何高德脚本。
+ * 限制：Nominatim 每秒最多 1 次；超时 8 秒；结果缓存在 localStorage。
  * 机票优先查本地机场表，找不到再搜「<IATA> airport」。
  * 请求中只包含名称、地址或 IATA，不会发送确认号、座位或备注。
+ * 浏览器页面里的 fetch 不能自定义 User-Agent；Nominatim 请求带 Accept 与
+ * Accept-Language，Referer / User-Agent 由浏览器自动附带。
  */
 (function (root) {
   "use strict";
 
   var CACHE_KEY = "wishlist-map-geocode-v1";
   var NOMINATIM = "https://nominatim.openstreetmap.org/search";
+  var AMAP_JS = "https://webapi.amap.com/maps";
   var MIN_INTERVAL_MS = 1000;
+  var REQUEST_TIMEOUT_MS = 8000;
+  var FRIENDLY_NOT_FOUND = "暂时找不到位置，不影响「带我去」导航";
   var lastRequestAt = 0;
   var chain = Promise.resolve();
+  var amapLoader = null;
+
+  function amapJsKey() {
+    var cfg = root.AppConfig || {};
+    return String(cfg.AMAP_JS_KEY || "").trim();
+  }
+
+  function amapSecurityCode() {
+    var cfg = root.AppConfig || {};
+    return String(cfg.AMAP_SECURITY_CODE || "").trim();
+  }
+
+  function amapConfigured() {
+    return !!(amapJsKey() && amapSecurityCode());
+  }
+
+  function looksMainland(text) {
+    if (root.GeoUtil && typeof root.GeoUtil.looksChineseMainlandQuery === "function") {
+      return root.GeoUtil.looksChineseMainlandQuery(text);
+    }
+    return /[\u3400-\u9fff]/.test(String(text || ""));
+  }
+
+  function fetchWithTimeout(url, options) {
+    var ms = REQUEST_TIMEOUT_MS;
+    var ctrl = typeof AbortController !== "undefined" ? new AbortController() : null;
+    var opts = {};
+    var key;
+    options = options || {};
+    for (key in options) {
+      if (Object.prototype.hasOwnProperty.call(options, key)) opts[key] = options[key];
+    }
+    if (ctrl) opts.signal = ctrl.signal;
+    return new Promise(function (resolve, reject) {
+      var timer = setTimeout(function () {
+        if (ctrl) ctrl.abort();
+        reject(new Error("timeout"));
+      }, ms);
+      fetch(url, opts).then(
+        function (res) {
+          clearTimeout(timer);
+          resolve(res);
+        },
+        function (err) {
+          clearTimeout(timer);
+          reject(err);
+        }
+      );
+    });
+  }
 
   function now() {
     return Date.now();
@@ -82,7 +140,9 @@
         lat: Number(r.lat),
         lng: Number(r.lon),
         displayName: r.display_name || "",
-        type: r.type || r.category || "",
+        name: r.name || "",
+        class: r.class || r.category || "",
+        type: r.type || "",
         importance: typeof r.importance === "number" ? r.importance : 0
       };
     }).filter(function (r) {
@@ -131,9 +191,11 @@
         encodeURIComponent("zh,en") +
         "&q=" +
         encodeURIComponent(q);
-      return fetch(url, { headers: { Accept: "application/json" } }).then(function (res) {
+      return fetchWithTimeout(url, {
+          headers: { Accept: "application/json", "Accept-Language": "zh,en" }
+        }).then(function (res) {
         if (!res.ok) {
-          throw new Error("Nominatim 返回 HTTP " + res.status);
+          throw new Error("timeout-or-http");
         }
         return res.json();
       }).then(function (data) {
@@ -142,6 +204,234 @@
         return results;
       });
     });
+  }
+
+  /**
+   * 高德 JS API 返回的是 GCJ-02。入库只做这一次转换，得到 WGS-84。
+   * 不要对已经转过的结果再调用一次。
+   */
+  function gcjResultToWgs(lat, lng) {
+    lat = Number(lat);
+    lng = Number(lng);
+    if (!isFinite(lat) || !isFinite(lng)) return null;
+    if (root.GeoUtil && typeof root.GeoUtil.gcj02ToWgs84 === "function") {
+      return root.GeoUtil.gcj02ToWgs84(lat, lng);
+    }
+    return { lat: lat, lng: lng };
+  }
+
+  function readAmapLngLat(loc) {
+    if (!loc) return null;
+    var lng = typeof loc.getLng === "function" ? loc.getLng() : loc.lng;
+    var lat = typeof loc.getLat === "function" ? loc.getLat() : loc.lat;
+    if (lng == null && Array.isArray(loc) && loc.length >= 2) {
+      lng = loc[0];
+      lat = loc[1];
+    }
+    return gcjResultToWgs(lat, lng);
+  }
+
+  function mapAmapJsPois(pois, q) {
+    var list = [];
+    (pois || []).forEach(function (poi) {
+      if (!poi) return;
+      var pt = readAmapLngLat(poi.location);
+      if (!pt) return;
+      var name = String(poi.name || "").trim();
+      var addr = String(poi.address || poi.district || "").trim();
+      list.push({
+        lat: pt.lat,
+        lng: pt.lng,
+        displayName: (name && addr ? name + ", " + addr : name || addr || q || "").trim(),
+        name: name,
+        class: "",
+        type: poi.type || poi.typecode || "",
+        source: "amap",
+        coordSystem: "wgs84"
+      });
+    });
+    return list;
+  }
+
+  function mapAmapJsTips(tips, q) {
+    var list = [];
+    (tips || []).forEach(function (tip) {
+      if (!tip) return;
+      var pt = readAmapLngLat(tip.location);
+      if (!pt) return;
+      var name = String(tip.name || "").trim();
+      var addr = String(tip.address || tip.district || "").trim();
+      list.push({
+        lat: pt.lat,
+        lng: pt.lng,
+        displayName: (name && addr ? name + ", " + addr : name || addr || q || "").trim(),
+        name: name,
+        class: "",
+        type: tip.type || tip.typecode || "",
+        source: "amap",
+        coordSystem: "wgs84"
+      });
+    });
+    return list;
+  }
+
+  function ensureAmapJs() {
+    if (!amapConfigured()) return Promise.reject(new Error("amap-not-configured"));
+    if (typeof document === "undefined") return Promise.reject(new Error("amap-no-document"));
+    if (root.AMap && (root.AMap.PlaceSearch || root.AMap.plugin)) {
+      return Promise.resolve(root.AMap);
+    }
+    if (amapLoader) return amapLoader;
+    try {
+      root._AMapSecurityConfig = { securityJsCode: amapSecurityCode() };
+    } catch (err) {}
+    amapLoader = new Promise(function (resolve, reject) {
+      var done = false;
+      function finish(err, value) {
+        if (done) return;
+        done = true;
+        clearTimeout(timer);
+        if (err) {
+          amapLoader = null;
+          reject(err);
+        } else {
+          resolve(value);
+        }
+      }
+      var timer = setTimeout(function () {
+        finish(new Error("timeout"));
+      }, REQUEST_TIMEOUT_MS);
+      root.__onAmapReady = function () {
+        if (root.AMap) finish(null, root.AMap);
+        else finish(new Error("amap-missing"));
+      };
+      var script = document.createElement("script");
+      script.src =
+        AMAP_JS +
+        "?v=2.0&key=" +
+        encodeURIComponent(amapJsKey()) +
+        "&plugin=AMap.PlaceSearch,AMap.AutoComplete&callback=__onAmapReady";
+      script.async = true;
+      script.onerror = function () {
+        finish(new Error("amap-load"));
+      };
+      try {
+        document.head.appendChild(script);
+      } catch (err) {
+        finish(err || new Error("amap-load"));
+      }
+    });
+    return amapLoader;
+  }
+
+  function amapPluginSearch(AMapCtor, pluginName, runner) {
+    return new Promise(function (resolve, reject) {
+      var timer = setTimeout(function () {
+        reject(new Error("timeout"));
+      }, REQUEST_TIMEOUT_MS);
+      function go() {
+        try {
+          runner(function (doneErr, list) {
+            clearTimeout(timer);
+            if (doneErr) reject(doneErr);
+            else resolve(list || []);
+          });
+        } catch (err) {
+          clearTimeout(timer);
+          reject(err);
+        }
+      }
+      if (AMapCtor[pluginName]) {
+        go();
+        return;
+      }
+      if (typeof AMapCtor.plugin === "function") {
+        AMapCtor.plugin(pluginName, function () {
+          go();
+        });
+        return;
+      }
+      clearTimeout(timer);
+      reject(new Error("amap-plugin"));
+    });
+  }
+
+  function amapPlaceSearch(AMapCtor, q) {
+    return amapPluginSearch(AMapCtor, "AMap.PlaceSearch", function (done) {
+      var searcher = new AMapCtor.PlaceSearch({ pageSize: 5, pageIndex: 1, extensions: "base" });
+      searcher.search(q, function (status, result) {
+        if (status === "complete" && result && result.poiList) {
+          done(null, mapAmapJsPois(result.poiList.pois || [], q));
+          return;
+        }
+        if (status === "no_data") {
+          done(null, []);
+          return;
+        }
+        done(new Error(status || "amap-search"));
+      });
+    });
+  }
+
+  function amapAutoComplete(AMapCtor, q) {
+    return amapPluginSearch(AMapCtor, "AMap.AutoComplete", function (done) {
+      var auto = new AMapCtor.AutoComplete({});
+      auto.search(q, function (status, result) {
+        if (status === "complete" && result && result.tips) {
+          done(null, mapAmapJsTips(result.tips, q));
+          return;
+        }
+        if (status === "no_data") {
+          done(null, []);
+          return;
+        }
+        done(new Error(status || "amap-auto"));
+      });
+    });
+  }
+
+  /**
+   * 大陆查询在已配置 JS Key 时走高德 PlaceSearch，空结果再试 AutoComplete。
+   * 失败、超时或配额错误由调用方回退 Nominatim。
+   */
+  function amapSearch(query) {
+    var q = sanitizeGeocodeQuery(query);
+    if (!amapConfigured() || !q) return Promise.resolve([]);
+    var cacheQ = "amap:" + q;
+    var hit = cacheGet(cacheQ);
+    if (hit && Array.isArray(hit.results)) return Promise.resolve(hit.results);
+    return ensureAmapJs()
+      .then(function (AMapCtor) {
+        return amapPlaceSearch(AMapCtor, q).then(function (list) {
+          if (list && list.length) return list;
+          return amapAutoComplete(AMapCtor, q);
+        });
+      })
+      .then(function (list) {
+        var out = list || [];
+        if (out.length) cacheSet(cacheQ, out);
+        return out;
+      });
+  }
+
+  /**
+   * 统一搜索：已配置高德且查询像大陆地址时先走 JS API，失败或无结果再退回 Nominatim。
+   * 两个配置都为空时只使用 Nominatim，不会加载 webapi.amap.com。
+   */
+  function searchAddress(query) {
+    var q = sanitizeGeocodeQuery(query);
+    if (!q) return Promise.resolve([]);
+    if (amapConfigured() && looksMainland(q)) {
+      return amapSearch(q)
+        .then(function (list) {
+          if (list && list.length) return list;
+          return nominatimSearch(q);
+        })
+        .catch(function () {
+          return nominatimSearch(q);
+        });
+    }
+    return nominatimSearch(q);
   }
 
   function lookupIata(code) {
@@ -342,7 +632,7 @@
         return Promise.resolve([]);
       }
       out.query = queries[i];
-      return nominatimSearch(queries[i]).then(function (list) {
+      return searchAddress(queries[i]).then(function (list) {
         if (list && list.length) return list;
         return searchNext(i + 1);
       });
@@ -369,12 +659,12 @@
         out.message = "找到 " + list.length + " 个候选，请确认地点";
       } else {
         out.status = "none";
-        out.message = "没有找到「" + query + "」的坐标";
+        out.message = FRIENDLY_NOT_FOUND;
       }
       return out;
-    }).catch(function (err) {
-      out.status = "error";
-      out.message = "地理编码失败：" + (err && err.message ? err.message : String(err));
+    }).catch(function () {
+      out.status = "none";
+      out.message = FRIENDLY_NOT_FOUND;
       return out;
     });
   }
@@ -409,11 +699,11 @@
         .catch(function (err) {
           var fail = {
             item: item,
-            status: "error",
+            status: "none",
             query: "",
             candidates: [],
             chosen: null,
-            message: String(err && err.message ? err.message : err)
+            message: FRIENDLY_NOT_FOUND
           };
           results.push(fail);
           if (typeof onEach === "function") onEach(fail, results.length - 1, list.length);
@@ -426,11 +716,20 @@
   var api = {
     CACHE_KEY: CACHE_KEY,
     nominatimSearch: nominatimSearch,
+    searchAddress: searchAddress,
+    amapSearch: amapSearch,
+    amapConfigured: amapConfigured,
+    gcjResultToWgs: gcjResultToWgs,
+    mapAmapJsPois: mapAmapJsPois,
+    FRIENDLY_NOT_FOUND: FRIENDLY_NOT_FOUND,
     sanitizeGeocodeQuery: sanitizeGeocodeQuery,
     lookupIata: lookupIata,
     resolveItem: resolveItem,
     resolveAll: resolveAll,
     applyChoice: applyChoice,
+    guessType: function (input, typ) {
+      return root.GuessType && GuessType.guessType ? GuessType.guessType(input, typ) : "地点";
+    },
     cacheGet: cacheGet,
     getCache: getCache,
     setCacheAll: setCacheAll
