@@ -22,12 +22,12 @@
 
 | 项 | 内容 |
 | --- | --- |
-| 线上地址 | https://freeyourtrip.github.io/ （2026-11-16 起；当前线上提交 `b71917b`，sw `xingcheng-map-shell-v13`；v5 首次部署为 `55ba75e`） |
+| 线上地址 | https://freeyourtrip.github.io/ （2026-11-16 起；当前线上提交 `7f726aa`（v5.1），sw `xingcheng-map-shell-v14`；v5 首次部署为 `55ba75e`） |
 | 代码仓库 | https://github.com/FreeYourTrip/freeyourtrip.github.io （公开仓库，部署在根路径） |
 | 高德域名白名单 | `freeyourtrip.github.io`（Key 与安全密钥不写入本日志或仓库，`config.js` 里保持为空） |
 | 旧网址 | 已停用：https://chickenbb52-hub.github.io/Trip-Map/ 现返回 404（2026-11-16 15:09 Europe/London 核实）；仓库 `chickenbb52-hub/Trip-Map` 已由用户本人删除；按用户要求不做自动跳转 |
 | 托管 | GitHub Pages，从 `main` 的仓库根目录部署；仓库根有空文件 `.nojekyll`，避免 Jekyll 处理 |
-| 截至本日志 | （2026-11-16 15:20 Europe/London 更新）线上 https://freeyourtrip.github.io/ 对应提交 `b71917b`，service worker 缓存名 `xingcheng-map-shell-v13`，显示版本 v5；高德 Key 与安全密钥均为空（`config.js` 里是空字符串）。旧网址 chickenbb52-hub.github.io/Trip-Map 已停用（返回 404，仓库已删除，不做跳转）。下一批（15:20 条目：v5.1，sw `xingcheng-map-shell-v14`）未推送，待老板看截图。12:25 时的旧状态（提交 `e8e43ff`、`config.js` 404）见第 3 节历史记录。 |
+| 截至本日志 | （2026-11-16 15:38 Europe/London 更新）线上 https://freeyourtrip.github.io/ 对应提交 `7f726aa`，service worker 缓存名 `xingcheng-map-shell-v14`，显示版本 v5.1（已核实 sw.js、version.js、locate.js 线上返回正确）；高德 Key 与安全密钥均为空（`config.js` 里是空字符串）。旧网址 chickenbb52-hub.github.io/Trip-Map 已停用（返回 404，仓库已删除，不做跳转）。12:25 时的旧状态（提交 `e8e43ff`、`config.js` 404）见第 3 节历史记录。 |
 
 ### 技术栈（已上线的第一版 / 隐私版）
 
@@ -681,7 +681,7 @@ git revert <出错的提交哈希>   # 优先用 revert，便于保留历史
 - sw 缓存名 `xingcheng-map-shell-v14`（本地之前已是 v13，与线上一致）。仍无公告以外的弹窗变化；无新外部域名；高德 Key 仍为空；假数据。
 - 涉及文件：`version.js`、`recommend.js`、`import.js`、`item-edit.js`、`timeline.js`、`calendar.js`、`styles.css`、`index.html`、`backup.js`（注释）、`sw.js`、`check-version.js`、`check-patch.js`、`check-pending.js`、`check-calendar.js`、`check-edit.js` / `check-update.js`（缓存名）、`README.md`、`DESIGN.md`、`DEVLOG.md`
 - 怎么测试：12 个 node 检查全部通过（新增：东京→洛杉矶 −1 天不标、−2 天不标、−3 天标；酒店颠倒标；颠倒条目修改后保持 / 清除；系统分享文字不带 👉；旧名「分享给朋友」不再出现；fitCity 截断；看过 v5 的人弹一次 v5.1 公告；v5.1 公告原文）。无头 Chrome 390px：设置里「分享行程」「推荐给朋友」并列；住宿段「大阪难波心…」与「·」间距 3.3px；颠倒酒店和 −3 天机票显示黄卡，−1 天机票（XX201，12/10 17:00 → 12/09 10:30）在 12/10 正常显示；v5.1 公告截图。截图在 `/workspace/ui-v5-patch2/`。
-- 是否已上线：未推送（待老板看截图）
+- 是否已上线：是，已推送（提交 `7f726aa`，2026-11-16 15:37 上线；老板说「做完了 更新v5.1版本」，UI 已看截图）
 - 回滚：回到 `b71917b`。
 
 
@@ -698,7 +698,7 @@ git revert <出错的提交哈希>   # 优先用 revert，便于保留历史
 - 提出：用户。规格：团队（UI）。
 - 涉及文件：`locate.js`（新）、`index.html`、`timeline.js`（`TripApp.getMap / mapTileKind / toast`、使用说明）、`styles.css`、`sw.js`（预缓存加 `locate.js`）、`check-locate.js`（新）、`check-privacy.js`
 - 怎么测试：`check-locate.js` 9 项（模拟 geolocation：参数、成功、拒绝、超时、无 API；GCJ 分支：上海转换，香港 / 澳门 / 台北 / 伦敦不转，OSM 不转；按钮接线、只在点按时请求；CSS 规格）。无头 Chrome 390px 模拟伦敦位置：点按后状态 locating → active，出现蓝点，缩放 15，localStorage 没有位置相关键；模拟拒绝：按钮变灰并显示提示。截图 `08-locate-button-390.png`、`09-locate-denied-toast-390.png`。
-- 是否已上线：未推送。
+- 是否已上线：是，已推送（提交 `7f726aa`）。
 
 ### 2026-11-16 15:36（Europe/London）— 设置里两个按钮最终命名
 
@@ -708,7 +708,7 @@ git revert <出错的提交哈希>   # 优先用 revert，便于保留历史
 - 提出：用户；定稿：IT老板。
 - 涉及文件：`index.html`、`timeline.js`、`styles.css`、`version.js`、`backup.js` / `recommend.js`（注释）、`README.md`、`DESIGN.md`、`check-patch.js`、`check-version.js`
 - 怎么测试：`check-patch.js` 断言新名字和副标题、旧名不再出现；`check-version.js` 断言公告和 v5.1 更新记录原文。截图 `01`、`06`、`07` 重拍。
-- 是否已上线：未推送。
+- 是否已上线：是，已推送（提交 `7f726aa`）。
 
 ### 2026-11-16 15:37（Europe/London）— 折叠屏 / 双屏大概适配（只做了模拟测试，没上真机）
 
@@ -724,4 +724,4 @@ git revert <出错的提交哈希>   # 优先用 revert，便于保留历史
 - 截图：`fold-344.png`、`fold-600.png`、`fold-768.png`、`fold-900.png`（均为修改后），另有各宽度 `-map` / `-settings` 图；没有留修改前的图。都在 `/workspace/ui-v5-patch2/`。
 - 不写进公告和更新记录。
 - 涉及文件：`styles.css`、`timeline.js`（`isDualScreen` 钩子）、`check-locate.js`、`README.md`、`DESIGN.md`
-- 是否已上线：未推送。仍是 sw `xingcheng-map-shell-v14`，无新外部域名，高德 Key 为空，假数据。
+- 是否已上线：是，已推送（提交 `7f726aa`）。仍是 sw `xingcheng-map-shell-v14`，无新外部域名，高德 Key 为空，假数据。
