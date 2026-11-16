@@ -1078,3 +1078,4 @@ git revert <出错的提交哈希>   # 优先用 revert，便于保留历史
 - 没做：没有推送到仓库。没有实现第 1 / 2 / 3 / 5 项（开关关掉）。没有实现选行程分享、放到哪天、导入去重。
 
 - 怎么测试：`node check*.js` 共 39 个检查文件、0 失败；打印出的通过项 404 条，另有 `check-size.js`、`check-v61-release-clean.js` 以整份通过（不逐条打印）。含 `check-v61-loc-confirm.js`（针尖/中心 10 米、关闭重开只留一张地图、底图失败时按钮仍可用）。无头 Chrome 390×844 和 360×844、假数据截图在 `/workspace/ui-v61/`（含公告 5 条、导入向导第 2 步、顶栏「共 N 趟」和『＋ 新行程』、更新弹窗、机票卡『带我去』和『↓ 怎么去』、位置待确认卡 390/360，署名在地图右下角）。发布包 `/workspace/trip-map-release-v61.tar.gz`（顶层文件夹 `wishlist-map/`，不含 `screenshot*.png`）。SHA256 以打包后命令行输出为准。没有推送。
+- 已上线（23:20 Europe/London）：v6.1 已推到 main，提交 `762bc09`，GitHub Pages 构建完成。线上关键文件 sha256 与发布包一致；缓存 xingcheng-map-shell-v19，APP_VERSION v6.1，高德两个密钥为空。
