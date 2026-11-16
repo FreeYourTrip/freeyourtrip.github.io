@@ -65,7 +65,7 @@ check("settings markup: 推荐给朋友 separate from 分享给朋友; script + 
   assert.ok(html.indexOf('id="recommend-btn"') !== -1 && html.indexOf(">推荐给朋友<") !== -1);
   assert.ok(html.indexOf('id="backup-export-share"') !== -1 && html.indexOf(">分享给朋友<") !== -1);
   assert.ok(html.indexOf('src="./recommend.js"') !== -1);
-  assert.ok(sw.indexOf('"./recommend.js"') !== -1 && sw.indexOf('"xingcheng-map-shell-v12"') !== -1);
+  assert.ok(sw.indexOf('"./recommend.js"') !== -1 && sw.indexOf('"xingcheng-map-shell-v13"') !== -1);
   assert.strictEqual(v.APP_VERSION, "v5");
 });
 

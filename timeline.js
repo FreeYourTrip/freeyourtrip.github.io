@@ -677,7 +677,7 @@
   function cardHtml(item) {
     var meta = typeStyle(item);
     var pendingLine = isPendingItem(item)
-      ? '<p class="card-raw">原文：' + escapeHtml(item.dateRaw || "（没写日期）") + "</p>"
+      ? '<p class="card-raw">' + (item.dateRaw ? "这个时间看不懂：" + escapeHtml(item.dateRaw) + "，点我改一下" : "没写日期，点我改一下") + "</p>"
       : "";
     var open = expanded[item.id] ? " is-open" : "";
     var extra = [];

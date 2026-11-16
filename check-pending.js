@@ -98,7 +98,7 @@ check("UI wiring: 待确认日期 group, banner, colours, raw text, toast wordin
   const css = fs.readFileSync(__dirname + "/styles.css", "utf8");
   assert.ok(tl.indexOf("<span>待确认日期</span>") !== -1);
   assert.ok(tl.indexOf('"<span>有 " + pending.length + " 条日期待确认</span>') !== -1);
-  assert.ok(tl.indexOf("原文：") !== -1);
+  assert.ok(tl.indexOf("这个时间看不懂：") !== -1);
   assert.ok(tl.indexOf('"，" + pendingN + " 条日期待确认"') !== -1);
   assert.ok(tl.indexOf('if (card.classList.contains("is-pending")) enterEditMode(') !== -1);
   assert.ok(/\.card\.is-pending \{ background: #FFF4CC;/.test(css) && css.indexOf("#F2B705") !== -1);
