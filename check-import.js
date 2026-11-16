@@ -221,7 +221,7 @@ const AiPrompt = require("./ai-prompt.js");
 check("team prompt example block parses into correct items", function () {
   const r = ImportUtil.parseImport(AiPrompt.EXAMPLE);
   assert.deepStrictEqual(r.errors, [], (r.errors || []).join("; "));
-  assert.strictEqual(r.items.length, 3);
+  assert.strictEqual(r.items.length, 5);
 
   const flight = r.items[0];
   assert.strictEqual(flight.type, "flight");
@@ -245,7 +245,17 @@ check("team prompt example block parses into correct items", function () {
   assert.strictEqual(hotel.checkOutTime || "", "");
   assert.strictEqual(hotel.confirmationNo, "ABC123");
 
-  const place = r.items[2];
+  const train = r.items[2];
+  assert.strictEqual(train.type, "train");
+  assert.strictEqual(train.number, "G7");
+  assert.strictEqual(train.fromNameZh, "北京南");
+  assert.strictEqual(train.nameZh, "上海虹桥");
+  assert.strictEqual(train.departDate, "2026-12-03");
+  assert.strictEqual(train.departTime, "08:00");
+  assert.strictEqual(train.arriveDate, "2026-12-03");
+  assert.strictEqual(train.arriveTime, "12:28");
+
+  const place = r.items[3];
   assert.strictEqual(place.type, "place");
   assert.strictEqual(place.subtype, "餐厅");
   assert.strictEqual(place.nameEn, "Dishoom Covent Garden");
@@ -253,6 +263,16 @@ check("team prompt example block parses into correct items", function () {
   assert.strictEqual(place.date, "2026-12-05");
   assert.strictEqual(place.time, "13:00");
   assert.strictEqual(place.note, "排队的人多");
+
+  const senso = r.items[4];
+  assert.strictEqual(senso.type, "place");
+  assert.strictEqual(senso.subtype, "景点");
+  assert.strictEqual(senso.nameZh, "浅草寺");
+  assert.strictEqual(senso.address, "东京都台东区浅草2-3-1");
+  assert.ok(!senso.date, "intentionally undated");
+  assert.ok(!senso.time);
+  assert.strictEqual(senso.note, "早上人少");
+  assert.ok(!senso.pendingDate, "empty date is not 待补");
 });
 
 check("prompt example inside code fences with leading text still imports", function () {
@@ -261,13 +281,16 @@ check("prompt example inside code fences with leading text still imports", funct
     AiPrompt.EXAMPLE +
     "\n```\n\n祝旅途愉快！\n";
   const r = ImportUtil.parseImport(wrapped);
-  assert.strictEqual(r.items.length, 3, "items: " + r.items.length + " errors: " + (r.errors || []).join("; "));
+  assert.strictEqual(r.items.length, 5, "items: " + r.items.length + " errors: " + (r.errors || []).join("; "));
   assert.deepStrictEqual(r.errors, [], (r.errors || []).join("; "));
   assert.strictEqual(r.items[0].flightNo, "BA123");
   assert.strictEqual(r.items[0].seat, "32A");
   assert.strictEqual(r.items[1].confirmationNo, "ABC123");
   assert.strictEqual(r.items[1].checkIn, "2026-12-04");
-  assert.strictEqual(r.items[2].subtype, "餐厅");
+  assert.strictEqual(r.items[2].number, "G7");
+  assert.strictEqual(r.items[3].subtype, "餐厅");
+  assert.strictEqual(r.items[4].nameZh, "浅草寺");
+  assert.ok(!r.items[4].date && !r.items[4].pendingDate);
   assert.ok((r.notes || []).length >= 1, "should gently note skipped explanation lines");
   assert.ok(r.notes.every(function (n) { return /跳过/.test(n); }));
 });
@@ -329,17 +352,19 @@ check("pipe rows with loose dates/times are imported, not dropped", function () 
   assert.strictEqual(r.items[3].arriveTime, "11:30");
 });
 
-check("12月11日 uses the year from other rows; with no year anywhere it is kept as 待确认", function () {
+check("12月11日 uses the year from other rows; with no year anywhere it uses the next occurrence on or after today", function () {
   const ok = ImportUtil.parseImport("地点 | 示例A | Example 1 | 2026/12/10 |\n地点 | 示例B | Example 2 | 12月11日 9点 |");
   assert.deepStrictEqual(ok.errors, []);
   assert.strictEqual(ok.items[1].date, "2026-12-11");
   assert.strictEqual(ok.items[1].time, "09:00");
-  const bad = ImportUtil.parseImport("地点 | 示例B | Example 2 | 12月11日 9点 |");
-  assert.deepStrictEqual(bad.errors, []);
-  assert.strictEqual(bad.items.length, 1);
-  assert.strictEqual(bad.items[0].pendingDate, true);
-  assert.strictEqual(bad.items[0].dateRaw, "12月11日 9点");
-  assert.strictEqual(bad.items[0].date, "");
+  const next = ImportUtil.parseImport("地点 | 示例B | Example 2 | 12月11日 9点 |", { today: "2026-11-16" });
+  assert.deepStrictEqual(next.errors, []);
+  assert.strictEqual(next.items.length, 1);
+  assert.ok(!next.items[0].pendingDate);
+  assert.strictEqual(next.items[0].date, "2026-12-11");
+  assert.strictEqual(next.items[0].time, "09:00");
+  const past = ImportUtil.parseImport("地点 | 示例B | Example 2 | 12月11日 9点 |", { today: "2026-12-12" });
+  assert.strictEqual(past.items[0].date, "2027-12-11");
 });
 
 check("JSON records get the same date/time tolerance", function () {

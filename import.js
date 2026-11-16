@@ -7,6 +7,13 @@
   "use strict";
 
   var HEADER = ["类型", "名称", "地址", "日期时间", "备注"];
+  /* v6：火车 / 船 / 大巴（写法见 transport.js 的 TYPE_WORDS） */
+  var Transport = root.Transport || (typeof require === "function" ? require("./transport.js") : null);
+  /* v6：图标别名（「甜品」→ 咖啡甜点酒吧）在 icons.js；用的时候再取，不依赖脚本先后 */
+  function iconsRef() {
+    if (root.Icons) return root.Icons;
+    try { return typeof require === "function" ? require("./icons.js") : null; } catch (e) { return null; }
+  }
   var TYPE_ALIASES = {
     机票: "flight",
     航班: "flight",
@@ -52,7 +59,7 @@
     return /^[\s|｜:：\-—]+$/.test(line) && /-/.test(line);
   }
 
-  var ROW_TYPE_RE = /^(机票|航班|飞机|酒店|住宿|民宿|地点|餐厅|景点|街道|flight|hotel|place)/i;
+  var ROW_TYPE_RE = /^(机票|航班|飞机|酒店|住宿|民宿|地点|餐厅|景点|街道|火车票|车票|火车|高铁|动车|列车|船票|船|轮渡|渡轮|邮轮|大巴票|汽车票|大巴|巴士|长途汽车|flight|hotel|place|train|ferry|boat|bus|coach)/i;
 
   function splitPipeLine(line) {
     return tidyPipeLine(line).replace(/\uFF5C/g, "|").split("|").map(trim);
@@ -76,8 +83,8 @@
       base = trim(s.slice(0, slash));
       subtype = trim(s.slice(slash + 1));
     }
-    var kind = TYPE_ALIASES[base.toLowerCase()] || TYPE_ALIASES[base];
-    if (!kind) return { error: "无法识别的类型「" + s + "」，应为 机票、酒店 或 地点（地点可带「地点/餐厅」等子类）" };
+    var kind = TYPE_ALIASES[base.toLowerCase()] || TYPE_ALIASES[base] || (Transport ? Transport.groundKindFromWord(base) : "");
+    if (!kind) return { error: "无法识别的类型「" + s + "」，应为 机票、火车、船、大巴、酒店 或 地点（地点可带「地点/餐厅」等子类）" };
     if (kind !== "place") subtype = subtype || "";
     return { kind: kind, subtype: subtype, raw: s };
   }
@@ -132,6 +139,7 @@
 
   /* ---------- 日期 / 时间宽容写法 → 标准「YYYY-MM-DD HH:MM」 ---------- */
   var activeYearHint = "";
+  var activeToday = "";
   var hintLocked = false;
 
   function toHalfWidth(s) {
@@ -173,7 +181,71 @@
    * 日期：2026/12/11、2026.12.11、2026年12月11日、2026-1-5；12月11日（只有 yearHint 时）。
    * 时间：9:00、9：00、9点、9点30、9点半、9:00 AM / PM、9am、下午3点；全角数字。
    */
-  function normalizeDateTime(raw, yearHint) {
+  /*
+   * v6：「4/12」「12/4/2026」这种月日不知道谁在前的写法。
+   * 有一个数大于 12 → 只有一种读法，直接用；两个都 ≤ 12（且不相等）→ 不猜，记进 lastAmbiguous，
+   * 由 itemFromFields 放进「待补」，问「是12月4日还是4月12日？」。order：首次 "md"（前面是月），第二种读法 "dm"。
+   */
+  var lastAmbiguous = null;
+
+  /** 行程里第一条已定日期的年份；待补不算。 */
+  function yearFromItems(items) {
+    var dates = [];
+    (items || []).forEach(function (it) {
+      if (!it || it.pendingDate) return;
+      ["date", "checkIn", "checkOut", "departDate", "arriveDate"].forEach(function (k) {
+        if (/^\d{4}-\d{2}-\d{2}$/.test(it[k] || "")) dates.push(it[k]);
+      });
+    });
+    dates.sort();
+    return dates.length ? dates[0].slice(0, 4) : "";
+  }
+
+  /** 没有年份时：取今天及之后最近一次出现的那一年来用。 */
+  function nearestYear(month, day, today) {
+    today = today || activeToday || localTodayIso();
+    var y = Number(String(today).slice(0, 4));
+    if (!y) return "";
+    function iso(year) {
+      var t = year + "-" + pad(month) + "-" + pad(day);
+      return isValidIsoDate(t) ? t : "";
+    }
+    var a = iso(y);
+    if (a && a >= today) return String(y);
+    var b = iso(y + 1);
+    if (b) return String(y + 1);
+    return a ? String(y) : "";
+  }
+
+  function yearForMd(month, day, explicitYear, yearHint) {
+    if (explicitYear) return String(explicitYear);
+    if (yearHint) return String(yearHint);
+    return nearestYear(month, day, activeToday);
+  }
+
+  function slashDates(s, yearHint, order) {
+    return s.replace(/(^|[^\d/.\-:])(\d{1,2})\s*[\/.]\s*(\d{1,2})(?:\s*[\/.\-]\s*((?:19|20)\d{2}))?(?![\d\/.:])/g, function (all, pre, a, b, y) {
+      var na = Number(a);
+      var nb = Number(b);
+      if (na < 1 || nb < 1) return all;
+      var m;
+      var d;
+      if (na > 12 && nb > 12) return all;
+      if (na > 12) { d = na; m = nb; }
+      else if (nb > 12) { m = na; d = nb; }
+      else if (na === nb) { m = na; d = nb; }
+      else {
+        if (!lastAmbiguous) lastAmbiguous = { a: na, b: nb };
+        if (order === "dm") { d = na; m = nb; } else { m = na; d = nb; }
+      }
+      if (m < 1 || m > 12 || d < 1 || d > 31) return all;
+      var year = yearForMd(m, d, y, yearHint);
+      if (!year) return all;
+      return pre + year + "-" + pad(m) + "-" + pad(d) + " ";
+    });
+  }
+
+  function normalizeDateTime(raw, yearHint, order) {
     var s = toHalfWidth(raw);
     if (!s.trim()) return s;
     s = s.replace(/((?:19|20)\d{2})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*[日号]?/g, function (_, y, m, d) {
@@ -182,11 +254,12 @@
     s = s.replace(/((?:19|20)\d{2})\s*[-/.]\s*(\d{1,2})\s*[-/.]\s*(\d{1,2})(?!\d)/g, function (_, y, m, d) {
       return y + "-" + pad(m) + "-" + pad(d) + " ";
     });
-    if (yearHint) {
-      s = s.replace(/(^|[^\d-])(\d{1,2})\s*月\s*(\d{1,2})\s*[日号]?/g, function (_, pre, m, d) {
-        return pre + yearHint + "-" + pad(m) + "-" + pad(d) + " ";
-      });
-    }
+    s = slashDates(s, yearHint, order);
+    s = s.replace(/(^|[^\d-])(\d{1,2})\s*月\s*(\d{1,2})\s*[日号]?/g, function (_, pre, m, d) {
+      var year = yearForMd(Number(m), Number(d), "", yearHint);
+      if (!year) return _;
+      return pre + year + "-" + pad(m) + "-" + pad(d) + " ";
+    });
     // 时间：带冒号的（可带 AM/PM 或 上午/下午）
     s = s.replace(/(上午|下午|早上|晚上)?\s*(\d{1,2}):(\d{2})(?!\d)\s*([AaPp]\.?[Mm]\.?)?/g, function (all, ap1, h, mi, ap2) {
       var t = fixTime(h, mi, ap2 || ap1);
@@ -258,20 +331,26 @@
     return null;
   }
 
+  /**
+   * 从备注里抽出座位和确认号。取值到空格或 ； ; ， , 、 | 为止（「票号 0000 1111 2222」整段留在备注里）。
+   * 确认号还认：预订号、订单号、取票号、预订编号、booking ref、confirmation。
+   */
   function parseSeatAndConfirm(remark) {
     var note = trim(remark);
     var seat = "";
     var confirmationNo = "";
-    note = note.replace(/座位\s*[:：]?\s*(\S+)/g, function (_, v) {
+    var val = "[^\\s；;，,、|]+";
+    note = note.replace(new RegExp("座位\\s*[:：]?\\s*(" + val + ")", "g"), function (_, v) {
       seat = v;
       return " ";
     });
-    note = note.replace(/确认号\s*[:：]?\s*(\S+)/g, function (_, v) {
+    note = note.replace(new RegExp("(?:预订编号|booking\\s*ref|confirmation(?:\\s*(?:no\\.?|number|code|#))?|确认号|预订号|订单号|取票号)\\s*[:：]?\\s*(" + val + ")", "gi"), function (_, v) {
       confirmationNo = v;
       return " ";
     });
-    note = note.replace(/\s+/g, " ");
-    note = trim(note);
+    note = note.replace(/([；;，,、|])(?:\s*[；;，,、|])+/g, "$1");
+    note = note.replace(/^[\s；;，,、|]+|[\s；;，,、|]+$/g, "");
+    note = note.replace(/[ \t]+/g, " ");
     return { seat: seat, confirmationNo: confirmationNo, note: note };
   }
 
@@ -365,6 +444,11 @@
   }
 
   /** 日期时间认不出来时：不丢这一行，记下原文、标「待确认」，能认出的日期放进 dateGuess 供修改时预填。 */
+  function localTodayIso() {
+    var d = new Date();
+    return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate());
+  }
+
   function markPending(item, rawText, normalized, reason) {
     item.pendingDate = true;
     item.dateRaw = String(rawText == null ? "" : rawText).trim();
@@ -372,14 +456,6 @@
     if (g && isValidIsoDate(g[1])) item.dateGuess = g[1];
     item.pendingReason = reason || "";
     return item;
-  }
-
-  var FLIGHT_EARLY_LIMIT_DAYS = 2;
-
-  function dayGap(a, b) {
-    if (!isValidIsoDate(a) || !isValidIsoDate(b)) return 0;
-    var pa = a.split("-"), pb = b.split("-");
-    return Math.round((Date.UTC(+pb[0], +pb[1] - 1, +pb[2]) - Date.UTC(+pa[0], +pa[1] - 1, +pa[2])) / 86400000);
   }
 
   /** 日期倒过来（退房早于入住 / 到达比出发早太多）：保留这一行，标待确认，记下两个日期给卡片显示，日期字段清空。 */
@@ -395,18 +471,120 @@
     return item;
   }
 
+  /** 火车 / 船 / 大巴：名称 = 班次号（可空），地址 = 「出发站 - 到达站」，日期时间 = 「出发 ~ 到达」（时间可只写日期） */
+  function groundItemFromFields(kind, name, fields, extra, rawDateText, usedIds) {
+    var label = Transport.KINDS[kind].label;
+    var st = Transport.splitStations(fields.address);
+    if (!st) {
+      return { error: label + "的地址应为「出发站 - 到达站」，例如 " + (kind === "boat" ? "Dover - Calais" : kind === "bus" ? "Victoria Coach Station - Oxford" : "北京南 - 上海虹桥") };
+    }
+    /* 当天到的可以只写「2026-12-01 09:00 ~ 13:28」，也可以只写出发时间 */
+    var dt = trim(fields.datetime).replace(/\uFF5E/g, "~");
+    var sameDay = dt.match(/^(\d{4}-\d{2}-\d{2})(?:[ T](\d{2}:\d{2}))?\s*~\s*(\d{2}:\d{2})$/);
+    if (sameDay) dt = sameDay[1] + (sameDay[2] ? " " + sameDay[2] : "") + " ~ " + sameDay[1] + " " + sameDay[3];
+    else if (/^\d{4}-\d{2}-\d{2}(?:[ T]\d{2}:\d{2})?$/.test(dt)) dt = dt + " ~ " + dt.slice(0, 10);
+    var when = parseRangeDateTime(dt, {
+      requireTimes: false,
+      requiredMessage: label + "缺少日期时间",
+      badMessage: label + "的日期时间应为「出发 ~ 到达」，例如 2026-12-01 09:00 ~ 2026-12-01 13:28"
+    });
+    var pending = !!when.error;
+    if (pending) when = { startDate: "", startTime: "", endDate: "", endTime: "", reason: when.error };
+    var item = {
+      id: newId(slug(name || st.from, kind), usedIds),
+      type: kind,
+      number: name.toUpperCase(),
+      fromNameZh: st.from,
+      nameZh: st.to,
+      departDate: when.startDate,
+      departTime: when.startTime || "",
+      arriveDate: when.endDate || when.startDate,
+      arriveTime: when.endTime || "",
+      confirmationNo: extra.confirmationNo || "",
+      seat: extra.seat || "",
+      note: extra.note || "",
+      example: false
+    };
+    if (pending) markPending(item, rawDateText, fields.datetime, when.reason);
+    else if (item.departDate && item.arriveDate && item.arriveDate < item.departDate) {
+      /* v6：火车 / 船（大巴也一样）跟 v5.4 的机票一样，到达日期早于出发日期 → 进待补，问「日期对吗？」 */
+      markReversed(item, rawDateText, "flight-reversed", "departDate", "arriveDate");
+    }
+    return { item: item };
+  }
+
   function itemFromFields(fields, usedIds) {
     var rawDateText = fields ? fields.datetime : "";
+    var ambiguous = null;
     if (fields && fields.datetime != null) {
-      fields = Object.assign({}, fields, { datetime: normalizeDateTime(fields.datetime, activeYearHint) });
+      lastAmbiguous = null;
+      var readA = normalizeDateTime(fields.datetime, activeYearHint, "md");
+      if (lastAmbiguous) {
+        ambiguous = { a: lastAmbiguous.a, b: lastAmbiguous.b, readA: readA, readB: normalizeDateTime(fields.datetime, activeYearHint, "dm") };
+      }
+      lastAmbiguous = null;
+      fields = Object.assign({}, fields, { datetime: readA });
     }
+    var made = itemFromFieldsInner(fields, usedIds, rawDateText);
+    if (ambiguous && made.item) markAmbiguous(made.item, rawDateText, ambiguous);
+    return made;
+  }
+
+  var DATE_KEYS = ["date", "time", "checkIn", "checkOut", "checkInTime", "checkOutTime", "departDate", "departTime", "arriveDate", "arriveTime"];
+  /** 「是12月4日还是4月12日？」：两种读法都存下来（整格日期时间的标准写法），日期字段清空，进「待补」；从不替用户选 */
+  function markAmbiguous(item, rawText, amb) {
+    var PK = ["pendingDate", "pendingKind", "pendingFrom", "pendingTo", "pendingReason", "dateGuess", "dateRaw"];
+    PK.forEach(function (k) { delete item[k]; });
+    DATE_KEYS.forEach(function (k) { if (k in item) item[k] = ""; });
+    item.pendingDate = true;
+    item.pendingKind = "date-ambiguous";
+    item.dateRaw = String(rawText == null ? "" : rawText).trim();
+    item.pendingReason = ambiguousQuestion(amb.a, amb.b);
+    item.pendingChoices = [
+      { label: amb.a + "月" + amb.b + "日", datetime: amb.readA },
+      { label: amb.b + "月" + amb.a + "日", datetime: amb.readB }
+    ];
+    return item;
+  }
+  function ambiguousQuestion(a, b) {
+    return "是" + a + "月" + b + "日还是" + b + "月" + a + "日？";
+  }
+
+  /**
+   * 用户点了一种读法：按这条的类型重新解析那一格，只改日期时间字段，别的（id、地点、备注…）不动；拿掉待补标记。
+   * 返回新对象；读法不对（比如解析失败）就原样返回。
+   */
+  function applyDateChoice(item, index) {
+    if (!item || item.pendingKind !== "date-ambiguous" || !item.pendingChoices || !item.pendingChoices[index]) return item;
+    var dt = item.pendingChoices[index].datetime;
+    var typeWord = item.type === "flight" ? "机票" : item.type === "hotel" ? "酒店" : (Transport && Transport.isGround(item)) ? Transport.KINDS[item.type].label : "地点";
+    var addr = item.type === "flight" ? (item.fromAirport || "AAA") + " - " + (item.toAirport || "BBB") : (Transport && Transport.isGround(item)) ? "A - B" : "x";
+    var fresh = itemFromFieldsInner({ type: typeWord, name: "x", address: addr, datetime: dt, note: "" }, {}, dt);
+    if (!fresh.item || fresh.item.pendingDate && fresh.item.pendingKind !== "flight-reversed" && fresh.item.pendingKind !== "hotel-reversed") return item;
+    var next = Object.assign({}, item);
+    ["pendingDate", "pendingKind", "pendingFrom", "pendingTo", "pendingReason", "dateGuess", "dateRaw", "pendingChoices"].forEach(function (k) { delete next[k]; });
+    DATE_KEYS.forEach(function (k) {
+      if (k in fresh.item) next[k] = fresh.item[k];
+    });
+    if (fresh.item.pendingDate) {
+      ["pendingDate", "pendingKind", "pendingFrom", "pendingTo", "dateGuess", "dateRaw"].forEach(function (k) {
+        if (k in fresh.item) next[k] = fresh.item[k];
+      });
+    }
+    if (next.type === "place" && !next.date) delete next.date;
+    return next;
+  }
+
+  function itemFromFieldsInner(fields, usedIds, rawDateText) {
     var typeInfo = parseType(fields.type);
     if (typeInfo.error) return { error: typeInfo.error };
     var name = trim(fields.name);
-    if (!name) return { error: "缺少名称" };
+    var ground = !!(Transport && Transport.isGround(typeInfo.kind));
+    if (!name && !ground) return { error: "缺少名称" };
     var extra = parseSeatAndConfirm(fields.note);
     if (fields.confirmation) extra.confirmationNo = trim(fields.confirmation);
     if (fields.seat) extra.seat = trim(fields.seat);
+    if (ground) return groundItemFromFields(typeInfo.kind, name, fields, extra, rawDateText, usedIds);
     var coords = parseCoordsFromAddress(fields.map_url || fields.address);
     var item;
 
@@ -467,7 +645,11 @@
         note: extra.note || "",
         example: false
       };
-      if (stayPending) markPending(item, rawDateText, fields.datetime, stayPending);
+      if (stayPending) {
+        /* v6：类型写「酒店」就存成酒店，导入时不弹日期框；缺日期 → 进「待补」，先按今天预填，批量导入不打断 */
+        markPending(item, rawDateText, fields.datetime, stayPending);
+        if (!item.dateGuess) item.dateGuess = localTodayIso();
+      }
       else if (item.checkOut && item.checkIn && item.checkOut < item.checkIn) {
         markReversed(item, rawDateText, "hotel-reversed", "checkIn", "checkOut");
       }
@@ -489,6 +671,12 @@
         example: false
       };
       if (placePending) markPending(item, rawDateText, fields.datetime, placePending);
+      /* v6：「地点/甜品」（旧名）、「地点/咖啡甜点酒吧」→ 咖啡甜点酒吧图标，子类统一写新名字 */
+      var IconsRef = iconsRef();
+      if (IconsRef && IconsRef.categoryFromWord && IconsRef.categoryFromWord(item.subtype) === "dessert") {
+        item.subtype = IconsRef.CAFE_LABEL || "咖啡甜点酒吧";
+        item.icon = "dessert";
+      }
     }
 
     if (fields.map_url) item.map_url = trim(fields.map_url);
@@ -532,7 +720,7 @@
       if (result.error) {
         errors.push("第 " + lineNo + " 行：" + result.error);
       } else {
-        items.push(result.item);
+        items.push(stripImportedLegRole(result.item));
       }
     }
     if (!items.length) notes = skippedProse.concat(notes);
@@ -557,12 +745,19 @@
     return { error: "JSON 应为对象数组，或带 items / 行程 数组的对象。" };
   }
 
+  /* 粘贴导入不写入手动航段角色；完整备份走 backup.js，会原样保留。 */
+  function stripImportedLegRole(item) {
+    if (item) delete item.legRole;
+    return item;
+  }
+
   function recordToFields(rec, indexLabel) {
+
     if (!rec || typeof rec !== "object" || Array.isArray(rec)) {
       return { error: indexLabel + "：不是一个对象" };
     }
     /* 已规范化的内部条目 */
-    if ((rec.type === "flight" || rec.type === "hotel" || rec.type === "place") && (rec.nameZh || rec.departDate || rec.checkIn)) {
+    if ((rec.type === "flight" || rec.type === "hotel" || rec.type === "place" || (Transport && Transport.isGround(rec.type) && rec.departDate)) && (rec.nameZh || rec.departDate || rec.checkIn)) {
       return { internal: rec };
     }
     var typ = cell(rec, ["类型", "type", "kind"]);
@@ -583,6 +778,23 @@
           name: cell(rec, ["flight_no", "flightNo", "航班号", "名称", "name"]),
           address: address,
           datetime: datetime,
+          note: cell(rec, ["备注", "note", "remark"]),
+          confirmation: cell(rec, ["confirmation", "confirmationNo", "确认号"]),
+          seat: cell(rec, ["seat", "座位"])
+        }
+      };
+    }
+    if (Transport && Transport.groundKindFromWord(typ)) {
+      var gdep = cell(rec, ["depart", "departure", "departAt"]);
+      var garr = cell(rec, ["arrive", "arrival", "arriveAt"]);
+      var gfrom = cell(rec, ["from"]);
+      var gto = cell(rec, ["to"]);
+      return {
+        fields: {
+          type: typ,
+          name: cell(rec, ["number", "train_no", "trainNo", "车次", "班次", "名称", "name"]),
+          address: gfrom && gto ? trim(gfrom) + " - " + trim(gto) : cell(rec, ["地址", "address"]),
+          datetime: gdep ? trim(gdep) + (garr ? " ~ " + trim(garr) : "") : cell(rec, ["日期时间", "datetime", "dateTime"]),
           note: cell(rec, ["备注", "note", "remark"]),
           confirmation: cell(rec, ["confirmation", "confirmationNo", "确认号"]),
           seat: cell(rec, ["seat", "座位"])
@@ -663,12 +875,12 @@
       if (mapped.internal) {
         var copy = Object.assign({}, mapped.internal);
         copy.id = newId(copy.id || slug(copy.nameZh || copy.flightNo || "item", "item"), usedIds);
-        items.push(copy);
+        items.push(stripImportedLegRole(copy));
         return;
       }
       var result = itemFromFields(mapped.fields, usedIds);
       if (result.error) errors.push(label + "：" + result.error);
-      else items.push(result.item);
+      else items.push(stripImportedLegRole(result.item));
     });
     return { items: items, errors: errors, format: "json", tripName: extracted.tripName || "" };
   }
@@ -689,19 +901,23 @@
       if (mapped.internal) {
         var copy = Object.assign({}, mapped.internal);
         copy.id = newId(copy.id || slug(copy.nameZh || copy.flightNo || "item", "item"), usedIds);
-        items.push(copy);
+        items.push(stripImportedLegRole(copy));
         return;
       }
       var result = itemFromFields(mapped.fields, usedIds);
       if (result.error) errors.push(label + "：" + result.error);
-      else items.push(result.item);
+      else items.push(stripImportedLegRole(result.item));
     });
     return { items: items, errors: errors, tripName: extracted.tripName || "" };
   }
 
-  function parseImport(text) {
+  function parseImport(text, opts) {
+    opts = opts || {};
     var raw = normalizeImportText(String(text == null ? "" : text));
-    activeYearHint = findYearHint(raw);
+    activeToday = opts.today && /^\d{4}-\d{2}-\d{2}$/.test(opts.today) ? opts.today : localTodayIso();
+    var fromText = findYearHint(raw);
+    var fromTrip = opts.yearHint || yearFromItems(opts.items);
+    activeYearHint = fromText || fromTrip || "";
     hintLocked = true;
     try {
       return parseImportInner(raw);
@@ -749,7 +965,7 @@
       var pipe = parsePipe(rest);
       pipe.items.forEach(function (it) {
         it.id = newId(it.id || "item", usedIds);
-        items.push(it);
+        items.push(stripImportedLegRole(it));
       });
       errors = errors.concat(pipe.errors || []);
       notes = notes.concat(pipe.notes || []);
@@ -788,7 +1004,11 @@
     looksLikeJson: looksLikeJson,
     normalizeImportText: normalizeImportText,
     normalizeDateTime: normalizeDateTime,
+    applyDateChoice: applyDateChoice,
+    ambiguousQuestion: ambiguousQuestion,
     findYearHint: findYearHint,
+    yearFromItems: yearFromItems,
+    nearestYear: nearestYear,
     splitPipeLine: splitPipeLine,
     parseCoordsFromAddress: parseCoordsFromAddress,
     parseSeatAndConfirm: parseSeatAndConfirm,

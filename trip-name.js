@@ -5,6 +5,11 @@
  */
 (function (root) {
   "use strict";
+  /* v6：火车 / 船 / 大巴跟机票一样按「出发 ~ 到达」处理，见 transport.js */
+  var Transport = root.Transport || (typeof require === "function" ? require("./transport.js") : null);
+  function isTransit(item) {
+    return Transport ? Transport.isTransit(item) : !!item && item.type === "flight";
+  }
 
   var DEFAULT_NAME = "我的行程";
   var ASKED_KEY = "wishlist-map-name-suggest-asked-v1";
@@ -37,7 +42,7 @@
   function itemDates(it) {
     if (!it || it.pendingDate) return [];
     var out = [];
-    if (it.type === "flight") out.push(it.departDate, it.arriveDate);
+    if (isTransit(it)) out.push(it.departDate, it.arriveDate);
     else if (it.type === "hotel") out.push(it.checkIn, it.checkOut);
     else out.push(it.date);
     return out.filter(isYmd);
@@ -147,7 +152,7 @@
   function sameDayItems(list, day, opts, keep) {
     var want = minutes(opts.time);
     var same = list.filter(function (it) {
-      return it && it.id !== opts.excludeId && it.type !== "flight" && it.type !== "hotel" && it.date === day && keep(it);
+      return it && it.id !== opts.excludeId && !isTransit(it) && it.type !== "hotel" && it.date === day && keep(it);
     });
     same.sort(function (x, y) {
       var a = minutes(x.time);

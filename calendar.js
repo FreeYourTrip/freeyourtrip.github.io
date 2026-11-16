@@ -5,6 +5,7 @@
  * - 日期条范围：行程最早一天到最晚一天（含酒店退房日），中间没安排的日子也显示。
  *   如果今天离行程不超过 31 天，会把范围延伸到今天，好让「今天」按钮有地方可跳；更远就不延伸，「今天」按钮隐藏。
  * - 打开时默认选中：今天有安排 → 今天；否则今天之后第一个有安排的日子；都过去了 → 最后一个有安排的日子。
+ * - 打开 / 切换时日期条初始位置：今天在行程前 → 第一天那一周；行程中 → 今天那一周；行程已结束 → 最后一天那一周；没有已定日期 → 今天。待补不算。
  * - 早于今天的日子显示为灰色。
  * - 住宿段：只按酒店算，入住日到退房日（没写退房日就到下一家酒店入住日，再没有就只算入住当天）。
  *   段名用酒店的 city 字段；没有就取地址最后一个逗号后面的部分（去掉邮编和数字）；再没有就用酒店名。
@@ -13,6 +14,11 @@
  */
 (function (root) {
   "use strict";
+  /* v6：火车 / 船 / 大巴跟机票一样按「出发 ~ 到达」处理，见 transport.js */
+  var Transport = root.Transport || (typeof require === "function" ? require("./transport.js") : null);
+  function isTransit(item) {
+    return Transport ? Transport.isTransit(item) : !!item && item.type === "flight";
+  }
 
   var WEEKDAYS = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"];
   var EXTEND_TO_TODAY_MAX_DAYS = 31;
@@ -64,7 +70,7 @@
   /** 一条行程在时间线上属于哪一天（与 legs.js 一致：机票按起飞日，酒店按入住日，其他按 date）。 */
   function displayDate(item) {
     if (!item) return "";
-    if (item.type === "flight") return item.departDate || "";
+    if (isTransit(item)) return item.departDate || "";
     if (item.type === "hotel") return item.checkIn || "";
     return item.date || "";
   }
@@ -72,7 +78,7 @@
   /** 圆点类别：flight / hotel / place（餐厅、景点、街道都算 place，颜色由调用方按类型给）。 */
   function dotKind(item) {
     if (!item) return "place";
-    if (item.type === "flight") return "flight";
+    if (isTransit(item)) return "flight";
     if (item.type === "hotel") return "hotel";
     return "place";
   }
@@ -121,7 +127,7 @@
       var d = displayDate(it);
       if (parse(d)) all.push(d);
       if (it && it.type === "hotel" && parse(it.checkOut)) all.push(it.checkOut);
-      if (it && it.type === "flight" && parse(it.arriveDate)) all.push(it.arriveDate);
+      if (it && isTransit(it) && parse(it.arriveDate)) all.push(it.arriveDate);
     });
     if (!all.length) return [];
     all.sort();
@@ -140,6 +146,34 @@
       guard += 1;
     }
     return out;
+  }
+
+  function isPendingItem(item) {
+    return !!(item && item.pendingDate);
+  }
+
+  /**
+   * 打开 / 切换行程时，日期条应停在哪一天（只用于初始滚动和月份标签）。
+   * 第一天 / 最后一天：最早 / 最晚的已定日期（机票、火车、船、大巴、酒店含退房、有日期的地点），忽略待补。
+   * 今天 < 第一天 → 第一天；第一天 ≤ 今天 ≤ 最后一天 → 今天；今天 > 最后一天 → 最后一天；没有已定日期 → 今天。
+   */
+  function initialStripFocus(items, today) {
+    var all = [];
+    (items || []).forEach(function (it) {
+      if (!it || isPendingItem(it)) return;
+      var d = displayDate(it);
+      if (parse(d)) all.push(d);
+      if (it.type === "hotel" && parse(it.checkOut)) all.push(it.checkOut);
+      if (isTransit(it) && parse(it.arriveDate)) all.push(it.arriveDate);
+    });
+    all.sort();
+    if (!all.length) return parse(today) ? today : "";
+    var first = all[0];
+    var last = all[all.length - 1];
+    if (!parse(today)) return first;
+    if (today < first) return first;
+    if (today > last) return last;
+    return today;
   }
 
   /** 打开时默认选中的日子；没有任何安排时返回 "all"。 */
@@ -270,6 +304,7 @@
     dotsByDay: dotsByDay,
     daysWithItems: daysWithItems,
     stripDays: stripDays,
+    initialStripFocus: initialStripFocus,
     defaultDay: defaultDay,
     isPast: isPast,
     cityFrom: cityFrom,

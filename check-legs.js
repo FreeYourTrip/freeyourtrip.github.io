@@ -240,6 +240,272 @@ check("v5.2 nav UI copy and styles", function () {
   assert.ok(/\.nav-pair \{ display: flex; gap: 8px;/.test(css) && /height: 40px;/.test(css) && /\.nav-line \{[^}]*font-size: 12px; color: #8A9099;/.test(css));
 });
 
+check("round trip with no hotel in between is not 转机 (LHR-CDG then CDG-LHR days later)", function () {
+  const out = {
+    id: "rt-out", type: "flight", flightNo: "EA321",
+    fromAirport: "LHR", toAirport: "CDG",
+    departDate: "2026-12-03", departTime: "09:30",
+    arriveDate: "2026-12-03", arriveTime: "11:50"
+  };
+  const back = {
+    id: "rt-back", type: "flight", flightNo: "EA322",
+    fromAirport: "CDG", toAirport: "LHR",
+    departDate: "2026-12-08", departTime: "18:00",
+    arriveDate: "2026-12-08", arriveTime: "18:20"
+  };
+  const pairs = Legs.pairRoundTrips([out, back]);
+  assert.strictEqual(pairs["rt-out"].label, "去程");
+  assert.strictEqual(pairs["rt-back"].label, "返程");
+  const legs = Legs.buildConnectors([out, back]);
+  assert.ok(!legs.some((c) => c.kind === "transfer" && String(c.label).indexOf("转机") === 0), JSON.stringify(legs));
+  assert.strictEqual(legs.filter((c) => c.fromItemId === "rt-out" && c.toItemId === "rt-back").length, 0, "cross-day return has no bar");
+});
+
+check("LHR-DXB then DXB-HND 2h30 is still 转机", function () {
+  const a = {
+    id: "dxb1", type: "flight", flightNo: "XX1",
+    fromAirport: "LHR", toAirport: "DXB",
+    departDate: "2026-12-01", departTime: "08:00",
+    arriveDate: "2026-12-01", arriveTime: "18:00"
+  };
+  const b = {
+    id: "dxb2", type: "flight", flightNo: "XX2",
+    fromAirport: "DXB", toAirport: "HND",
+    departDate: "2026-12-01", departTime: "20:30",
+    arriveDate: "2026-12-02", arriveTime: "12:00"
+  };
+  const legs = Legs.buildConnectors([a, b]);
+  assert.strictEqual(legs.length, 1);
+  assert.strictEqual(legs[0].kind, "transfer");
+  assert.strictEqual(legs[0].clickable, false);
+  assert.strictEqual(legs[0].label, "转机 2小时30分");
+});
+
+check("mismatched airports are not 转机; 30h gap is not 转机", function () {
+  const a = Object.assign({}, f1, { id: "m1", fromAirport: "LHR", toAirport: "CDG", arriveDate: "2026-12-02", arriveTime: "12:00" });
+  const b = Object.assign({}, f2, { id: "m2", fromAirport: "LHR", toAirport: "JFK", departDate: "2026-12-02", departTime: "14:30" });
+  const mismatch = Legs.buildConnectors([a, b]);
+  assert.ok(!mismatch.some((c) => String(c.label).indexOf("转机") === 0), "same-day mismatch is not 转机: " + JSON.stringify(mismatch.map((c) => c.label)));
+  assert.strictEqual(mismatch[0] && mismatch[0].kind, "nav", "same day falls back to nav");
+
+  const later = Object.assign({}, f2, {
+    id: "m3", fromAirport: "CDG", toAirport: "FCO",
+    departDate: "2026-12-03", departTime: "18:00",
+    arriveDate: "2026-12-03", arriveTime: "20:00"
+  });
+  /* 12:00 → next day 18:00 = 30 hours, same airport */
+  const longGap = Legs.buildConnectors([a, later]);
+  assert.ok(!longGap.some((c) => c.kind === "transfer"), "30h is not 转机: " + JSON.stringify(longGap));
+});
+
+check("train then bus under 24h is 换乘, not 转机", function () {
+  const tr = {
+    id: "tr1", type: "train", number: "G1",
+    fromNameZh: "北京南", nameZh: "上海虹桥",
+    departDate: "2026-12-04", departTime: "08:00",
+    arriveDate: "2026-12-04", arriveTime: "12:28"
+  };
+  const bus = {
+    id: "bus1", type: "bus", number: "X90",
+    fromNameZh: "上海虹桥", nameZh: "杭州",
+    departDate: "2026-12-04", departTime: "14:00",
+    arriveDate: "2026-12-04", arriveTime: "16:00"
+  };
+  const legs = Legs.buildConnectors([tr, bus]);
+  assert.strictEqual(legs.length, 1);
+  assert.strictEqual(legs[0].kind, "transfer");
+  assert.strictEqual(legs[0].clickable, false);
+  assert.strictEqual(legs[0].label, "换乘 1小时32分");
+  assert.ok(legs[0].label.indexOf("转机") === -1);
+});
+
+check("ES9014 (12/5) then BA301 (12/8) has no 转机 or 换乘 bar", function () {
+  const tr = {
+    id: "es1", type: "train", number: "ES9014",
+    fromNameZh: "St Pancras", nameZh: "Paris Nord",
+    departDate: "2026-12-05", departTime: "10:30",
+    arriveDate: "2026-12-05", arriveTime: "13:47"
+  };
+  const fl = {
+    id: "ba301", type: "flight", flightNo: "BA301",
+    fromAirport: "CDG", toAirport: "LHR",
+    departDate: "2026-12-08", departTime: "18:00",
+    arriveDate: "2026-12-08", arriveTime: "18:20"
+  };
+  const legs = Legs.buildConnectors([tr, fl]);
+  assert.deepStrictEqual(legs, [], JSON.stringify(legs));
+});
+
+check("same-day train then flight with a short gap is not 转机 or 换乘", function () {
+  const tr = {
+    id: "tr-same", type: "train", number: "G1",
+    fromNameZh: "北京南", nameZh: "上海虹桥",
+    departDate: "2026-12-04", departTime: "08:00",
+    arriveDate: "2026-12-04", arriveTime: "12:28"
+  };
+  const fl = {
+    id: "fl-same", type: "flight", flightNo: "MU1",
+    fromAirport: "SHA", toAirport: "PEK",
+    departDate: "2026-12-04", departTime: "14:00",
+    arriveDate: "2026-12-04", arriveTime: "16:00"
+  };
+  const legs = Legs.buildConnectors([tr, fl]);
+  assert.ok(!legs.some((c) => /转机|换乘/.test(c.label || "")), JSON.stringify(legs));
+  assert.strictEqual(legs[0] && legs[0].kind, "nav", "mixed modes fall through to 怎么去");
+});
+
+check("train then bus at a different station is not 换乘", function () {
+  const tr = {
+    id: "tr-diff", type: "train", number: "G1",
+    fromNameZh: "北京南", nameZh: "上海虹桥",
+    departDate: "2026-12-04", departTime: "08:00",
+    arriveDate: "2026-12-04", arriveTime: "12:28"
+  };
+  const bus = {
+    id: "bus-diff", type: "bus", number: "X90",
+    fromNameZh: "上海站", nameZh: "杭州",
+    departDate: "2026-12-04", departTime: "14:00",
+    arriveDate: "2026-12-04", arriveTime: "16:00"
+  };
+  const legs = Legs.buildConnectors([tr, bus]);
+  assert.ok(!legs.some((c) => String(c.label).indexOf("换乘") === 0 || String(c.label).indexOf("转机") === 0), JSON.stringify(legs));
+  assert.strictEqual(legs[0] && legs[0].kind, "nav");
+});
+
+check("flight then flight with a missing airport code is not auto 转机", function () {
+  const a = {
+    id: "miss-a", type: "flight", flightNo: "XX1",
+    fromAirport: "LHR", toAirport: "DXB",
+    departDate: "2026-12-01", departTime: "08:00",
+    arriveDate: "2026-12-01", arriveTime: "18:00"
+  };
+  const b = {
+    id: "miss-b", type: "flight", flightNo: "XX2",
+    fromAirport: "", toAirport: "HND",
+    departDate: "2026-12-01", departTime: "20:30",
+    arriveDate: "2026-12-02", arriveTime: "12:00"
+  };
+  const legs = Legs.buildConnectors([a, b]);
+  assert.ok(!legs.some((c) => String(c.label).indexOf("转机") === 0), JSON.stringify(legs));
+});
+
+check("open-jaw manual back pairs as 返程 even when airports differ", function () {
+  const out = {
+    id: "oj-out", type: "flight", flightNo: "BA1",
+    fromAirport: "LHR", toAirport: "HND",
+    departDate: "2026-12-01", departTime: "09:30",
+    arriveDate: "2026-12-02", arriveTime: "07:00"
+  };
+  const back = {
+    id: "oj-back", type: "flight", flightNo: "BA2",
+    fromAirport: "KIX", toAirport: "LHR",
+    departDate: "2026-12-10", departTime: "11:00",
+    arriveDate: "2026-12-10", arriveTime: "16:00",
+    legRole: "back"
+  };
+  const auto = Legs.pairRoundTrips([Object.assign({}, out), Object.assign({}, back, { legRole: undefined })]);
+  assert.deepStrictEqual(auto, {}, "without a manual role, open-jaw does not auto-pair");
+  const pairs = Legs.pairRoundTrips([out, back]);
+  assert.strictEqual(pairs["oj-out"].label, "去程");
+  assert.strictEqual(pairs["oj-out"].otherId, "oj-back");
+  assert.strictEqual(pairs["oj-back"].label, "返程");
+  assert.strictEqual(pairs["oj-back"].otherId, "oj-out");
+});
+
+check("manual transfer shows 转机 across different airports and any gap", function () {
+  const a = {
+    id: "hnd", type: "flight", flightNo: "NH1",
+    fromAirport: "LHR", toAirport: "HND",
+    departDate: "2026-12-01", departTime: "09:30",
+    arriveDate: "2026-12-02", arriveTime: "07:00"
+  };
+  const b = {
+    id: "nrt", type: "flight", flightNo: "NH2",
+    fromAirport: "NRT", toAirport: "SFO",
+    departDate: "2026-12-04", departTime: "11:00",
+    arriveDate: "2026-12-04", arriveTime: "05:00",
+    legRole: "transfer"
+  };
+  const legs = Legs.buildConnectors([a, b]);
+  assert.strictEqual(legs.length, 1);
+  assert.strictEqual(legs[0].kind, "transfer");
+  assert.strictEqual(legs[0].clickable, false);
+  assert.ok(legs[0].label.indexOf("转机") === 0, legs[0].label);
+  /* 07:00 on 12/2 → 11:00 on 12/4 = 52 hours */
+  assert.strictEqual(legs[0].label, "转机 52小时");
+});
+
+check("manual out/back suppress 转机 with their partner, even under 24h at the same airport", function () {
+  const out = {
+    id: "sd-out", type: "flight", flightNo: "BA7",
+    fromAirport: "LHR", toAirport: "EDI",
+    departDate: "2026-12-04", departTime: "07:00",
+    arriveDate: "2026-12-04", arriveTime: "08:30",
+    legRole: "out"
+  };
+  const back = {
+    id: "sd-back", type: "flight", flightNo: "BA8",
+    fromAirport: "EDI", toAirport: "LHR",
+    departDate: "2026-12-04", departTime: "11:00",
+    arriveDate: "2026-12-04", arriveTime: "12:30",
+    legRole: "back"
+  };
+  const legs = Legs.buildConnectors([out, back]);
+  assert.ok(!legs.some((c) => String(c.label).indexOf("转机") === 0), JSON.stringify(legs));
+  assert.strictEqual(legs[0] && legs[0].kind, "nav", "same-day return uses 怎么去, not 转机");
+});
+
+check("auto hint text: 去程 / 返程 / 转机 / 没认出来", function () {
+  assert.strictEqual(Legs.autoRoleHintText("out"), "已自动识别为：去程");
+  assert.strictEqual(Legs.autoRoleHintText("back"), "已自动识别为：返程");
+  assert.strictEqual(Legs.autoRoleHintText("transfer"), "已自动识别为：转机");
+  assert.strictEqual(Legs.autoRoleHintText(""), "没认出来，可以自己选");
+  assert.strictEqual(Legs.autoRoleHintText("auto"), "没认出来，可以自己选");
+  const out = {
+    id: "hint-out", type: "flight", flightNo: "BA1",
+    fromAirport: "LHR", toAirport: "HND",
+    departDate: "2026-12-01", departTime: "09:30",
+    arriveDate: "2026-12-02", arriveTime: "07:00"
+  };
+  const back = {
+    id: "hint-back", type: "flight", flightNo: "BA2",
+    fromAirport: "HND", toAirport: "LHR",
+    departDate: "2026-12-10", departTime: "11:00",
+    arriveDate: "2026-12-10", arriveTime: "16:00"
+  };
+  assert.strictEqual(Legs.autoRoleFor([out, back], "hint-out"), "out");
+  assert.strictEqual(Legs.autoRoleFor([out, back], "hint-back"), "back");
+  const a = {
+    id: "lx1", type: "flight", flightNo: "X1",
+    fromAirport: "LHR", toAirport: "DXB",
+    departDate: "2026-12-01", departTime: "08:00",
+    arriveDate: "2026-12-01", arriveTime: "18:00"
+  };
+  const b = {
+    id: "lx2", type: "flight", flightNo: "X2",
+    fromAirport: "DXB", toAirport: "HND",
+    departDate: "2026-12-01", departTime: "20:30",
+    arriveDate: "2026-12-02", arriveTime: "12:00"
+  };
+  assert.strictEqual(Legs.autoRoleFor([a, b], "lx2"), "transfer");
+  assert.strictEqual(Legs.autoRoleFor([a], "lx1"), "");
+});
+
+check("flight form has 这段是 picker; selected/unselected styles; hint copy", function () {
+  const html = fs.readFileSync(__dirname + "/index.html", "utf8");
+  const css = fs.readFileSync(__dirname + "/styles.css", "utf8");
+  const tl = fs.readFileSync(__dirname + "/timeline.js", "utf8");
+  assert.ok(html.indexOf("这段是") !== -1 && html.indexOf("id=\"leg-role-row\"") !== -1);
+  assert.ok(html.indexOf("data-leg-role=\"auto\"") !== -1 && html.indexOf(">去程<") !== -1 && html.indexOf(">返程<") !== -1 && html.indexOf(">转机<") !== -1);
+  assert.ok(/\.leg-role-seg \{[^}]*height: 36px;[^}]*border-radius: 18px;[^}]*background: #F1ECE4/.test(css));
+  assert.ok(/\.leg-role-opt\.is-on \{[^}]*background: #fff;[^}]*color: #0F9D8A;[^}]*font-weight: 600;[^}]*box-shadow: 0 1px 3px rgba\(0,0,0,\.12\)/.test(css));
+  assert.ok(/\.leg-role-opt \{[^}]*font-size: 14px;[^}]*color: #6B7A8F/.test(css));
+  assert.ok(/\.leg-role-hint \{[^}]*font-size: 12px;[^}]*color: #9AA6B2/.test(css));
+  assert.ok(fs.readFileSync(__dirname + "/legs.js", "utf8").indexOf("已自动识别为：去程") !== -1);
+  assert.ok(html.indexOf("没认出来，可以自己选") !== -1);
+  assert.ok(tl.indexOf("pickedLegRole") !== -1 && tl.indexOf("paintLegRoleHint") !== -1);
+});
+
 if (failures) {
   console.log("\n" + failures + " failure(s)");
   process.exit(1);

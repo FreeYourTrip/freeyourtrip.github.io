@@ -5,6 +5,15 @@
 (function (root) {
   "use strict";
 
+  /* v6：火车 / 船 / 大巴照机票的方式改：班次号、出发 ~ 到达；地址一栏写「出发站 - 到达站」 */
+  var Transport = root.Transport || (typeof require === "function" ? require("./transport.js") : null);
+  function isGround(item) {
+    return !!(Transport && Transport.isGround(item));
+  }
+  function isTransit(item) {
+    return Transport ? Transport.isTransit(item) : !!item && item.type === "flight";
+  }
+
   /* v5.2：删一条撤销 5 秒；「清空全部」仍是 10 秒 */
   var UNDO_MS = 5000;
   var CLEAR_UNDO_MS = 10000;
@@ -67,6 +76,7 @@
   function typeValue(item) {
     if (!item) return "地点";
     if (item.type === "flight") return "机票";
+    if (isGround(item)) return Transport.kind(item).label;
     if (item.type === "hotel") return "酒店";
     if (item.subtype === "餐厅" || item.subtype === "景点" || item.subtype === "街道") return "地点/" + item.subtype;
     return "地点";
@@ -80,6 +90,19 @@
         type: "机票",
         name: item.flightNo || "",
         address: "",
+        date: item.departDate || item.dateGuess || "",
+        time: item.departTime || "",
+        endDate: item.arriveDate || item.pendingTo || "",
+        endTime: item.arriveTime || "",
+        note: item.note || "",
+        legRole: item.legRole || "auto"
+      };
+    }
+    if (isGround(item)) {
+      return {
+        type: Transport.kind(item).label,
+        name: item.number || "",
+        address: (item.fromNameZh || "") + (item.fromNameZh || item.nameZh ? " - " : "") + (item.nameZh || ""),
         date: item.departDate || item.dateGuess || "",
         time: item.departTime || "",
         endDate: item.arriveDate || item.pendingTo || "",
@@ -125,6 +148,7 @@
     form = form || {};
     var next = Object.assign({}, item);
     var name = clean(form.name);
+    if (isGround(item)) return applyGroundForm(item, next, form, name);
     if (!name) return { item: item, addressChanged: false, error: "请先填写名称。" };
     var addressChanged = false;
 
@@ -144,6 +168,11 @@
         next.arriveDate = newDepart;
       }
       setOrDelete(next, "note", clean(form.note));
+      if (form.legRole != null) {
+        var role = clean(form.legRole).toLowerCase();
+        if (role === "out" || role === "back" || role === "transfer") next.legRole = role;
+        else delete next.legRole;
+      }
       clearPendingIfDated(next);
       return { item: next, addressChanged: false, error: "" };
     }
@@ -199,6 +228,42 @@
     return dayDiff(a, b);
   }
 
+  /** 火车 / 船 / 大巴：班次号可以不填；改了车站就去掉那一头的坐标，由调用方重新找 */
+  function applyGroundForm(item, next, form, name) {
+    setOrDelete(next, "number", name);
+    var oldDepart = item.departDate || "";
+    var newDepart = clean(form.date);
+    setOrDelete(next, "departDate", newDepart);
+    setOrDelete(next, "departTime", clean(form.time));
+    setOrDelete(next, "arriveTime", clean(form.endTime));
+    var endDate = clean(form.endDate);
+    if (endDate && endDate !== (item.arriveDate || "")) next.arriveDate = endDate;
+    else if (item.arriveDate && oldDepart && newDepart && newDepart !== oldDepart) next.arriveDate = shiftIso(item.arriveDate, dayDiff(oldDepart, newDepart));
+    else if (!item.arriveDate && newDepart) next.arriveDate = newDepart;
+    var changed = false;
+    if (form.address != null) {
+      var st = Transport.splitStations(form.address);
+      var from = st ? st.from : clean(form.address);
+      var to = st ? st.to : "";
+      if (from !== clean(item.fromNameZh)) {
+        setOrDelete(next, "fromNameZh", from);
+        delete next.fromLat;
+        delete next.fromLng;
+        changed = true;
+      }
+      if (st && to !== clean(item.nameZh)) {
+        setOrDelete(next, "nameZh", to);
+        delete next.lat;
+        delete next.lng;
+        changed = true;
+      }
+    }
+    setOrDelete(next, "note", clean(form.note));
+    delete next.arriveEarlyOk;
+    clearPendingIfDated(next);
+    return { item: next, addressChanged: changed, error: "" };
+  }
+
   /** 机票落地日期早于起飞日期要标待确认。用户点「对的」后记 arriveEarlyOk，不再反复标。 */
   var FLIGHT_EARLY_LIMIT_DAYS = 0;
 
@@ -206,7 +271,8 @@
   function rangeProblem(item) {
     if (!item) return "";
     if (item.type === "hotel" && isIso(item.checkIn) && isIso(item.checkOut) && item.checkOut < item.checkIn) return "hotel-reversed";
-    if (item.type === "flight" && isIso(item.departDate) && isIso(item.arriveDate) && item.arriveDate < item.departDate) {
+    /* v6：火车 / 船 / 大巴同机票 */
+    if (isTransit(item) && isIso(item.departDate) && isIso(item.arriveDate) && item.arriveDate < item.departDate) {
       if (item.arriveEarlyOk) return "";
       return "flight-reversed";
     }
@@ -215,7 +281,7 @@
 
   /** 「对的」：保留原来的起飞/落地日期，从待确认里拿掉。 */
   function acceptEarlyArrival(item) {
-    if (!item || item.type !== "flight") return item;
+    if (!item || !isTransit(item)) return item;
     var next = Object.assign({}, item);
     if (next.pendingFrom) next.departDate = next.pendingFrom;
     if (next.pendingTo) next.arriveDate = next.pendingTo;
@@ -232,7 +298,7 @@
    */
   function clearPendingIfDated(next) {
     if (!next || !next.pendingDate) return next;
-    var d = next.type === "flight" ? next.departDate : next.type === "hotel" ? next.checkIn : next.date;
+    var d = isTransit(next) ? next.departDate : next.type === "hotel" ? next.checkIn : next.date;
     if (!isIso(d)) return next;
     var problem = rangeProblem(next);
     if (problem) {
@@ -300,7 +366,27 @@
     return next;
   }
 
+  /**
+   * v6：「全部」里跨天拖动。拖到某一天 → 改成那天；拖进「还没定哪天」（day 为空）→ 去掉日期。
+   * 只改地点；酒店、机票、火车、船、大巴都不能拖，原样返回。顺序（dayOrder）清掉，由调用方按落点重排。
+   */
+  function moveToDay(item, day) {
+    if (!item) return item;
+    var next = Object.assign({}, item);
+    day = isIso(day) ? day : "";
+    if (next.type === "place" || !next.type) {
+      if (day) next.date = day;
+      else delete next.date;
+    } else {
+      return item;
+    }
+    delete next.dayOrder;
+    return next;
+  }
+
   var api = {
+    moveToDay: moveToDay,
+    shiftIso: shiftIso,
     applyFoundPlace: applyFoundPlace,
     UNDO_MS: UNDO_MS,
     CLEAR_UNDO_MS: CLEAR_UNDO_MS,

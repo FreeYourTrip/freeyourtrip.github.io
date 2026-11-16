@@ -3,10 +3,18 @@
  *
  * - 航班「之前」的地面段，终点是出发机场；
  * - 航班「之后」的地面段，起点是到达机场；
- * - 两段航班相邻：显示不可点击的「转机」（可附中转时长）；
+ * - 两段航班相邻：同机场且中转不足 24 小时、又不是往返配对时，显示不可点击的「转机」；
+ * - 相邻的火车/船/大巴（或跟机票对接）间隔不足 24 小时：显示不可点击的「换乘」；
+ * - 机票可选手动角色 legRole（auto / out / back / transfer），手动优先。
  */
 (function (root) {
   "use strict";
+
+  /* v6：火车 / 船 / 大巴跟机票一样按「出发 ~ 到达」处理，见 transport.js */
+  var Transport = root.Transport || (typeof require === "function" ? require("./transport.js") : null);
+  function isTransit(item) {
+    return Transport ? Transport.isTransit(item) : !!item && item.type === "flight";
+  }
 
   var WEEKDAYS = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"];
 
@@ -51,7 +59,7 @@
   function itemDisplayDate(item) {
     if (!item) return "";
     if (isCheckoutView(item)) return item.checkOut || "";
-    if (item.type === "flight") return item.departDate || "";
+    if (isTransit(item)) return item.departDate || "";
     if (item.type === "hotel") return item.checkIn || "";
     return item.date || "";
   }
@@ -61,7 +69,7 @@
       var ct = item.displayTime || item.checkOutTime || "";
       return (item.checkOut || "") + "T" + (ct || "00:00");
     }
-    if (item.type === "flight") {
+    if (isTransit(item)) {
       return (item.departDate || "") + "T" + (item.departTime || "00:00");
     }
     if (item.type === "hotel") return (item.checkIn || "") + "T" + (item.checkInTime || "15:00");
@@ -130,12 +138,13 @@
   }
 
   function departEndpoint(item) {
-    if (!item || item.type !== "flight") return null;
+    if (!item || !isTransit(item)) return null;
+    var k = Transport && Transport.kind(item);
     var pt = {
       id: item.id + ":dep",
       itemId: item.id,
       role: "depart",
-      name: item.fromNameZh || item.fromAirport || "出发机场",
+      name: item.fromNameZh || item.fromAirport || (k ? k.fromFallback : "出发机场"),
       nameEn: item.fromNameEn || item.fromAirport || "",
       airport: item.fromAirport || "",
       address: item.fromAirport || ""
@@ -148,12 +157,13 @@
   }
 
   function arriveEndpoint(item) {
-    if (!item || item.type !== "flight") return null;
+    if (!item || !isTransit(item)) return null;
+    var k = Transport && Transport.kind(item);
     var pt = {
       id: item.id + ":arr",
       itemId: item.id,
       role: "arrive",
-      name: item.nameZh || item.toAirport || "到达机场",
+      name: item.nameZh || item.toAirport || (k ? k.toFallback : "到达机场"),
       nameEn: item.nameEn || item.toAirport || "",
       airport: item.toAirport || "",
       address: item.toAirport || ""
@@ -187,7 +197,7 @@
    */
   function endpointFor(item, as) {
     if (!item) return null;
-    if (item.type === "flight") {
+    if (isTransit(item)) {
       return as === "dest" ? departEndpoint(item) : arriveEndpoint(item);
     }
     return placeEndpoint(item);
@@ -209,37 +219,113 @@
     return minutesBetweenCivil(flightA.arriveDate, flightA.arriveTime, flightB.departDate, flightB.departTime);
   }
 
-  function layoverLabel(flightA, flightB) {
-    var mins = layoverMinutes(flightA, flightB);
-    if (mins == null || mins < 0) return "转机";
+  function durationLabel(prefix, mins) {
+    if (mins == null || mins < 0) return prefix;
     var h = Math.floor(mins / 60);
     var m = mins % 60;
-    if (h && m) return "转机 " + h + "小时" + m + "分";
-    if (h) return "转机 " + h + "小时";
-    return "转机 " + m + "分钟";
+    if (h && m) return prefix + " " + h + "小时" + m + "分";
+    if (h) return prefix + " " + h + "小时";
+    return prefix + " " + m + "分钟";
+  }
+
+  function layoverLabel(flightA, flightB) {
+    return durationLabel("转机", layoverMinutes(flightA, flightB));
+  }
+
+  function changeLabel(itemA, itemB) {
+    return durationLabel("换乘", layoverMinutes(itemA, itemB));
+  }
+
+  /** auto（缺省）/ out / back / transfer。导入不会写入。 */
+  function legRoleOf(item) {
+    var r = String((item && item.legRole) || "auto").trim().toLowerCase();
+    if (r === "out" || r === "back" || r === "transfer") return r;
+    return "auto";
+  }
+
+  function airportCode(item, key) {
+    return String((item && item[key]) || "").trim().toUpperCase();
+  }
+
+  function flightMoment(it) {
+    return (it && it.departDate ? it.departDate : "") + "T" + ((it && it.departTime) || "00:00");
+  }
+
+  function arePartners(pairs, a, b) {
+    if (!pairs || !a || !b) return false;
+    var pa = pairs[a.id];
+    var pb = pairs[b.id];
+    return !!(pa && pa.otherId === b.id && pb && pb.otherId === a.id);
+  }
+
+  /** 自动认转机：只限航班接航班，同机场且 0 ≤ 间隔 < 24 小时，且不是往返配对。缺机场代码就不自动认。 */
+  function isAutoLayover(a, b, pairs, mins) {
+    if (!a || !b || a.type !== "flight" || b.type !== "flight") return false;
+    if (arePartners(pairs, a, b)) return false;
+    if (mins == null || mins < 0 || mins >= 24 * 60) return false;
+    var fromA = airportCode(a, "toAirport");
+    var toB = airportCode(b, "fromAirport");
+    if (!fromA || !toB) return false;
+    return fromA === toB;
+  }
+
+  function isManualLayover(a, b) {
+    return !!(a && b && a.type === "flight" && b.type === "flight" && legRoleOf(b) === "transfer");
+  }
+
+  function stationKey(item, which) {
+    if (!item) return "";
+    if (which === "arrive") return String(item.nameZh || item.nameEn || item.toNameZh || "").trim();
+    return String(item.fromNameZh || item.fromNameEn || "").trim();
+  }
+
+  function sameStation(a, b) {
+    var fromA = stationKey(a, "arrive");
+    var toB = stationKey(b, "depart");
+    if (!fromA || !toB) return false;
+    return fromA.toLowerCase() === toB.toLowerCase();
+  }
+
+  function isGroundTransit(item) {
+    var k = transitKind(item);
+    return k === "train" || k === "boat" || k === "bus";
+  }
+
+  /* 换乘：只限火车/船/大巴之间，间隔不足 24 小时且到站 = 下一程出发站。缺站名或跟机票对接都不画。 */
+  function isChangeover(a, b, mins) {
+    if (!isGroundTransit(a) || !isGroundTransit(b)) return false;
+    if (mins == null || mins < 0 || mins >= 24 * 60) return false;
+    return sameStation(a, b);
+  }
+
+  function transferBar(kindLabel, a, b, sameDay, mins) {
+    return {
+      kind: "transfer",
+      clickable: false,
+      label: kindLabel,
+      fromItemId: a.id,
+      toItemId: b.id,
+      minutes: mins,
+      from: arriveEndpoint(a),
+      to: departEndpoint(b),
+      crossDay: !sameDay
+    };
   }
 
   function buildConnectors(items) {
     var list = sortedItems(items);
+    var pairs = pairRoundTrips(list);
     var out = [];
     var i;
     for (i = 0; i < list.length - 1; i++) {
       var a = list[i];
       var b = list[i + 1];
       var sameDay = (itemDisplayDate(a) || "") === (itemDisplayDate(b) || "");
-      if (a.type === "flight" && b.type === "flight") {
-        /* 转机：即使两段航班跨日（跨午夜）也保留 */
-        out.push({
-          kind: "transfer",
-          clickable: false,
-          label: layoverLabel(a, b),
-          fromItemId: a.id,
-          toItemId: b.id,
-          minutes: layoverMinutes(a, b),
-          from: arriveEndpoint(a),
-          to: departEndpoint(b),
-          crossDay: !sameDay
-        });
+      var mins = layoverMinutes(a, b);
+      if (isManualLayover(a, b) || isAutoLayover(a, b, pairs, mins)) {
+        out.push(transferBar(durationLabel("转机", mins), a, b, sameDay, mins));
+      } else if (isChangeover(a, b, mins)) {
+        out.push(transferBar(changeLabel(a, b), a, b, sameDay, mins));
       } else if (sameDay) {
         out.push({
           kind: "nav",
@@ -255,6 +341,36 @@
       /* 跨天的地面连接不画：次日卡片上的「带我去」已从当前位置出发 */
     }
     return out;
+  }
+
+  function autoRoleHintText(role) {
+    if (role === "out") return "已自动识别为：去程";
+    if (role === "back") return "已自动识别为：返程";
+    if (role === "transfer") return "已自动识别为：转机";
+    return "没认出来，可以自己选";
+  }
+
+  /**
+   * 自动识别当前这条机票会是去程、返程还是转机（不算任何人手选的 legRole）。
+   */
+  function autoRoleFor(items, id) {
+    var cloned = (items || []).map(function (it) {
+      if (!it || it.type !== "flight") return it;
+      var c = Object.assign({}, it);
+      delete c.legRole;
+      return c;
+    });
+    var pairs = pairRoundTrips(cloned);
+    if (pairs[id] && pairs[id].role) return pairs[id].role;
+    var list = sortedItems(cloned);
+    var i;
+    for (i = 1; i < list.length; i++) {
+      if (list[i].id !== id) continue;
+      var prev = list[i - 1];
+      var cur = list[i];
+      if (isAutoLayover(prev, cur, pairs, layoverMinutes(prev, cur))) return "transfer";
+    }
+    return "";
   }
 
   function firstOfDayTarget(item) {
@@ -281,7 +397,7 @@
 
   function numberedList(items) {
     return sortedItems(items).map(function (item, i) {
-      return { n: i + 1, item: item, marker: endpointFor(item, item.type === "flight" ? "dest" : "origin") };
+      return { n: i + 1, item: item, marker: endpointFor(item, isTransit(item) ? "dest" : "origin") };
     });
   }
 
@@ -347,7 +463,8 @@
    */
   function navPillSpec(fromItem, toItem) {
     if (!fromItem || !toItem) return { show: false };
-    if (fromItem.type === "flight" || toItem.type === "flight") {
+    /* v6：火车 / 船 / 大巴跟机票一样，两头不放胶囊 */
+    if (isTransit(fromItem) || isTransit(toItem)) {
       return { show: false, reason: "flight", fromItemId: fromItem.id, toItemId: toItem.id };
     }
     var from = endpointFor(fromItem, "origin");
@@ -459,7 +576,7 @@
   function itemClock(item) {
     if (!item) return "";
     if (isCheckoutView(item)) return item.displayTime || item.checkOutTime || "";
-    if (item.type === "flight") return item.departTime || "";
+    if (isTransit(item)) return item.departTime || "";
     if (item.type === "hotel") return item.checkInTime || "";
     return item.time || "";
   }
@@ -473,13 +590,14 @@
         /船|轮渡|游轮/.test(sub) || /^(ferry|boat|ship)$/i.test(sub)) {
       return "boat";
     }
+    if (item.type === "bus" || sub === "大巴" || sub === "巴士" || /^(bus|coach)$/i.test(sub)) return "bus";
     return "";
   }
 
   function transitLeadMinutes(item) {
     var k = transitKind(item);
     if (k === "flight") return 180;
-    if (k === "train" || k === "boat") return 60;
+    if (k === "train" || k === "boat" || k === "bus") return 60;
     return 0;
   }
 
@@ -496,7 +614,7 @@
   }
 
   /**
-   * 退房时间默认：机票出发前 3 小时，火车/船出发前 1 小时。
+   * 退房时间默认：机票出发前 3 小时，火车/船/大巴出发前 1 小时。
    * 算出的时刻晚于 12:00 则用 12:00（不算自动）。当天最早出发早于 03:00：不自动、也不填 12:00，时间留空。
    * 用户自己写的 checkOutTime 一律优先。
    * autoFromFlight 只在用了「出发前 3/1 小时」且结果不晚于 12:00 时为 true。
@@ -570,36 +688,87 @@
     }
     var list = (items || []).filter(function (it) {
       if (!it || it.type !== "flight" || isCheckoutView(it)) return false;
-      var e = ends(it);
-      return e.from && e.to && ymdOk(e.date);
+      if (legRoleOf(it) === "transfer") return false;
+      return ymdOk(it.departDate || "");
     }).slice().sort(function (a, b) {
-      var ka = (a.departDate || "") + "T" + (a.departTime || "");
-      var kb = (b.departDate || "") + "T" + (b.departTime || "");
+      var ka = flightMoment(a);
+      var kb = flightMoment(b);
       return ka < kb ? -1 : ka > kb ? 1 : 0;
     });
     var used = {};
     var pairs = {};
+    function bind(a, b) {
+      used[a.id] = true;
+      used[b.id] = true;
+      pairs[a.id] = { role: "out", label: "去程", otherId: b.id, otherDate: b.departDate };
+      pairs[b.id] = { role: "back", label: "返程", otherId: a.id, otherDate: a.departDate };
+    }
+
+    /* 手动返程：跟最近的更早未配对航班配成返程，优先已经标成去程的，机场不一样也可以（开口程）。 */
+    list.forEach(function (b) {
+      if (used[b.id] || legRoleOf(b) !== "back") return;
+      var bestOut = null;
+      var bestAny = null;
+      var j;
+      for (j = 0; j < list.length; j++) {
+        var a = list[j];
+        if (a.id === b.id || used[a.id]) continue;
+        if (flightMoment(a) >= flightMoment(b)) continue;
+        if (legRoleOf(a) === "back") continue;
+        if (!bestAny || flightMoment(a) > flightMoment(bestAny)) bestAny = a;
+        if (legRoleOf(a) === "out") {
+          if (!bestOut || flightMoment(a) > flightMoment(bestOut)) bestOut = a;
+        }
+      }
+      var pick = bestOut || bestAny;
+      if (pick) bind(pick, b);
+    });
+
+    /* 手动去程：跟最近的更晚手动返程配对，没有则用机场对得上的自动返程。 */
+    list.forEach(function (a) {
+      if (used[a.id] || legRoleOf(a) !== "out") return;
+      var ea = ends(a);
+      var bestBack = null;
+      var bestAuto = null;
+      var j;
+      for (j = 0; j < list.length; j++) {
+        var b = list[j];
+        if (b.id === a.id || used[b.id]) continue;
+        if (flightMoment(b) <= flightMoment(a)) continue;
+        if (legRoleOf(b) === "back" && !bestBack) bestBack = b;
+        var eb = ends(b);
+        if (ea.from && ea.to && eb.from && eb.to && ea.from === eb.to && ea.to === eb.from && !bestAuto) {
+          bestAuto = b;
+        }
+      }
+      var pick = bestBack || bestAuto;
+      if (pick) bind(a, pick);
+    });
+
+    /* 其余按出发/到达机场自动配对，取最近的后一段。 */
     list.forEach(function (a, i) {
       if (used[a.id]) return;
       var ea = ends(a);
+      if (!ea.from || !ea.to) return;
       var best = null;
       var j;
       for (j = i + 1; j < list.length; j++) {
         var b = list[j];
         if (used[b.id]) continue;
         var eb = ends(b);
-        var ta = (ea.date || "") + "T" + (ea.time || "00:00");
-        var tb = (eb.date || "") + "T" + (eb.time || "00:00");
-        if (ea.from === eb.to && ea.to === eb.from && tb > ta) {
+        if (ea.from === eb.to && ea.to === eb.from && flightMoment(b) > flightMoment(a)) {
           best = b;
           break;
         }
       }
-      if (!best) return;
-      used[a.id] = true;
-      used[best.id] = true;
-      pairs[a.id] = { role: "out", label: "去程", otherId: best.id, otherDate: best.departDate };
-      pairs[best.id] = { role: "back", label: "回程", otherId: a.id, otherDate: a.departDate };
+      if (best) bind(a, best);
+    });
+
+    /* 手动去程/返程即使没配上对家，卡片上也标出来（样式跟自动识别一样）。 */
+    list.forEach(function (it) {
+      if (pairs[it.id]) return;
+      if (legRoleOf(it) === "out") pairs[it.id] = { role: "out", label: "去程" };
+      if (legRoleOf(it) === "back") pairs[it.id] = { role: "back", label: "返程" };
     });
     return pairs;
   }
@@ -685,7 +854,7 @@
   }
 
   function applySuggestedTime(item, hhmm) {
-    if (!item || item.type === "flight") return item;
+    if (!item || isTransit(item)) return item;
     if (item.type === "hotel") item.checkInTime = hhmm;
     else item.time = hhmm;
     return item;
@@ -701,6 +870,10 @@
     endpointFor: endpointFor,
     layoverMinutes: layoverMinutes,
     layoverLabel: layoverLabel,
+    changeLabel: changeLabel,
+    legRoleOf: legRoleOf,
+    autoRoleFor: autoRoleFor,
+    autoRoleHintText: autoRoleHintText,
     buildConnectors: buildConnectors,
     firstOfDayTarget: firstOfDayTarget,
     groupByDay: groupByDay,

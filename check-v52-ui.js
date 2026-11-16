@@ -27,18 +27,18 @@ check("help: 3 tiers as cards; only tier 1 on first open; privacy line; 常用 g
   const uiSrc = (tl + fs.readFileSync(__dirname + "/index.html", "utf8") + fs.readFileSync(__dirname + "/install-guide.js", "utf8") + fs.readFileSync(__dirname + "/trip-name.js", "utf8")).replace(/✓|✕/g, "");
   assert.ok(!EMOJI.test(uiSrc), "emoji left in UI: " + (uiSrc.match(EMOJI) || [""])[0]);
   [
-    '{ key: "add", title: "添加", text: "点「＋ 添加」，选加机票、酒店还是地点，搜到后点一下就加好了" }',
+    '{ key: "add", title: "添加", text: "点『＋ 添加』，选加机票、酒店还是地点，搜到后点一下就加好了" }',
     '{ key: "ai", title: "截图交给 AI", text: "机票、酒店截图丢给任意 AI，自动整理成行程" }',
-    '{ key: "map", title: "带我去", text: "卡片右边的『带我去』，从你现在的位置出发；两站中间的『路线』，从上一站去下一站", line: "长按卡片，拖动换顺序" }'
+    '{ key: "map", title: "带我去", text: "卡片右边的『带我去』，从你现在的位置出发；两站中间的『路线』，从上一站去下一站", line: "长按卡片拖动，能换顺序，也能拖到别的日子" }'
   ].forEach((l) => assert.ok(tl.indexOf(l) !== -1, l));
   assert.ok(fs.readFileSync(__dirname + "/index.html", "utf8").indexOf('id="add-fab" aria-haspopup="dialog" aria-controls="add-sheet">＋ 添加<') !== -1, "the help names the real button label");
   ["看行程", "改和删", "地图", "分享我的行程", "放到桌面", "改行程名"].forEach((t) => assert.ok(tl.indexOf('title: "' + t + '"') !== -1, t));
   /* 第 3 层原文（广告文案宣传大师） */
   [
-    '{ q: "换手机", a: "在设置里点「完整备份」，到新手机上点「导入」" }',
+    '{ q: "换手机", a: "在设置里点『完整备份』，到新手机上点『导入』" }',
     '{ q: "更新", a: "看到的还是旧版，就把网页彻底关掉再打开" }',
     '{ q: "隐私", a: "行程只存在你手机里，没有账号，我们看不到。搜索和导航时，地名、地址和大概位置会发给地图服务" }',
-    '{ q: "清空", a: "在设置里点「清空本机数据」，会删掉所有行程" }'
+    '{ q: "清空", a: "在使用说明最下面点『清空本机数据』，会删掉所有行程" }' /* v6：按钮挪到使用说明最下面 */
   ].forEach((l) => assert.ok(tl.indexOf(l) !== -1, l));
   /* 文案里提到的按钮名、行为都真实存在 */
   const html = fs.readFileSync(__dirname + "/index.html", "utf8");
@@ -61,12 +61,12 @@ check("AI wizard: big button on top, 1-2-3 progress, exact copy, clipboard read 
   assert.ok(html.indexOf('<details class="fold add-only" id="ai-help">') === -1, "not folded any more");
   const C = {
     title: "截图交给 AI，自动排好行程",
-    step1: "点「复制给 AI 的话」，复制完按钮显示「已复制 ✓」",
+    step1: "点『给 AI 的话』看一眼，再点下面的『复制』", /* v6.0 定稿 */
     copied: "已复制 ✓",
     step2: "打开你常用的 AI（豆包、Kimi、DeepSeek、ChatGPT 都行），先粘贴，再把截图发过去",
     step2Small: "不会截图？同时按侧边键和音量加键", /* v5.3 定稿：去掉 iPhone */
     privacy: "发截图前，把护照号、银行卡、手机号裁掉或涂掉",
-    step3: "把 AI 的回复整段复制，回来点「粘贴并导入」",
+    step3: "把 AI 的回复整段复制，回来点『粘贴并导入』",
     step3Small: "手机弹出「粘贴」或「允许」时，再点一下就行",
     pasteBtn: "粘贴并导入",
     fallbackHint: "长按这里，选『粘贴』，再点『添加』"
@@ -82,7 +82,9 @@ check("AI wizard: big button on top, 1-2-3 progress, exact copy, clipboard read 
 check("icon picker: 4×2, 52px round, two-character labels, one colour map", function () {
   const I = require("./icons.js");
   assert.strictEqual(I.CATEGORIES.length, 8);
-  I.CATEGORIES.forEach((c) => assert.strictEqual([...c.label].length, 2, c.label));
+  /* v6：「咖啡甜点酒吧」（名字暂定，在 icons.js 的 CAFE_LABEL）例外，其余仍是两个字 */
+  I.CATEGORIES.filter((c) => c.key !== "dessert").forEach((c) => assert.strictEqual([...c.label].length, 2, c.label));
+  assert.strictEqual(I.CATEGORIES.find((c) => c.key === "dessert").label, I.CAFE_LABEL);
   const col = (k) => I.categoryMeta(k).color;
   assert.strictEqual(col("sight"), "#27AE60"); assert.strictEqual(col("nature"), "#27AE60");
   assert.strictEqual(col("food"), "#F2994A"); assert.strictEqual(col("dessert"), "#F2994A");

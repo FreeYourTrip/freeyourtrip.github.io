@@ -15,6 +15,9 @@
   var PATHS = {
     flight:
       '<path d="M3 16.5l7.2-2.1L13 6.2l2.2.7-1.2 6.3L21 15v2.1l-7.4.3L10.2 22H8.2l2-5.2L3 18.4z"/>',
+    /* v6：船（火车、大巴用下面原有的 train / bus） */
+    boat:
+      '<path d="M3 15l2.2 4.2a2 2 0 0 0 1.8 1.1h10a2 2 0 0 0 1.8-1.1L21 15z"/><path d="M5 15V10h14v5"/><path d="M12 10V4"/><path d="M12 5l4 2.5-4 1"/>',
     hotel:
       '<path d="M3 19V10a2 2 0 0 1 2-2h5a3 3 0 0 1 6 0h3a2 2 0 0 1 2 2v9"/><path d="M3 19h18"/><path d="M3 15h18"/><path d="M3 19v2M21 19v2"/>',
     restaurant:
@@ -70,8 +73,9 @@
     /* v5.2 自选图标：同一颜色组里的图标形状各不相同 */
     nature:
       '<path d="M3 20l6-10 4 6 2-3 6 7z"/><circle cx="17" cy="6" r="2"/>',
+    /* v6：「咖啡甜点酒吧」（内部 id 仍叫 dessert，老地点自动跟着变）：冒热气的杯子，替换原来的冰淇淋 */
     dessert:
-      '<path d="M8 11a4 4 0 1 1 8 0"/><path d="M7 11h10l-5 10z"/>',
+      '<path d="M5 11h11v4a5 5 0 0 1-5 5h-1a5 5 0 0 1-5-5z"/><path d="M16 12h1.5a2.5 2.5 0 0 1 0 5H16"/><path d="M8 3.5c-.8 1 .8 2 0 3M11 3.5c-.8 1 .8 2 0 3M14 3.5c-.8 1 .8 2 0 3"/>',
     shop:
       '<path d="M5 8h14l-1 12H6z"/><path d="M9 8V6a3 3 0 0 1 6 0v2"/>',
     train:
@@ -81,7 +85,7 @@
   };
 
   /* v5.2 颜色只在这里配一次（IT老板 定稿，按组锁定）：
-     景点、自然 绿；餐厅、甜品 橙；购物 粉；酒店 紫；交通 石板灰；其他 炭黑图标 + 沙色底 */
+     景点、自然 绿；餐厅、咖啡甜点酒吧 橙；购物 粉；酒店 紫；交通 石板灰；其他 炭黑图标 + 沙色底 */
   var PALETTE = {
     green: { color: "#27AE60", tint: "#E3F7EA" },
     orange: { color: "#F2994A", tint: "#FDEDD9" },
@@ -91,17 +95,32 @@
     charcoal: { color: "#2B2B2B", tint: "#EEE7DA" }
   };
 
+  /* v6：这一类的名字只在这里写一次（暂定「咖啡甜点酒吧」，可能换成「咖啡酒吧」「歇脚」「喝一杯」，改这一行即可） */
+  var CAFE_LABEL = "咖啡甜点酒吧";
+
   /* 图标选择器：4×2，顺序即显示顺序；标签都是两个字 */
   var CATEGORIES = [
     { key: "sight", label: "景点", icon: "attraction", group: "green" },
     { key: "nature", label: "自然", icon: "nature", group: "green" },
     { key: "food", label: "餐厅", icon: "restaurant", group: "orange" },
-    { key: "dessert", label: "甜品", icon: "dessert", group: "orange" },
+    { key: "dessert", label: CAFE_LABEL, icon: "dessert", group: "orange" },
     { key: "shop", label: "购物", icon: "shop", group: "pink" },
     { key: "hotel", label: "酒店", icon: "hotel", group: "purple" },
     { key: "transport", label: "交通", icon: "train", group: "slate" },
     { key: "other", label: "其他", icon: "pin", group: "charcoal" }
   ];
+
+  /* v6：「手动填写」里的图标（可不选）不再放「酒店」「交通」（类型里已经能选），3×2。
+     老地点用着酒店 / 交通图标照样显示（categoryMeta 仍认识它们）。 */
+  var MANUAL_PICKER_KEYS = ["sight", "nature", "food", "dessert", "shop", "other"];
+
+  /** v6：导入「地点/甜品」（旧名）或「地点/咖啡甜点酒吧」都归到这一类 */
+  var CATEGORY_ALIASES = { "甜品": "dessert", "咖啡甜点酒吧": "dessert" };
+  CATEGORY_ALIASES[CAFE_LABEL] = "dessert";
+  function categoryFromWord(word) {
+    var w = String(word || "").trim();
+    return Object.prototype.hasOwnProperty.call(CATEGORY_ALIASES, w) ? CATEGORY_ALIASES[w] : "";
+  }
 
   function categoryMeta(key) {
     for (var i = 0; i < CATEGORIES.length; i++) {
@@ -121,6 +140,9 @@
   /* 没自选图标时，按类型给默认图标；颜色同样取自 PALETTE */
   var TYPE_META = {
     flight: fromPalette("flight", "slate", "机票"),
+    train: fromPalette("train", "slate", "火车"),
+    boat: fromPalette("boat", "slate", "船"),
+    bus: fromPalette("bus", "slate", "大巴"),
     hotel: fromPalette("hotel", "purple", "酒店"),
     restaurant: fromPalette("restaurant", "orange", "餐厅"),
     attraction: fromPalette("attraction", "green", "景点"),
@@ -136,6 +158,9 @@
     if (!item) return "place";
     var t = String(item.type || "").toLowerCase();
     if (t === "flight" || t === "机票") return "flight";
+    if (t === "train" || t === "火车") return "train";
+    if (t === "boat" || t === "船") return "boat";
+    if (t === "bus" || t === "大巴") return "bus";
     if (t === "hotel" || t === "酒店") return "hotel";
     if (t === "restaurant" || t === "餐厅") return "restaurant";
     if (t === "attraction" || t === "景点") return "attraction";
@@ -148,7 +173,7 @@
   }
 
   function typeMeta(itemOrKind) {
-    if (itemOrKind && typeof itemOrKind === "object" && itemOrKind.icon && itemOrKind.type !== "flight") {
+    if (itemOrKind && typeof itemOrKind === "object" && itemOrKind.icon && ["flight", "train", "boat", "bus"].indexOf(itemOrKind.type) === -1) {
       var picked = categoryMeta(itemOrKind.icon);
       if (picked) return picked;
     }
@@ -182,6 +207,9 @@
     TYPE_META: TYPE_META,
     PALETTE: PALETTE,
     CATEGORIES: CATEGORIES,
+    MANUAL_PICKER_KEYS: MANUAL_PICKER_KEYS,
+    categoryFromWord: categoryFromWord,
+    CAFE_LABEL: CAFE_LABEL,
     categoryMeta: categoryMeta,
     svg: function (name) {
       return PATHS[name] ? svg(PATHS[name]) : "";

@@ -14,24 +14,20 @@ function check(name, fn) {
 
 const FULL = "机票、酒店、想去的地方，一路串起来 ✈️ 不用下载不用注册，打开就能用 👉 https://freeyourtrip.github.io";
 
-check("recommend text is exact; share payload puts URL only in url", function () {
+check("recommend text is exact; share payload is title + URL only (no trip data, no promo text)", function () {
   assert.strictEqual(R.FULL_TEXT, FULL);
   const p = R.sharePayload();
-  assert.strictEqual(p.title, "Free Your Trip");
-  assert.strictEqual(p.url, "https://freeyourtrip.github.io");
-  assert.ok(p.text.indexOf("http") === -1, "no URL inside text");
-  assert.strictEqual(p.text, "机票、酒店、想去的地方，一路串起来 ✈️ 不用下载不用注册，打开就能用", "share text ends at 打开就能用, no 👉");
-  assert.ok(p.text.indexOf("👉") === -1);
-  assert.strictEqual(p.text + " 👉 " + p.url, FULL);
+  assert.deepStrictEqual(p, { title: "Free Your Trip", url: "https://freeyourtrip.github.io" });
+  assert.ok(!p.text, "share sheet sends the URL only");
 });
 
-check("uses navigator.share when available, no toast, no trip data", async function () {
+check("uses navigator.share when available: only URL, no toast, no trip data", async function () {
   let got = null;
   const toasts = [];
   const res = await R.recommend({ navigator: { share: (d) => { got = d; return Promise.resolve(); } }, toast: (m) => toasts.push(m) });
   assert.strictEqual(res, "shared");
-  assert.deepStrictEqual(Object.keys(got).sort(), ["text", "title", "url"]);
-  assert.strictEqual(toasts.length, 0);
+  assert.deepStrictEqual(got, { title: "Free Your Trip", url: "https://freeyourtrip.github.io" });
+  assert.strictEqual(toasts.length, 0, "toast only on the copy fallback");
 });
 
 check("user cancelling the share sheet does nothing", async function () {
@@ -41,43 +37,54 @@ check("user cancelling the share sheet does nothing", async function () {
   assert.strictEqual(toasts.length, 0);
 });
 
-check("no navigator.share -> copies full text and toasts 已复制，去粘贴给朋友吧", async function () {
+check("no navigator.share -> copies the URL and toasts 「网址已复制，发给朋友就行」", async function () {
   let copied = null;
   const toasts = [];
   const res = await R.recommend({ navigator: { clipboard: { writeText: (t) => { copied = t; return Promise.resolve(); } } }, toast: (m) => toasts.push(m) });
   assert.strictEqual(res, "copied");
-  assert.strictEqual(copied, FULL);
-  assert.deepStrictEqual(toasts, ["已复制，去粘贴给朋友吧"]);
+  assert.strictEqual(copied, "https://freeyourtrip.github.io");
+  assert.deepStrictEqual(toasts, ["网址已复制，发给朋友就行"]);
 });
 
-check("share failing (not cancel) falls back to copy", async function () {
+check("share failing (not cancel) falls back to copy + toast", async function () {
   let copied = null;
+  const toasts = [];
   const res = await R.recommend({
     navigator: { share: () => Promise.reject(new Error("NotAllowed")), clipboard: { writeText: (t) => { copied = t; return Promise.resolve(); } } },
-    toast: () => {}
+    toast: (m) => toasts.push(m)
   });
   assert.strictEqual(res, "copied");
-  assert.strictEqual(copied, FULL);
+  assert.strictEqual(copied, "https://freeyourtrip.github.io");
+  assert.deepStrictEqual(toasts, ["网址已复制，发给朋友就行"]);
 });
 
-check("settings markup: 分享我的行程 / 推荐这个工具 with subtitles; old labels gone; script + precache", function () {
+check("copy failing tells the user the URL to copy by hand", async function () {
+  const toasts = [];
+  const res = await R.recommend({ navigator: { clipboard: { writeText: () => Promise.reject(new Error("no")) } }, toast: (m) => toasts.push(m) });
+  assert.strictEqual(res, "failed");
+  assert.deepStrictEqual(toasts, ["复制没成功，请手动复制：https://freeyourtrip.github.io"]);
+});
+
+check("settings markup: 分享我的行程 / 分享给朋友 (v6) with subtitles; old labels gone; script + precache", function () {
   const html = fs.readFileSync(__dirname + "/index.html", "utf8");
   const sw = fs.readFileSync(__dirname + "/sw.js", "utf8");
-  assert.ok(html.indexOf('id="recommend-btn"') !== -1 && html.indexOf('data-sub="只发网址，不含你的行程">推荐这个工具<') !== -1);
+  assert.ok(html.indexOf('id="recommend-btn"') !== -1 && html.indexOf('data-sub="只发网址，不含你的行程">分享给朋友<') !== -1);
   assert.ok(html.indexOf('id="backup-export-share"') !== -1 && html.indexOf('data-sub="发给同行的人，对方导入就能看到">分享我的行程<') !== -1);
   const tl = fs.readFileSync(__dirname + "/timeline.js", "utf8");
   const css = fs.readFileSync(__dirname + "/styles.css", "utf8");
   assert.ok(/\.more-sub \{ font-size: 12px; font-weight: 400; color: #8A9099;/.test(css));
   assert.ok(/#backup-export-share \+ #recommend-btn \{ margin-top: 8px; \}/.test(css));
   const docs = ["index.html", "timeline.js", "README.md", "DESIGN.md", "backup.js", "recommend.js"].map((f) => fs.readFileSync(__dirname + "/" + f, "utf8")).join("\n");
-  ["分享给朋友", "分享行程」", "「分享行程", "推荐给朋友"].forEach((old) => assert.ok(docs.indexOf(old) === -1, "old label gone: " + old));
+  ["分享行程」", "「分享行程", "推荐给朋友"].forEach((old) => assert.ok(docs.indexOf(old) === -1, "old label gone: " + old));
+  /* v6：「推荐这个工具」改成「分享给朋友」；README 第 3 行是 v5.1 的历史记录，不算 */
+  ["index.html", "timeline.js", "DESIGN.md", "recommend.js"].forEach((f) => assert.ok(fs.readFileSync(__dirname + "/" + f, "utf8").indexOf("推荐这个工具") === -1, "v6 name in " + f));
   const v = require("./version.js");
   const v51 = v.ANNOUNCEMENT.bullets.concat(v.CHANGELOG[0].lines).join("\n");
   assert.ok(v51.indexOf("推荐给朋友") === -1 && v51.indexOf("「分享行程」") === -1, "v5.1 texts use the final names");
   assert.ok(tl.indexOf('title: "分享我的行程", text: "发给同行的人，订单号和座位会自动隐藏"') !== -1, "help sheet uses final names");
   assert.ok(html.indexOf('src="./recommend.js"') !== -1);
-  assert.ok(sw.indexOf('"./recommend.js"') !== -1 && sw.indexOf('"xingcheng-map-shell-v17"') !== -1);
-  assert.ok(["v5.1", "v5.2", "v5.3", "v5.4"].indexOf(v.APP_VERSION) !== -1);
+  assert.ok(sw.indexOf('"./recommend.js"') !== -1 && sw.indexOf('"xingcheng-map-shell-v18"') !== -1);
+  assert.ok(["v5.1", "v5.2", "v5.3", "v5.4", "v6", "v6.0"].indexOf(v.APP_VERSION) !== -1);
 });
 
 check("narrow top bar CSS: ≤360px brand 16px nowrap, icon-only buttons, 44px; help button keeps aria-label", function () {

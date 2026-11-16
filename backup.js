@@ -2,13 +2,23 @@
  * 导出 / 导入本地数据。
  * 「分享我的行程」会去掉确认号、座位及备注里的对应字样，且不含地理编码缓存。
  * 「完整备份」保留全部内容，仅供自己保存。
+ *
+ * 文件格式（v6 起 version: 2）：
+ *   { app: "行程地图", version: 2, kind: "share"|"full", exportedAt, trips: [...], places: [...],
+ *     activeTripId, examplesLoaded, legs, statuses, wishlistLoaded, geocodeCache?(只在完整备份) }
+ *   分享：places 只带分享出去的行程用到的地点，去掉收藏和去过；条目和地点的备注都去掉确认号 / 座位字样。
+ *   完整备份：整个地点库（含收藏、去过）。
+ *   行程上的 theme 字段原样带上（第 4 批：行程颜色跟着分享走；背景图以后要勾了才带）。
+ * 旧文件（version: 1，没有 places）照样能导入：条目导入后现连地点库。
  */
 (function (root) {
   "use strict";
 
   var LEG_KEY = "wishlist-map-legs-v1";
   var STATUS_KEY = "wishlist-map-status-v1";
-  var TRIP_KEY = "wishlist-map-trips-v1";
+  var TRIP_KEY = "wishlist-map-trips-v1"; /* v5.3 及以前；v6 起只读，用来搬家 */
+  var DATA_KEY = "wishlist-map-data-v2";
+  var FORMAT_VERSION = 2;
   var GEO_KEY = "wishlist-map-geocode-v1";
   var FLAG_KEY = "wishlist-map-examples-loaded-v1";
   var APP_PREFIX = "wishlist-map";
@@ -58,6 +68,13 @@
     var out = JSON.parse(JSON.stringify(payload || {}));
     out.kind = "share";
     delete out.geocodeCache;
+    var P = root.Places || (typeof require === "function" ? require("./places.js") : null);
+    if (Array.isArray(out.places) && P) {
+      out.places = P.forShare(out.places, out.trips || []).map(function (p) {
+        if (p.note) p.note = stripSecretPatterns(p.note);
+        return p;
+      });
+    }
     out.trips = (out.trips || []).map(function (trip) {
       var t = Object.assign({}, trip);
       t.items = (t.items || []).map(redactItem);
@@ -86,15 +103,16 @@
     opts = opts || {};
     var live = root.TripApp && typeof root.TripApp.exportState === "function" ? root.TripApp.exportState() : null;
     var wish = root.WishlistApp && typeof root.WishlistApp.exportState === "function" ? root.WishlistApp.exportState() : null;
+    var stored = live ? null : readJson(DATA_KEY, null) || readJson(TRIP_KEY, null);
     var payload = {
       app: "行程地图",
-      version: 1,
+      version: FORMAT_VERSION,
       exportedAt: new Date().toISOString(),
       trips: live && live.trips ? live.trips : (function () {
-        var stored = readJson(TRIP_KEY, null);
         if (stored && Array.isArray(stored.trips)) return stored.trips;
         return Array.isArray(stored) ? stored : [];
       })(),
+      places: live && live.places ? live.places : stored && Array.isArray(stored.places) ? stored.places : [],
       activeTripId: live && live.activeTripId ? live.activeTripId : "",
       examplesLoaded: live && typeof live.examplesLoaded === "boolean" ? live.examplesLoaded : readJson(FLAG_KEY, false),
       legs: live && live.legs ? live.legs : readJson(LEG_KEY, {}),
@@ -140,7 +158,10 @@
     return downloadShare();
   }
 
-  function applyBackup(payload, mode) {
+  /**
+   * opts.onConflict（v6）：{ 行程id: "overwrite" | "copy" }，合并时本机已有同一趟怎么办；没写 = 另存一份。
+   */
+  function applyBackup(payload, mode, opts) {
     if (!payload || payload.app !== "行程地图" || !payload.version) {
       if (!payload || !Array.isArray(payload.trips)) {
         throw new Error("这不是一份有效的 Free Your Trip 备份或分享文件。");
@@ -155,11 +176,13 @@
       root.TripApp.importState(
         {
           trips: incomingTrips,
+          places: Array.isArray(payload.places) ? payload.places : [],
           activeTripId: payload.activeTripId || "",
           examplesLoaded: !!payload.examplesLoaded,
           legs: incomingLegs
         },
-        mode
+        mode,
+        { onConflict: (opts && opts.onConflict) || {} }
       );
     }
     if (root.WishlistApp && typeof root.WishlistApp.importState === "function") {
@@ -203,6 +226,9 @@
     });
     return keys;
   }
+
+  /* v6：清空本机数据的确认（文案定稿 19:43） */
+  var CLEAR_LOCAL_COPY = { title: "手机上所有行程和地点都会删掉，删了找不回来", ok: "全部删掉", cancel: "取消" };
 
   function setupButtons() {
     var share = document.getElementById("backup-export-share") || document.getElementById("backup-export");
@@ -248,12 +274,24 @@
             if (!replace) return;
             mode = "replace";
           }
-          try {
-            applyBackup(data, mode);
-            alert(mode === "replace" ? "已用文件替换当前数据。" : "已将文件合并到当前数据。");
-          } catch (err) {
-            alert(err && err.message ? err.message : String(err));
+          var run = function (onConflict) {
+            try {
+              applyBackup(data, mode, { onConflict: onConflict || {} });
+              alert(mode === "replace" ? "已用文件替换当前数据。" : "已将文件合并到当前数据。");
+            } catch (err) {
+              alert(err && err.message ? err.message : String(err));
+            }
+          };
+          /* v6：合并时本机已有同一趟 → 先问 覆盖 / 另存一份 / 取消（取消 = 什么都不导入） */
+          var app = root.TripApp;
+          var clashes = mode === "merge" && app && app.tripConflicts && data && Array.isArray(data.trips) ? app.tripConflicts(data) : [];
+          if (clashes.length && app.askTripConflicts) {
+            app.askTripConflicts(clashes, function (answers) {
+              if (answers) run(answers);
+            });
+            return;
           }
+          run({});
         };
         reader.readAsText(f, "utf-8");
       });
@@ -266,14 +304,14 @@
         };
         if (window.TripApp && typeof window.TripApp.confirm === "function") {
           window.TripApp.confirm({
-            title: "确定清空本机全部数据吗？",
-            sub: "会删除这台手机上的全部行程和设置，清空后不可恢复。建议先备份（点“完整备份”导出文件）。",
-            okText: "全部清空",
+            title: CLEAR_LOCAL_COPY.title,
+            okText: CLEAR_LOCAL_COPY.ok,
+            cancelText: CLEAR_LOCAL_COPY.cancel,
             onOk: wipe
           });
           return;
         }
-        var ok = window.confirm("确定清空本机全部数据吗？清空后不可恢复。建议先备份（点“完整备份”导出文件）。");
+        var ok = window.confirm(CLEAR_LOCAL_COPY.title);
         if (!ok) return;
         wipe();
       });
@@ -281,7 +319,10 @@
   }
 
   var api = {
+    CLEAR_LOCAL_COPY: CLEAR_LOCAL_COPY,
     TRIP_KEY: TRIP_KEY,
+    DATA_KEY: DATA_KEY,
+    FORMAT_VERSION: FORMAT_VERSION,
     LEG_KEY: LEG_KEY,
     STATUS_KEY: STATUS_KEY,
     FLAG_KEY: FLAG_KEY,

@@ -5,9 +5,10 @@
 (function () {
   "use strict";
 
-  var TRIP_STORE = "wishlist-map-trips-v1";
+  /* v6：行程 + 地点库存在 TripStore.KEY（wishlist-map-data-v2），旧的 wishlist-map-trips-v1 只读，用来搬家。见 trip-store.js */
   var LEG_STORAGE_KEY = "wishlist-map-legs-v1";
   var trips = [];
+  var places = [];
   var activeTripId = null;
   var examplesLoaded = false;
   var demoMode = false;
@@ -129,6 +130,28 @@
     return n.getFullYear() + "-" + pad2(n.getMonth() + 1) + "-" + pad2(n.getDate());
   }
 
+  /* v6：火车 / 船 / 大巴（见 transport.js） */
+  function isTransit(item) {
+    return window.Transport ? Transport.isTransit(item) : !!item && item.type === "flight";
+  }
+  /** v6：机票、火车、船有固定时间，跟机票一样上锁、不能拖 */
+  function isFixedTime(item) {
+    return window.Transport ? Transport.isFixedTime(item) : !!item && item.type === "flight";
+  }
+  function isGround(item) {
+    return !!(window.Transport && Transport.isGround(item));
+  }
+  function formatGroundLocal(item) {
+    var offset = formatDayOffset(civilDayOffset(item.departDate, item.arriveDate));
+    var k = Transport.kind(item);
+    var no = item.number ? item.number + " " : "";
+    return no + (item.departTime ? item.departTime + " " : "") + (item.fromNameZh || k.fromFallback) + " → " +
+      (item.arriveTime ? item.arriveTime + offset + " " : "") + (item.nameZh || k.toFallback);
+  }
+  function formatTransitLocal(item) {
+    return isGround(item) ? formatGroundLocal(item) : formatFlightLocal(item);
+  }
+
   function formatFlightLocal(item) {
     var offset = formatDayOffset(civilDayOffset(item.departDate, item.arriveDate));
     var no = item.flightNo ? item.flightNo + " " : "";
@@ -147,34 +170,24 @@
     return trips[0] || emptyTrip();
   }
 
-  function loadAllTrips() {
-    try {
-      var raw = localStorage.getItem(TRIP_STORE);
-      if (raw) {
-        var parsed = JSON.parse(raw);
-        if (parsed && Array.isArray(parsed.trips)) return parsed;
-      }
-    } catch (err) {}
-    try {
-      var old = localStorage.getItem("wishlist-map-imported-trips-v1");
-      if (old) {
-        var list = JSON.parse(old);
-        if (Array.isArray(list) && list.length) {
-          return { trips: list, activeTripId: list[0].id, examplesLoaded: false };
-        }
-      }
-    } catch (err) {}
-    return null;
+  function loadAllTrips(opts) {
+    if (!window.TripStore) return null;
+    var res = TripStore.load(localStorage, { readOnly: !!(opts && opts.readOnly), today: todayIso() });
+    return res.state;
   }
 
   function saveAllTrips() {
-    if (demoMode) return;
-    try {
-      localStorage.setItem(
-        TRIP_STORE,
-        JSON.stringify({ trips: trips, activeTripId: activeTripId, examplesLoaded: examplesLoaded })
-      );
-    } catch (err) {}
+    if (demoMode || !window.TripStore) return;
+    /* 地点缺的坐标 / 城市，用后来补上位置的条目补齐（不覆盖） */
+    if (window.Places) {
+      trips.forEach(function (t) {
+        (t.items || []).forEach(function (it) {
+          var p = it && it.placeId ? Places.byId(places, it.placeId) : null;
+          if (p) Places.fillFromItem(p, it);
+        });
+      });
+    }
+    TripStore.save(localStorage, { trips: trips, places: places, activeTripId: activeTripId, examplesLoaded: examplesLoaded });
   }
 
   function uniqueItemIds(existing, incoming) {
@@ -327,7 +340,8 @@
   }
 
   function itemTimeLabel(item) {
-    if (item.type === "flight") {
+    if (isTransit(item)) {
+      if (!item.departTime && !item.arriveTime) return "";
       var offset = formatDayOffset(civilDayOffset(item.departDate, item.arriveDate));
       return (item.departTime || "") + " – " + (item.arriveTime || "") + offset;
     }
@@ -344,11 +358,12 @@
 
   function itemTitle(item) {
     if (item.type === "flight") return item.flightNo || "航班";
+    if (isGround(item)) return Transport.title(item);
     return item.nameZh || item.nameEn || "未命名";
   }
 
   function cardTarget(item) {
-    if (window.Legs && item.type === "flight") return Legs.endpointFor(item, "dest");
+    if (window.Legs && isTransit(item)) return Legs.endpointFor(item, "dest");
     return {
       id: item.id,
       name: item.nameZh || item.nameEn || "",
@@ -359,6 +374,8 @@
   }
 
   function itemUnlocated(item) {
+    /* v6：火车 / 船 / 大巴搜不到车站只留名字，不算「待补」 */
+    if (isGround(item)) return false;
     if (item.type === "flight") {
       return typeof item.fromLat !== "number" && typeof item.lat !== "number";
     }
@@ -399,7 +416,16 @@
     return formatMd(days[0]) + " – " + formatMd(days[days.length - 1]);
   }
 
+  var stripFocusDay = "";
+  var stripNeedScroll = false;
+  function rememberStripFocus(items) {
+    stripFocusDay = window.TripCalendar && TripCalendar.initialStripFocus
+      ? TripCalendar.initialStripFocus(items, todayIso())
+      : "";
+    stripNeedScroll = true;
+  }
   function defaultSelectedDay(items) {
+    rememberStripFocus(items);
     if (window.TripCalendar) return TripCalendar.defaultDay(items, todayIso());
     var days = tripDays(items);
     var today = todayIso();
@@ -464,7 +490,8 @@
     var segs = C.deriveSegments(items, today);
     var col = {};
     days.forEach(function (d, i) { col[d] = i + 2; });
-    var monthIso = selectedDay !== "all" && col[selectedDay] ? selectedDay : (col[today] ? today : days[0]);
+    var monthIso = selectedDay !== "all" && col[selectedDay] ? selectedDay
+      : (stripFocusDay && col[stripFocusDay] ? stripFocusDay : (col[today] ? today : days[0]));
     var hasToday = !!col[today];
     var segHtml = segs.map(function (sg, i) {
       var start = col[sg.start];
@@ -511,7 +538,13 @@
       segHtml + cells + "</div></div>" +
       (hasToday ? '<button type="button" class="cal-today" id="cal-today">今天</button>' : "") +
       "</div>";
-    scrollStripTo(selectedDay === "all" ? null : selectedDay, false);
+    var scrollIso = selectedDay !== "all" && col[selectedDay] ? selectedDay
+      : (stripFocusDay && col[stripFocusDay] ? stripFocusDay : null);
+    if (selectedDay !== "all") scrollStripTo(scrollIso, false);
+    else if (stripNeedScroll) {
+      scrollStripTo(scrollIso, false);
+      stripNeedScroll = false;
+    }
   }
 
   function scrollStripTo(iso, smooth) {
@@ -529,7 +562,7 @@
     selectedDay = iso || "all";
     if (fromUser) dayPickedByUser = !!(iso && iso !== "all");
     renderAll();
-    scrollStripTo(selectedDay === "all" ? null : selectedDay, true);
+    scrollStripTo(selectedDay !== "all" ? selectedDay : (stripFocusDay || null), true);
     if (currentView === "list") {
       var el = selectedDay === "all" ? $("timeline") : document.getElementById("day-" + selectedDay);
       if (el && el.scrollIntoView) el.scrollIntoView({ block: "start" });
@@ -803,8 +836,27 @@
     if (item.pendingKind === "hotel-reversed") {
       return "退房比入住还早：" + mmdd(item.pendingFrom) + " ~ " + mmdd(item.pendingTo) + "，点我改一下";
     }
-    if (item.pendingKind === "flight-reversed") return "落地比起飞早，日期对吗？";
+    if (item.pendingKind === "flight-reversed") return reversedQuestion(item);
+    if (item.pendingKind === "date-ambiguous" && item.pendingReason) return item.pendingReason;
     return item.dateRaw ? "这个时间看不懂：" + item.dateRaw + "，点我改一下" : "没写日期，点我改一下";
+  }
+
+  /** 机票「落地比起飞早，日期对吗？」；火车 / 船 / 大巴「到达比出发早，日期对吗？」 */
+  function reversedQuestion(item) {
+    return isGround(item) ? "到达比出发早，日期对吗？" : "落地比起飞早，日期对吗？";
+  }
+
+  /**
+   * v6：退房卡第二行「12:00 · 共 2 晚」。宽屏放不下时「· 共 X 晚」先藏起来；
+   * 360 窄屏改到第三行（12px #9AA6B2），不再丢掉，也不被「带我去」挡住。
+   */
+  var TZ_NOTE = "当地时间";
+  function checkoutTimeHtml(label) {
+    var i = String(label).indexOf(" · ");
+    var when = i === -1 ? label : label.slice(0, i);
+    var nights = i === -1 ? "" : label.slice(i + 3);
+    return '<span class="card-time card-checkout-time"><span class="co-when">' + escapeHtml(when) + "</span>" +
+      (nights ? '<span class="co-dot">· </span><span class="co-nights">' + escapeHtml(nights) + "</span>" : "") + "</span>";
   }
 
   function isPendingItem(item) {
@@ -819,8 +871,17 @@
   function locArrowSvg() {
     return '<svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true"><path d="M4.2 11.2l15.3-6.7-6.7 15.3-2-7z"/></svg>';
   }
-  function flightLockSvg() {
-    return '<span class="flight-lock" title="有固定时间，不能拖" aria-label="有固定时间，不能拖"><svg viewBox="0 0 14 14" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6.2" width="8" height="6.2" rx="1.2"/><path d="M5 6.2V4.6a2 2 0 0 1 4 0v1.6"/></svg></span>';
+  /* v6：不能拖的两种说法 —— 机票 / 火车 / 船按固定时间；酒店入住、退房两张卡跟着入住日期走 */
+  var LOCK_COPY = { fixed: "有固定时间，不能拖", hotel: "跟着入住日期走，不能拖" };
+  function lockReason(item) {
+    if (!item) return "";
+    if (item.type === "hotel" || (window.Legs && Legs.isCheckoutView && Legs.isCheckoutView(item))) return LOCK_COPY.hotel;
+    if (isFixedTime(item)) return LOCK_COPY.fixed;
+    return "";
+  }
+  function flightLockSvg(text) {
+    text = text || LOCK_COPY.fixed;
+    return '<span class="flight-lock" title="' + text + '" aria-label="' + text + '"><svg viewBox="0 0 14 14" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6.2" width="8" height="6.2" rx="1.2"/><path d="M5 6.2V4.6a2 2 0 0 1 4 0v1.6"/></svg></span>';
   }
   function cardGoHref(item) {
     var dest = cardTarget(item);
@@ -830,7 +891,8 @@
     return links.href || links.google || "";
   }
   function cardGoBtnHtml(item) {
-    if (!item || item.type === "flight") return "";
+    /* v6：火车 / 船 / 大巴跟机票一样不放导航（isTransit） */
+    if (!item || isTransit(item)) return "";
     var href = cardGoHref(item);
     if (!href) return "";
     return (
@@ -840,7 +902,7 @@
   }
   /** 展开后只放「看位置」或「补上地址 ›」，不要「带我去」。 */
   function cardLookHtml(item) {
-    if (!item || item.type === "flight") return "";
+    if (!item || isTransit(item)) return "";
     var plan = navPlan(null, cardTarget(item));
     if (plan.state === "noaddr") {
       if (item.id) {
@@ -862,7 +924,7 @@
       : "";
     var open = expanded[item.id] ? " is-open" : "";
     var extra = [];
-    var needsAddr = item.type !== "flight" && itemUnlocated(item);
+    var needsAddr = !isTransit(item) && itemUnlocated(item);
     /* v5.3：待补的卡片，地址那一行换成「是这里吗？」候选 */
     if (needsAddr) extra.push(candBoxHtml(item));
     else if (item.address) extra.push("<p>" + escapeHtml(item.address) + "</p>");
@@ -872,10 +934,10 @@
     if (item.checkIn && item.checkOut) {
       extra.push("<p>入住 " + escapeHtml(item.checkIn) + "，退房 " + escapeHtml(item.checkOut) + "</p>");
     }
-    if (item.type === "flight") extra.push("<p>" + escapeHtml(formatFlightLocal(item)) + "</p>");
+    if (isTransit(item)) extra.push("<p>" + escapeHtml(formatTransitLocal(item)) + "</p>");
     if (item.type === "flight" && flightPairs[item.id] && flightPairs[item.id].otherDate) {
       var pairInfo = flightPairs[item.id];
-      extra.push("<p>" + (pairInfo.role === "out" ? "回程 " : "去程 ") + escapeHtml(formatMd(pairInfo.otherDate)) + "</p>");
+      extra.push("<p>" + (pairInfo.role === "out" ? "返程 " : "去程 ") + escapeHtml(formatMd(pairInfo.otherDate)) + "</p>");
     }
     if (itemUnlocated(item) && !needsAddr) {
       extra.push(
@@ -892,9 +954,12 @@
       tagHtml = '<span class="leg-tag">' + escapeHtml(flightPairs[item.id].label) + "</span>";
     }
     var timeLabel = itemTimeLabel(item);
+    var lockText = lockReason(item);
     var metaMain = tagHtml +
-      (timeLabel ? '<span class="card-time' + (isCheckout ? " card-checkout-time" : "") + '">' + escapeHtml(timeLabel) + "</span>" : "") +
-      (item.type === "flight" || isCheckout ? flightLockSvg() : "");
+      (timeLabel ? (isCheckout ? checkoutTimeHtml(timeLabel) : '<span class="card-time">' + escapeHtml(timeLabel) + "</span>") : "") +
+      /* v6：机票、火车、船的时间都是各自当地时间，旁边小字注明 */
+      (timeLabel && isFixedTime(item) ? '<span class="tz-note">' + TZ_NOTE + "</span>" : "") +
+      (lockText ? flightLockSvg(lockText) : "");
     var goBtn = cardGoBtnHtml(item);
     var metaHtml = "";
     if (!pendingLine && (metaMain || goBtn)) {
@@ -902,10 +967,19 @@
     }
     if (item.pendingKind === "flight-reversed") {
       pendingLine =
-        '<div class="pending-ask"><p class="pending-ask-q">落地比起飞早，日期对吗？</p>' +
+        '<div class="pending-ask"><p class="pending-ask-q">' + escapeHtml(reversedQuestion(item)) + "</p>" +
         '<div class="pending-ask-btns">' +
         '<button type="button" class="pending-ask-ok" data-flight-ok="' + escapeHtml(item.id) + '">对的</button>' +
         '<button type="button" class="pending-ask-edit" data-flight-edit="' + escapeHtml(item.id) + '">改日期</button>' +
+        "</div></div>";
+    } else if (item.pendingKind === "date-ambiguous" && item.pendingChoices && item.pendingChoices.length === 2) {
+      /* v6：「是12月4日还是4月12日？」两个按钮各是一种读法，不替用户猜 */
+      pendingLine =
+        '<div class="pending-ask"><p class="pending-ask-q">' + escapeHtml(pendingText(item)) + "</p>" +
+        '<div class="pending-ask-btns">' +
+        item.pendingChoices.map(function (c, k) {
+          return '<button type="button" class="' + (k === 0 ? "pending-ask-ok" : "pending-ask-edit") + '" data-date-choice="' + escapeHtml(item.id) + '" data-choice="' + k + '">' + escapeHtml(c.label) + "</button>";
+        }).join("") +
         "</div></div>";
     }
     var tipHtml = item.id && item.id === dragTipItemId
@@ -1014,6 +1088,65 @@
     return null;
   }
 
+  var EMPTY_TRIP_COPY = { title: "这趟还是空的", hint: "点『＋ 添加』，加这趟的第一个地方" };
+
+  /* v6：「全部」最下面一组，放还没定日期的（不是待补；待补在最上面单独一块） */
+  var UNDATED_KEY = "未标明日期";
+  var UNDATED_TITLE = "还没定哪天";
+  /** 卡片之间不放路线胶囊；空的时候藏起来，拖动时才露出来当落点 */
+  function undatedBlockHtml(g) {
+    var items = (g && g.items) || [];
+    var out = '<section class="day-block undated-block' + (items.length ? "" : " is-empty") + '" id="day-undated" data-drop-day="">';
+    out += '<h3 class="day-subhead">' + UNDATED_TITLE + "</h3>";
+    out += '<div class="day-rail">';
+    items.forEach(function (item) { out += cardHtml(item, null); });
+    out += "</div></section>";
+    return out;
+  }
+  /** 有没有日期定死的条目（酒店、机票、火车、船、大巴）：有才用日程表样式 */
+  var ANCHOR_TYPES = ["hotel", "flight", "train", "boat", "bus"];
+  function hasAnchorItems(items) {
+    return (items || []).some(function (it) {
+      return it && ANCHOR_TYPES.indexOf(it.type) !== -1 && !isPendingItem(it) && !!(window.Legs && Legs.itemDisplayDate(it));
+    });
+  }
+
+  /**
+   * 第一天到最后一天之间没有安排的日子补成空组（只给「全部」用；不改数据）。
+   * 范围：机票 / 火车 / 船 / 大巴 / 酒店最早的出发 / 入住到最晚的到达 / 退房；别的有日期的条目在外面就再放宽。
+   */
+  function fillEmptyDays(groups, rawItems) {
+    var dated = groups.filter(function (g) { return g.date !== UNDATED_KEY; });
+    var rest = groups.filter(function (g) { return g.date === UNDATED_KEY; });
+    if (!dated.length || !window.ItemEdit || !ItemEdit.shiftIso) return groups;
+    var byDate = {};
+    dated.forEach(function (g) { byDate[g.date] = g; });
+    var out = [];
+    var d = dated[0].date;
+    var last = dated[dated.length - 1].date;
+    (rawItems || []).forEach(function (it) {
+      if (!it || isPendingItem(it) || ANCHOR_TYPES.indexOf(it.type) === -1) return;
+      var end = it.type === "hotel" ? it.checkOut : it.arriveDate;
+      if (/^\d{4}-\d{2}-\d{2}$/.test(end || "") && end > last && end <= ItemEdit.shiftIso(last, 60)) last = end;
+    });
+    var guard = 0;
+    while (d && d <= last && guard < 400) {
+      out.push(byDate[d] || { date: d, header: Legs.formatDayHeader(d), items: [] });
+      d = ItemEdit.shiftIso(d, 1);
+      guard += 1;
+    }
+    return out.concat(rest);
+  }
+
+  /** 日期小标题吸在日期条下面：量一下顶栏 + 日期条的高度 */
+  function syncStickyOffset() {
+    var chips = $("day-chips");
+    if (!chips) return;
+    /* 日期条自己是 sticky（top = 顶栏高度），小标题吸在它下面 */
+    var top = parseFloat(getComputedStyle(chips).top) || 0;
+    var h = top + chips.offsetHeight;
+    try { document.documentElement.style.setProperty("--subhead-top", h + "px"); } catch (err) {}
+  }
   function renderList() {
     updateFixBanner();
     var root = $("timeline");
@@ -1022,7 +1155,8 @@
     var items = (trip && trip.items) || [];
     updateListHead(items);
     if (!items.length) {
-      root.innerHTML = '<div class="empty-state">点＋添加你的第一个地方</div>';
+      /* v6：空的这一趟（新建的、清空过的） */
+      root.innerHTML = '<div class="empty-state"><strong>' + EMPTY_TRIP_COPY.title + "</strong><p>" + EMPTY_TRIP_COPY.hint + "</p></div>";
       return;
     }
     var pending = items.filter(isPendingItem);
@@ -1049,7 +1183,7 @@
     if (!dragTipSeen()) {
       var ti;
       for (ti = 0; ti < all.length; ti++) {
-        if (all[ti] && all[ti].type !== "flight" && !(window.Legs && Legs.isCheckoutView && Legs.isCheckoutView(all[ti]))) {
+        if (all[ti] && !lockReason(all[ti])) {
           dragTipItemId = all[ti].id;
           break;
         }
@@ -1064,9 +1198,27 @@
       });
       html += "</section>";
     }
+    /*
+     * v6（日程表样式）：「全部」里有酒店 / 机票 / 火车 / 船（日期定死的）时，从第一天到最后一天每天一条日期带，
+     * 没安排的日子留一块空白当落点，最下面是「还没定哪天」。一个都没有就还是原来的普通列表。
+     */
+    var agenda = selectedDay === "all" && hasAnchorItems(datedRaw);
+    var showAll = agenda;
+    var undatedGroup = null;
+    if (agenda) groups = fillEmptyDays(groups, datedRaw);
     groups.forEach(function (g) {
       if (selectedDay !== "all" && g.date !== selectedDay) return;
-      html += '<section class="day-block" id="day-' + escapeHtml(g.date) + '">';
+      /* v6：没日期的放到最下面的「还没定哪天」（只在「全部」里出现） */
+      if (agenda && g.date === UNDATED_KEY) {
+        undatedGroup = g;
+        return;
+      }
+      html += '<section class="day-block" id="day-' + escapeHtml(g.date) + '" data-drop-day="' + escapeHtml(g.date) + '">';
+      if (showAll) html += '<h3 class="day-subhead">' + escapeHtml(g.header || formatMd(g.date)) + "</h3>";
+      if (!g.items.length) {
+        html += '<div class="day-rail day-empty"></div></section>';
+        return;
+      }
       html += '<div class="day-rail">';
       g.items.forEach(function (item, i) {
         html += cardHtml(item, i === 0 ? null : connectorInto(connectors, item.id));
@@ -1092,7 +1244,9 @@
       if (window.Legs && Legs.trailingHotelPill) html += legPillHtml(Legs.trailingHotelPill(g.items, datedRaw, g.date));
       html += "</div></section>";
     });
+    if (showAll) html += undatedBlockHtml(undatedGroup);
     root.innerHTML = html;
+    syncStickyOffset();
     bindSecretToggles(root);
     bindListEvents(root);
   }
@@ -1101,7 +1255,7 @@
     var count = $("list-count");
     var btn = $("clear-all-btn");
     var n = (items || []).length;
-    if (count) count.textContent = n ? "共 " + n + " 项" : "还没有行程";
+    if (count) count.textContent = n ? "共 " + n + " 项" : "";
     if (btn) {
       btn.disabled = !n;
       btn.setAttribute("aria-disabled", n ? "false" : "true");
@@ -1144,6 +1298,13 @@
         acceptFlightDates(flightOk.getAttribute("data-flight-ok"));
         return;
       }
+      var dateChoice = ev.target.closest && ev.target.closest("[data-date-choice]");
+      if (dateChoice) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        chooseImportDate(dateChoice.getAttribute("data-date-choice"), Number(dateChoice.getAttribute("data-choice")));
+        return;
+      }
       var flightEdit = ev.target.closest && ev.target.closest("[data-flight-edit]");
       if (flightEdit) {
         ev.preventDefault();
@@ -1160,11 +1321,11 @@
         renderList();
         /* 展开没坐标的卡片：如果定位权限早就允许过，悄悄取一次位置（不弹窗），拿到后自动选好一个地图 */
         var eit = findItem(eid);
-        if (expanded[eid] && eit && eit.type !== "flight" && itemUnlocated(eit) && !hereInMemory() && window.LocateMe && LocateMe.warmIfGranted) {
+        if (expanded[eid] && eit && !isTransit(eit) && itemUnlocated(eit) && !hereInMemory() && window.LocateMe && LocateMe.warmIfGranted) {
           LocateMe.warmIfGranted(renderList);
         }
         /* v5.3：展开待补的卡片 → 后台找候选（已经找过就直接用内存里的） */
-        if (expanded[eid] && eit && eit.type !== "flight" && itemUnlocated(eit)) queueCandidates(eit);
+        if (expanded[eid] && eit && !isTransit(eit) && itemUnlocated(eit)) queueCandidates(eit);
         return;
       }
       var fcRow = ev.target.closest && ev.target.closest("[data-fc-item]");
@@ -1249,6 +1410,18 @@
     renderAll();
   }
 
+  /** v6：导入时月日分不清，用户点了一种读法 */
+  function chooseImportDate(id, index) {
+    var item = findItem(id);
+    if (!item || !window.ImportUtil || !ImportUtil.applyDateChoice) return;
+    var next = ImportUtil.applyDateChoice(item, index);
+    if (next === item) return;
+    var trip = currentTrip();
+    trip.items = ItemEdit.updateItem(trip.items || [], id, next);
+    saveAllTrips();
+    renderAll();
+  }
+
   var dragSuppressClick = false;
   var dragTimer = null;
   var dragState = null;
@@ -1276,6 +1449,16 @@
       if (dragState && dragState.dragging) ev.preventDefault();
     };
     root.addEventListener("touchmove", moveGuard, { passive: false });
+    /* v6：长按卡片不出系统的选字 / 菜单（输入框里照旧），免得把拖动打断 */
+    var noNative = function (ev) {
+      var t = ev.target;
+      if (t && t.nodeType === 3) t = t.parentElement;
+      if (!t || !t.closest) return;
+      if (t.closest("input, textarea, select, [contenteditable]")) return;
+      if (t.closest(".card")) ev.preventDefault();
+    };
+    root.addEventListener("contextmenu", noNative);
+    root.addEventListener("selectstart", noNative);
 
     root.addEventListener("pointerdown", function (ev) {
       if (ev.button != null && ev.button !== 0) return;
@@ -1318,13 +1501,14 @@
         dragTimer = null;
         cleanupEarly();
         if (cancelled) return;
-        if (item.type === "flight" || cardIsCheckout) {
+        var locked = cardIsCheckout ? LOCK_COPY.hotel : lockReason(item);
+        if (locked) {
           dragSuppressClick = true;
           card.classList.remove("is-shake");
           void card.offsetWidth;
           card.classList.add("is-shake");
           setTimeout(function () { card.classList.remove("is-shake"); }, 400);
-          showToast("有固定时间，不能拖", null, 2500);
+          showToast(locked, null, 2500);
           return;
         }
         startCardDrag(card, item, rail, startX, startY, pointerId);
@@ -1332,12 +1516,36 @@
     });
   }
 
+  /**
+   * v6：拖动可以跨天。落点是 #timeline 里每一块 .day-block[data-drop-day]（单日视图只有这一天；
+   * 「全部」的日程表样式里每天一块，没安排的日子是一块空白，最下面「还没定哪天」）。
+   * 拖到哪一块上那块变浅绿；放下：同一天 = 换顺序（v5.4），别的日子 = 改日期，不弹「放哪天？」。
+   * 触摸时浏览器可能发 pointercancel（以为要滚动），这时改听 touchmove / touchend 接着拖，不中断。
+   */
+  function dragBlocks() {
+    var root = $("timeline");
+    if (!root) return [];
+    return Array.prototype.slice.call(root.querySelectorAll(".day-block[data-drop-day]")).map(function (el) {
+      return {
+        el: el,
+        day: el.getAttribute("data-drop-day") || "",
+        rail: el.querySelector(".day-rail"),
+        cards: Array.prototype.slice.call(el.querySelectorAll(".day-rail .card"))
+      };
+    });
+  }
+
   function startCardDrag(card, item, rail, startX, startY, pointerId) {
     dismissDragTip();
     vibrateBrief();
-    var cards = Array.prototype.slice.call(rail.querySelectorAll(".card"));
-    var ids = cards.map(function (c) { return c.getAttribute("data-item"); });
-    var day = (window.Legs && Legs.itemDisplayDate(item)) || "";
+    var root = $("timeline");
+    if (root) root.classList.add("is-dragging-any");
+    var blocks = dragBlocks();
+    var home = blocks.filter(function (b) { return b.el.contains(card); })[0];
+    if (!home) {
+      if (root) root.classList.remove("is-dragging-any");
+      return;
+    }
     var rect = card.getBoundingClientRect();
     var clone = card.cloneNode(true);
     clone.classList.add("is-drag-clone", "is-lifting");
@@ -1349,63 +1557,129 @@
     var line = document.createElement("div");
     line.className = "drop-line";
     line.setAttribute("aria-hidden", "true");
-    var insertAt = ids.indexOf(item.id);
     dragState = {
       dragging: true,
       id: item.id,
-      day: day,
-      ids: ids,
-      cards: cards,
+      day: home.day,
+      ids: home.cards.map(function (c) { return c.getAttribute("data-item"); }),
+      blocks: blocks,
+      home: home,
+      target: home,
       rail: rail,
       clone: clone,
       source: card,
       line: line,
-      insertAt: insertAt,
+      insertAt: home.cards.indexOf(card),
       offsetX: startX - rect.left,
       offsetY: startY - rect.top,
-      pointerId: pointerId
+      pointerId: pointerId,
+      lastX: startX,
+      lastY: startY,
+      pointerLost: false,
+      scrollTimer: null
     };
     try { card.setPointerCapture && card.setPointerCapture(pointerId); } catch (err) {}
-    rail.classList.add("is-dragging");
-    placeDropLine(insertAt);
+    blocks.forEach(function (b) { if (b.rail) b.rail.classList.add("is-dragging"); });
+    placeDropLine(home, dragState.insertAt);
     window.addEventListener("pointermove", onDragMove, true);
     window.addEventListener("pointerup", onDragEnd, true);
-    window.addEventListener("pointercancel", onDragEnd, true);
+    window.addEventListener("pointercancel", onPointerLost, true);
+    window.addEventListener("touchmove", onDragTouchMove, { capture: true, passive: false });
+    window.addEventListener("touchend", onDragTouchEnd, true);
+    window.addEventListener("touchcancel", onDragTouchEnd, true);
+    dragState.scrollTimer = setInterval(dragAutoScroll, 30);
   }
 
-  function placeDropLine(index) {
+  function placeDropLine(block, index) {
     var st = dragState;
-    if (!st) return;
+    if (!st || !block) return;
     var line = st.line;
     if (line.parentNode) line.parentNode.removeChild(line);
-    var others = st.cards.filter(function (c) { return c.getAttribute("data-item") !== st.id; });
-    if (index < 0) index = others.length;
-    if (index >= others.length) {
-      var last = others[others.length - 1] || st.source;
+    var others = block.cards.filter(function (c) { return c !== st.source; });
+    if (index < 0 || index > others.length) index = others.length;
+    if (!others.length) {
+      if (block.rail) block.rail.appendChild(line);
+    } else if (index >= others.length) {
+      var last = others[others.length - 1];
       last.parentNode.insertBefore(line, last.nextSibling);
     } else {
       others[index].parentNode.insertBefore(line, others[index]);
     }
+    st.blocks.forEach(function (b) { b.el.classList.toggle("is-drop-target", b === block); });
+    st.target = block;
     st.insertAt = index;
   }
 
-  function onDragMove(ev) {
+  /** 手指 / 鼠标在 (x, y)：找落在哪一天、排第几 */
+  function dragMoveTo(x, y) {
     var st = dragState;
     if (!st || !st.dragging) return;
-    ev.preventDefault();
-    st.clone.style.left = ev.clientX - st.offsetX + "px";
-    st.clone.style.top = ev.clientY - st.offsetY + "px";
-    var others = st.cards.filter(function (c) { return c.getAttribute("data-item") !== st.id; });
+    st.lastX = x;
+    st.lastY = y;
+    st.clone.style.left = x - st.offsetX + "px";
+    st.clone.style.top = y - st.offsetY + "px";
+    var best = null;
+    var bestDist = Infinity;
+    st.blocks.forEach(function (b) {
+      var r = b.el.getBoundingClientRect();
+      if (!r.height) return;
+      var dist = y < r.top ? r.top - y : y > r.bottom ? y - r.bottom : 0;
+      if (dist < bestDist) {
+        bestDist = dist;
+        best = b;
+      }
+    });
+    if (!best) return;
+    var others = best.cards.filter(function (c) { return c !== st.source; });
     var idx = others.length;
-    var i, r;
+    var i, r2;
     for (i = 0; i < others.length; i++) {
-      r = others[i].getBoundingClientRect();
-      if (ev.clientY < r.top + r.height / 2) {
+      r2 = others[i].getBoundingClientRect();
+      if (y < r2.top + r2.height / 2) {
         idx = i;
         break;
       }
     }
-    if (idx !== st.insertAt) placeDropLine(idx);
+    if (best !== st.target || idx !== st.insertAt) placeDropLine(best, idx);
+  }
+
+  function onDragMove(ev) {
+    var st = dragState;
+    if (!st || !st.dragging || st.pointerLost) return;
+    ev.preventDefault();
+    dragMoveTo(ev.clientX, ev.clientY);
+  }
+
+  /** 浏览器把这次触摸交给了滚动 / 系统手势：不结束拖动，改听 touch 事件 */
+  function onPointerLost() {
+    if (dragState && dragState.dragging) dragState.pointerLost = true;
+  }
+  function onDragTouchMove(ev) {
+    var st = dragState;
+    if (!st || !st.dragging) return;
+    ev.preventDefault();
+    var t = ev.touches && ev.touches[0];
+    if (st.pointerLost && t) dragMoveTo(t.clientX, t.clientY);
+  }
+  function onDragTouchEnd(ev) {
+    var st = dragState;
+    if (!st || !st.dragging || !st.pointerLost) return;
+    onDragEnd(ev);
+  }
+
+  /** 拖到屏幕上下边缘时自动滚一点，好拖到看不见的日子 */
+  function dragAutoScroll() {
+    var st = dragState;
+    if (!st || !st.dragging) return;
+    var topEdge = 0;
+    var chips = $("day-chips");
+    if (chips) topEdge = chips.getBoundingClientRect().bottom;
+    var step = 0;
+    if (st.lastY < topEdge + 48) step = -12;
+    else if (st.lastY > window.innerHeight - 64) step = 12;
+    if (!step) return;
+    window.scrollBy(0, step);
+    dragMoveTo(st.lastX, st.lastY);
   }
 
   function endDragVisuals() {
@@ -1413,33 +1687,67 @@
     if (!st) return;
     window.removeEventListener("pointermove", onDragMove, true);
     window.removeEventListener("pointerup", onDragEnd, true);
-    window.removeEventListener("pointercancel", onDragEnd, true);
+    window.removeEventListener("pointercancel", onPointerLost, true);
+    window.removeEventListener("touchmove", onDragTouchMove, { capture: true, passive: false });
+    window.removeEventListener("touchend", onDragTouchEnd, true);
+    window.removeEventListener("touchcancel", onDragTouchEnd, true);
+    if (st.scrollTimer) clearInterval(st.scrollTimer);
     if (st.clone && st.clone.parentNode) st.clone.parentNode.removeChild(st.clone);
     if (st.line && st.line.parentNode) st.line.parentNode.removeChild(st.line);
     if (st.source) st.source.classList.remove("is-drag-source", "is-lifting");
-    if (st.rail) st.rail.classList.remove("is-dragging");
+    (st.blocks || []).forEach(function (b) {
+      b.el.classList.remove("is-drop-target");
+      if (b.rail) b.rail.classList.remove("is-dragging");
+    });
+    var root = $("timeline");
+    if (root) root.classList.remove("is-dragging-any");
   }
 
   function onDragEnd(ev) {
     var st = dragState;
     if (!st || !st.dragging) return;
-    ev.preventDefault();
-    ev.stopPropagation();
+    if (ev && ev.cancelable) ev.preventDefault();
+    if (ev) ev.stopPropagation();
     dragSuppressClick = true;
     setTimeout(function () { dragSuppressClick = false; }, 400);
-    var fromIds = st.ids.slice();
+    var target = st.target || st.home;
     var insertAt = st.insertAt;
     var moving = st.id;
-    var day = st.day;
+    var fromDay = st.day;
+    var fromIds = st.ids.slice();
     endDragVisuals();
     dragState = null;
-    var newIds = fromIds.filter(function (id) { return id !== moving; });
-    if (insertAt < 0) insertAt = newIds.length;
-    if (insertAt > newIds.length) insertAt = newIds.length;
+    var newIds = target.cards.map(function (c) { return c.getAttribute("data-item"); }).filter(function (id) { return id !== moving; });
+    if (insertAt < 0 || insertAt > newIds.length) insertAt = newIds.length;
     newIds.splice(insertAt, 0, moving);
-    var same = newIds.length === fromIds.length && newIds.every(function (id, i) { return id === fromIds[i]; });
-    if (same) return;
-    applyReorder(day, newIds, moving);
+    if (target.day === fromDay) {
+      var same = newIds.length === fromIds.length && newIds.every(function (id, i) { return id === fromIds[i]; });
+      if (same) return;
+      applyReorder(fromDay, newIds, moving);
+      return;
+    }
+    moveItemToDay(moving, target.day, newIds);
+  }
+
+  /** 拖到别的日子（或「还没定哪天」）：改日期，按落点排好；底部「已移到 11月17日」+ 撤销 5 秒 */
+  var MOVE_COPY = { moved: "已移到 ", undated: "已放进『还没定哪天』" };
+  function moveItemToDay(id, day, orderedIds) {
+    var trip = currentTrip();
+    var item = findItem(id);
+    if (!item || !window.ItemEdit || !ItemEdit.moveToDay) return;
+    var next = ItemEdit.moveToDay(item, day);
+    if (next === item) return;
+    var snapshot = snapshotItems();
+    trip.items = ItemEdit.updateItem(trip.items || [], id, next);
+    if (window.Legs && Legs.applyDayOrder) Legs.applyDayOrder(trip.items, day, orderedIds);
+    saveAllTrips();
+    renderAll();
+    showToast(day ? MOVE_COPY.moved + formatMd(day) : MOVE_COPY.undated, function () {
+      var t = currentTrip();
+      t.items = snapshot;
+      saveAllTrips();
+      renderAll();
+    }, 5000);
   }
 
   function snapshotItems() {
@@ -1613,9 +1921,9 @@
       title: "新手先看这 3 条",
       cards: [
         /* 第 1 层：广告文案宣传大师定稿 */
-        { key: "add", title: "添加", text: "点「＋ 添加」，选加机票、酒店还是地点，搜到后点一下就加好了" },
+        { key: "add", title: "添加", text: "点『＋ 添加』，选加机票、酒店还是地点，搜到后点一下就加好了" },
         { key: "ai", title: "截图交给 AI", text: "机票、酒店截图丢给任意 AI，自动整理成行程" },
-        { key: "map", title: "带我去", text: "卡片右边的『带我去』，从你现在的位置出发；两站中间的『路线』，从上一站去下一站", line: "长按卡片，拖动换顺序" }
+        { key: "map", title: "带我去", text: "卡片右边的『带我去』，从你现在的位置出发；两站中间的『路线』，从上一站去下一站", line: "长按卡片拖动，能换顺序，也能拖到别的日子" }
       ]
     },
     /* 第 2、3 层：广告文案宣传大师定稿（v5.2）。每条都对过代码：分享会去掉确认号 / 座位；按钮名「完整备份」「导入」「清空本机数据」；地图按钮在顶部、定位按钮在地图右下角；没有账号。 */
@@ -1635,10 +1943,10 @@
     faq: {
       title: "需要时再看",
       items: [
-        { q: "换手机", a: "在设置里点「完整备份」，到新手机上点「导入」" },
+        { q: "换手机", a: "在设置里点『完整备份』，到新手机上点『导入』" },
         { q: "更新", a: "看到的还是旧版，就把网页彻底关掉再打开" },
         { q: "隐私", a: "行程只存在你手机里，没有账号，我们看不到。搜索和导航时，地名、地址和大概位置会发给地图服务" },
-        { q: "清空", a: "在设置里点「清空本机数据」，会删掉所有行程" }
+        { q: "清空", a: "在使用说明最下面点『清空本机数据』，会删掉所有行程" }
       ]
     }
   };
@@ -1657,6 +1965,9 @@
   function renderHelpBody() {
     var box = $("help-body");
     if (!box) return;
+    /* v6：「清空本机数据」放在使用说明最下面（内容区里，滚到底才看到）；先拿出来，重画后放回最后 */
+    var danger = document.querySelector(".help-danger");
+    if (danger && danger.parentNode) danger.parentNode.removeChild(danger);
     var T = HELP_TIERS;
     var cards = T.starter.cards.map(function (c, i) {
       return (
@@ -1688,6 +1999,7 @@
       '<div class="help-grid">' + grid + "</div>" +
       '<div class="help-tile-detail" id="help-tile-detail" hidden></div></section>' +
       '<section class="help-tier help-tier-3"><h3>' + escapeHtml(T.faq.title) + "</h3>" + faq + "</section>";
+    if (danger) box.appendChild(danger);
     var strip = $("help-cards");
     if (strip) {
       strip.addEventListener("scroll", function () {
@@ -1796,7 +2108,7 @@
   function decorateCopyBtn() {
     var btn = $("ai-copy-btn");
     if (!btn) return;
-    var label = btn.getAttribute("data-label") || "复制给 AI 的话";
+    var label = btn.getAttribute("data-label") || AI_WIZARD_COPY.copyBtn;
     if (btn.classList.contains("is-copied")) return;
     btn.innerHTML = ico("copy") + "<span>" + escapeHtml(label) + "</span>";
   }
@@ -1848,7 +2160,11 @@
     hotelPlaceholder: "输入酒店名，或粘贴地址",
     hotelTitle: "加酒店",
     back: "返回「添加什么？」",
-    mapLink: "找不到？在地图上选 ›",
+    /* v6：「找不到？在地图上选」和「手动填地址」合成一行，点开再选（文案定稿 19:43） */
+    fallback: "找不到？换个方式加 ›",
+    fallbackTitle: "找不到？换个方式加",
+    fallbackMap: "在地图上选",
+    fallbackManual: "手动填地址",
     mapHotelName: "未命名酒店",
     placePlaceholder: "输入店名，或粘贴地址"
   };
@@ -1995,7 +2311,7 @@
     var sheet = $("add-sheet");
     if (sheet) sheet.classList.toggle("is-hotel", hotelMode);
     if ($("add-sheet-back")) $("add-sheet-back").hidden = !hotelMode;
-    if ($("add-map-link")) $("add-map-link").hidden = !hotelMode;
+    syncAddFallback();
     var title = $("add-sheet-title");
     if (title && !editingId && !fixingId) title.textContent = hotelMode ? ADD_MENU_COPY.hotelTitle : "添加";
   }
@@ -2003,13 +2319,16 @@
   var AI_WIZARD_COPY = {
     bigSub: "截图交给 AI，自动排好行程",
     title: "截图交给 AI，自动排好行程",
-    step1: "点「复制给 AI 的话」，复制完按钮显示「已复制 ✓」",
+    /* v6：一个按钮「给 AI 的话」先打开全文，下面「复制」（文案定稿） */
+    step1: "点『给 AI 的话』看一眼，再点下面的『复制』",
+    promptBtn: "给 AI 的话",
+    copyBtn: "复制",
     copied: "已复制 ✓",
     step2: "打开你常用的 AI（豆包、Kimi、DeepSeek、ChatGPT 都行），先粘贴，再把截图发过去",
     /* v5.3 定稿：步骤 2 下面的小字 */
     step2Small: "不会截图？同时按侧边键和音量加键",
     privacy: "发截图前，把护照号、银行卡、手机号裁掉或涂掉",
-    step3: "把 AI 的回复整段复制，回来点「粘贴并导入」",
+    step3: "把 AI 的回复整段复制，回来点『粘贴并导入』",
     step3Small: "手机弹出「粘贴」或「允许」时，再点一下就行",
     pasteBtn: "粘贴并导入",
     fallbackHint: "长按这里，选『粘贴』，再点『添加』",
@@ -2017,6 +2336,15 @@
   };
   var aiStep = 1;
   var aiLeftPage = false;
+
+  /** v6：打开 / 收起「给 AI 的话」全文（下面是「复制」） */
+  function showAiPrompt(on) {
+    var box = $("ai-prompt-box");
+    if (!box) return;
+    if (on && $("ai-prompt-view")) $("ai-prompt-view").textContent = aiPromptText();
+    box.hidden = !on;
+    if ($("ai-prompt-open")) $("ai-prompt-open").setAttribute("aria-expanded", on ? "true" : "false");
+  }
 
   function setAiStep(n) {
     aiStep = n;
@@ -2062,6 +2390,7 @@
         copy.classList.remove("is-copied");
         decorateCopyBtn();
       }
+      showAiPrompt(false);
       var fb = $("ai-fallback");
       if (fb) fb.hidden = true;
       setAiStep(1);
@@ -2128,7 +2457,7 @@
       return;
     }
     if (type === "机票") {
-      showManualStatus('<p class="err">机票请用「复制给 AI 的话」整理截图，或把「机票 | 航班号 | LHR - HND | 起飞时间 ~ 落地时间 | 」粘贴到「用 AI 帮我整理」里的框中。</p>');
+      showManualStatus('<p class="err">机票请用『给 AI 的话』整理截图，或把「机票 | 航班号 | LHR - HND | 起飞时间 ~ 落地时间 | 」粘贴到「用 AI 帮我整理」里的框中。</p>');
       return;
     }
     var day = selectedDateOrEmpty();
@@ -2187,7 +2516,7 @@
   }
 
 
-  /* ---------- 详情 / 修改 / 删除 / 清空全部 ---------- */
+  /* ---------- 详情 / 修改 / 删除 / 清空这趟 ---------- */
   var UNDO_MS = (window.ItemEdit && ItemEdit.UNDO_MS) || 5000;
   var CLEAR_UNDO_MS = (window.ItemEdit && ItemEdit.CLEAR_UNDO_MS) || 10000;
   var detailId = null;
@@ -2205,6 +2534,11 @@
     if (item.type === "flight") {
       row("航班", escapeHtml(formatFlightLocal(item)));
       row("日期", escapeHtml(item.departDate ? formatMd(item.departDate) : ""));
+    } else if (isGround(item)) {
+      row(Transport.kind(item).numberLabel, escapeHtml(item.number || ""));
+      row("路线", escapeHtml(Transport.routeText(item)));
+      row("出发", escapeHtml(((item.departDate ? formatMd(item.departDate) : "") + " " + (item.departTime || "")).trim()));
+      row("到达", escapeHtml(((item.arriveDate && item.arriveDate !== item.departDate ? formatMd(item.arriveDate) : "") + " " + (item.arriveTime || "")).trim()));
     } else if (item.type === "hotel") {
       row("入住", escapeHtml(((item.checkIn ? formatMd(item.checkIn) : "") + " " + (item.checkInTime || "")).trim()));
       row("退房", escapeHtml(item.checkOut ? formatMd(item.checkOut) : ""));
@@ -2223,7 +2557,8 @@
       (itemTimeLabel(item) ? '<p class="card-time">' + escapeHtml(itemTimeLabel(item)) + "</p>" : "") +
       "</div></div>" +
       rows.join("") +
-      '<div class="detail-nav">' + navPairHtml(navPlan(null, cardTarget(item)), "从我的位置导航到 " + itemTitle(item)) + "</div>";
+      /* v6：火车 / 船 / 大巴不放导航 */
+      (isGround(item) ? "" : '<div class="detail-nav">' + navPairHtml(navPlan(null, cardTarget(item)), "从我的位置导航到 " + itemTitle(item)) + "</div>");
     if (itemUnlocated(item)) {
       html += '<p class="detail-hint">还没有位置，地图上不显示。可以点“修改”改一下地址。</p>';
     }
@@ -2244,15 +2579,39 @@
     openSheet("detail-sheet");
   }
 
+  /**
+   * 应用内确认框。v6 加了：cancelText / onCancel（点「取消」那个按钮时调用）、
+   * checkbox: { label, checked }（勾选框，结果作为 onOk(checked) 的参数）、tone: "primary"（不是删除，确定按钮用主色）。
+   */
+  var confirmCancelAction = null;
+  var confirmAltAction = null; /* v6：第三个按钮（altText / onAlt） */
+  var confirmCloseAction = null; /* v6：不管怎么关（确定 / 取消 / 点外面）都在最后调一次，排队问的时候用 */
   function openConfirm(opts) {
     $("confirm-title").textContent = opts.title;
     $("confirm-sub").textContent = opts.sub || "";
     $("confirm-sub").hidden = !opts.sub;
     $("confirm-ok").textContent = opts.okText || "删除";
+    $("confirm-ok").classList.toggle("is-primary", opts.tone === "primary");
     if ($("confirm-cancel")) $("confirm-cancel").textContent = opts.cancelText || "取消";
+    var row = $("confirm-check-row");
+    if (row) {
+      row.hidden = !opts.checkbox;
+      if (opts.checkbox) {
+        $("confirm-check-text").textContent = opts.checkbox.label || "";
+        $("confirm-check").checked = !!opts.checkbox.checked;
+      }
+    }
     var sheet = $("confirm-sheet");
     if (sheet) sheet.classList.toggle("is-ask", !!opts.ask);
     confirmAction = opts.onOk;
+    confirmCancelAction = opts.onCancel || null;
+    confirmCloseAction = opts.onClose || null;
+    confirmAltAction = opts.onAlt || null;
+    if ($("confirm-alt")) {
+      $("confirm-alt").hidden = !opts.altText;
+      $("confirm-alt").textContent = opts.altText || "";
+      $("confirm-alt").parentNode.classList.toggle("has-alt", !!opts.altText);
+    }
     openSheet("confirm-sheet");
     try { $("confirm-cancel").focus(); } catch (err) {}
   }
@@ -2260,12 +2619,23 @@
   var pendingOrderToast = null;
   function closeConfirm() {
     confirmAction = null;
+    confirmCancelAction = null;
     var later = pendingOrderToast;
     pendingOrderToast = null;
+    var onClose = confirmCloseAction;
+    confirmCloseAction = null;
+    confirmAltAction = null;
+    if ($("confirm-alt")) {
+      $("confirm-alt").hidden = true;
+      $("confirm-alt").parentNode.classList.remove("has-alt");
+    }
+    if (typeof onClose === "function") setTimeout(onClose, 0);
     var sheet = $("confirm-sheet");
     if (sheet) sheet.classList.remove("is-ask");
     if ($("confirm-cancel")) $("confirm-cancel").textContent = "取消";
     if ($("confirm-ok")) $("confirm-ok").textContent = "删除";
+    if ($("confirm-check-row")) $("confirm-check-row").hidden = true;
+    if ($("confirm-ok")) $("confirm-ok").classList.remove("is-primary");
     closeSheet("confirm-sheet");
     if (typeof later === "function") setTimeout(later, 0);
   }
@@ -2324,13 +2694,14 @@
     }, UNDO_MS);
   }
 
+  /** v6：「清空这趟」只清当前这一趟，其他行程不动 */
   function askClearAll() {
     var trip = currentTrip();
     if (!(trip.items || []).length) return;
     openConfirm({
-      title: "确定清空全部行程吗？",
-      sub: "建议先备份（在“设置”里点“完整备份”导出文件）。删除后 10 秒内可以撤销。",
-      okText: "清空全部",
+      title: "清空『" + (trip.nameZh || "我的行程") + "』里的所有内容吗？",
+      sub: "其他行程不受影响",
+      okText: "清空这趟",
       onOk: clearAllNow
     });
   }
@@ -2380,6 +2751,58 @@
 
   /* ---------- v5.2 自选图标：4×2，颜色见 icons.js 的 PALETTE ---------- */
   var pickedIcon = "";
+  var pickedLegRole = "auto";
+
+  function paintLegRoleSeg(role) {
+    role = role || "auto";
+    Array.prototype.forEach.call(document.querySelectorAll(".leg-role-opt"), function (btn) {
+      var on = btn.getAttribute("data-leg-role") === role;
+      btn.classList.toggle("is-on", on);
+      btn.setAttribute("aria-checked", on ? "true" : "false");
+    });
+  }
+
+  function flightsForRoleHint() {
+    var items = ((currentTrip() && currentTrip().items) || []).slice();
+    var item = editingId ? findItem(editingId) : null;
+    if (!item || item.type !== "flight") return items;
+    var over = Object.assign({}, item);
+    delete over.legRole;
+    var d = getVal("edit-date");
+    var t = getVal("edit-time");
+    var ed = getVal("edit-end-date");
+    var et = getVal("edit-end-time");
+    if (d) over.departDate = d;
+    if (t) over.departTime = t;
+    if (ed) over.arriveDate = ed;
+    if (et) over.arriveTime = et;
+    var found = false;
+    items = items.map(function (it) {
+      if (it.id === over.id) {
+        found = true;
+        return over;
+      }
+      return it;
+    });
+    if (!found) items.push(over);
+    return items;
+  }
+
+  function paintLegRoleHint() {
+    var el = $("leg-role-hint");
+    if (!el) return;
+    var text = "没认出来，可以自己选";
+    if (window.Legs && Legs.autoRoleHintText && Legs.autoRoleFor && editingId) {
+      text = Legs.autoRoleHintText(Legs.autoRoleFor(flightsForRoleHint(), editingId));
+    }
+    el.textContent = text;
+  }
+
+  function setPickedLegRole(role) {
+    if (role !== "out" && role !== "back" && role !== "transfer") role = "auto";
+    pickedLegRole = role;
+    paintLegRoleSeg(role);
+  }
 
   function defaultCategoryFor(item) {
     if (!item || !window.Icons) return "";
@@ -2392,7 +2815,11 @@
     var box = $(boxId || "icon-picker");
     if (boxId == null) current = pickedIcon;
     if (!box || !window.Icons || !Icons.CATEGORIES) return;
-    box.innerHTML = Icons.CATEGORIES.map(function (c) {
+    var cats = Icons.CATEGORIES;
+    if (box.id === "icon-picker" && Icons.MANUAL_PICKER_KEYS) {
+      cats = cats.filter(function (c) { return Icons.MANUAL_PICKER_KEYS.indexOf(c.key) !== -1; });
+    }
+    box.innerHTML = cats.map(function (c) {
       var m = Icons.categoryMeta(c.key);
       var on = current === c.key;
       var style = c.key === "other"
@@ -2436,10 +2863,18 @@
     editingId = id;
     var f = ItemEdit.formFields(item);
     var sel = $("manual-type");
-    var isFlight = item.type === "flight";
+    var isFlight = isTransit(item);
     if (sel) {
+      /* v6：火车 / 船 / 大巴只在修改时临时加进下拉框（手动添加交通等第 3 批的表单） */
+      if (isGround(item) && !Array.prototype.some.call(sel.options, function (o) { return o.value === f.type; })) {
+        var opt = document.createElement("option");
+        opt.value = f.type;
+        opt.textContent = f.type;
+        opt.setAttribute("data-temp", "1");
+        sel.appendChild(opt);
+      }
       Array.prototype.forEach.call(sel.options, function (o) {
-        o.disabled = isFlight ? o.value !== "机票" : o.value === "机票";
+        o.disabled = isFlight ? o.value !== f.type : o.value === "机票";
       });
       sel.value = f.type;
       sel.disabled = isFlight;
@@ -2451,36 +2886,48 @@
     setVal("edit-end-date", f.endDate);
     setVal("edit-end-time", f.endTime);
     setVal("edit-note", f.note);
-    paintEditLabels(isFlight ? "机票" : f.type);
+    pickedLegRole = (item.type === "flight" && (f.legRole === "out" || f.legRole === "back" || f.legRole === "transfer")) ? f.legRole : "auto";
     pickedIcon = isFlight ? "" : defaultCategoryFor(item);
     renderIconPicker();
     if ($("icon-pick-row")) $("icon-pick-row").hidden = isFlight;
     if ($("manual-status")) $("manual-status").innerHTML = "";
     setAddMode(true);
-    if ($("edit-address-row")) $("edit-address-row").hidden = isFlight;
+    paintEditLabels(f.type);
+    if ($("edit-address-row")) $("edit-address-row").hidden = item.type === "flight";
     closeSheet("detail-sheet");
     openSheet("add-sheet");
   }
 
+  var GROUND_LABELS = { "火车": "车次", "船": "班次", "大巴": "班次" };
   function paintEditLabels(type) {
+    var isGroundType = Object.prototype.hasOwnProperty.call(GROUND_LABELS, type);
     var isFlight = type === "机票";
+    var isMove = isFlight || isGroundType;
     var isHotel = type === "酒店";
     var nameLabel = document.querySelector('label[for="manual-name"]');
-    if (nameLabel) nameLabel.textContent = isFlight ? "航班号" : "名称";
-    if ($("edit-date-label")) $("edit-date-label").textContent = isFlight ? "起飞日期" : isHotel ? "入住日期" : "日期";
-    if ($("edit-time-label")) $("edit-time-label").textContent = isFlight ? "起飞时间" : isHotel ? "入住时间" : "时间";
-    if ($("edit-end-row")) $("edit-end-row").hidden = !(isFlight || isHotel);
-    if ($("edit-end-date-label")) $("edit-end-date-label").textContent = isFlight ? "到达日期" : "退房日期";
-    if ($("edit-end-time-box")) $("edit-end-time-box").hidden = !(isFlight || isHotel);
+    if (nameLabel) nameLabel.textContent = isFlight ? "航班号" : isGroundType ? GROUND_LABELS[type] + "（可不填）" : "名称";
+    var addrLabel = document.querySelector('label[for="edit-address"]');
+    if (addrLabel) addrLabel.textContent = isGroundType ? "出发站 - 到达站" : "地址";
+    if ($("edit-date-label")) $("edit-date-label").textContent = isFlight ? "起飞日期" : isGroundType ? "出发日期" : isHotel ? "入住日期" : "日期";
+    if ($("edit-time-label")) $("edit-time-label").textContent = isFlight ? "起飞时间" : isGroundType ? "出发时间" : isHotel ? "入住时间" : "时间";
+    if ($("edit-end-row")) $("edit-end-row").hidden = !(isMove || isHotel);
+    if ($("edit-end-date-label")) $("edit-end-date-label").textContent = isMove ? "到达日期" : "退房日期";
+    if ($("edit-end-time-box")) $("edit-end-time-box").hidden = !(isMove || isHotel);
     var endTimeLabel = document.querySelector('label[for="edit-end-time"]');
     if (endTimeLabel) endTimeLabel.textContent = isHotel ? "退房时间" : "到达时间";
     if ($("edit-add-return")) $("edit-add-return").hidden = !isFlight;
+    if ($("leg-role-row")) $("leg-role-row").hidden = !isFlight;
+    if (isFlight) {
+      paintLegRoleSeg(pickedLegRole);
+      paintLegRoleHint();
+    }
   }
 
   function exitEditMode() {
     editingId = null;
     var sel = $("manual-type");
     if (sel) {
+      Array.prototype.slice.call(sel.querySelectorAll('option[data-temp="1"]')).forEach(function (o) { o.remove(); });
       sel.disabled = false;
       Array.prototype.forEach.call(sel.options, function (o) {
         o.disabled = false;
@@ -2491,6 +2938,7 @@
     ["edit-address", "edit-date", "edit-time", "edit-end-date", "edit-end-time", "edit-note"].forEach(function (id) {
       setVal(id, "");
     });
+    pickedLegRole = "auto";
     paintEditLabels("地点");
     pickedIcon = "";
     renderIconPicker();
@@ -2517,16 +2965,17 @@
       address: item.type === "flight" ? "" : getVal("edit-address"),
       date: getVal("edit-date"),
       time: getVal("edit-time"),
-      endDate: type === "酒店" || item.type === "flight" ? getVal("edit-end-date") : null,
+      endDate: type === "酒店" || isTransit(item) ? getVal("edit-end-date") : null,
       endTime: getVal("edit-end-time"),
-      note: getVal("edit-note")
+      note: getVal("edit-note"),
+      legRole: item.type === "flight" ? pickedLegRole : undefined
     };
     var res = ItemEdit.applyForm(item, form);
     if (res.error) {
       showManualStatus('<p class="err">' + escapeHtml(res.error) + "</p>");
       return;
     }
-    if (item.type !== "flight") {
+    if (!isTransit(item)) {
       if (pickedIcon) res.item.icon = pickedIcon;
       else delete res.item.icon;
     }
@@ -2537,13 +2986,29 @@
       returnFlightDraft = null;
     } else {
       trip.items = ItemEdit.updateItem(trip.items || [], id, res.item);
+      /* v6：备注跟着地点走 —— 改了备注，同一个地点在其他行程里的条目也一起改 */
+      if (window.Places && res.item.placeId && String(res.item.note || "") !== String(item.note || "")) {
+        Places.setNote(places, trips, res.item.placeId, res.item.note || "", todayIso());
+      }
     }
     fixSelectedDay(trip.items);
     saveAllTrips();
     exitEditMode();
     closeSheet("add-sheet");
     renderAll();
-    if (res.addressChanged && window.Geocode && res.item.address) {
+    if (res.addressChanged && window.Geocode && isGround(res.item)) {
+      showToast("已保存修改");
+      Geocode.resolveItem(res.item, dayArgsFor(res.item)).then(function (r) {
+        var cur = findItem(id);
+        if (!cur || !r) return;
+        var fresh = Object.assign({}, cur);
+        Geocode.applyChoice(fresh, r.chosen, r.fromChosen);
+        var t = currentTrip();
+        t.items = ItemEdit.updateItem(t.items || [], id, fresh);
+        saveAllTrips();
+        renderAll();
+      }).catch(function () {});
+    } else if (res.addressChanged && window.Geocode && res.item.address) {
       showToast("已保存，正在找新地址的位置…");
       Geocode.resolveItem(res.item, dayArgsFor(res.item))
         .then(function (r) {
@@ -2577,12 +3042,22 @@
         if (detailId) askDeleteItem(detailId);
       });
     }
-    if ($("confirm-cancel")) $("confirm-cancel").addEventListener("click", closeConfirm);
+    if ($("confirm-cancel")) $("confirm-cancel").addEventListener("click", function () {
+      var fn = confirmCancelAction;
+      closeConfirm();
+      if (typeof fn === "function") fn();
+    });
+    if ($("confirm-alt")) $("confirm-alt").addEventListener("click", function () {
+      var fn = confirmAltAction;
+      closeConfirm();
+      if (typeof fn === "function") fn();
+    });
     if ($("confirm-ok")) {
       $("confirm-ok").addEventListener("click", function () {
         var fn = confirmAction;
+        var checked = !!($("confirm-check") && !$("confirm-check-row").hidden && $("confirm-check").checked);
         closeConfirm();
-        if (typeof fn === "function") fn();
+        if (typeof fn === "function") fn(checked);
       });
     }
     if ($("clear-all-btn")) $("clear-all-btn").addEventListener("click", askClearAll);
@@ -2602,6 +3077,22 @@
         if (editingId) paintEditLabels(getVal("manual-type"));
       });
     }
+    var roleRow = $("leg-role-row");
+    if (roleRow && !roleRow.getAttribute("data-bound")) {
+      roleRow.setAttribute("data-bound", "1");
+      roleRow.addEventListener("click", function (ev) {
+        var btn = ev.target.closest && ev.target.closest("[data-leg-role]");
+        if (!btn) return;
+        ev.preventDefault();
+        setPickedLegRole(btn.getAttribute("data-leg-role"));
+      });
+    }
+    ["edit-date", "edit-time", "edit-end-date", "edit-end-time"].forEach(function (id) {
+      if (!$(id) || $(id).getAttribute("data-leg-hint-bound")) return;
+      $(id).setAttribute("data-leg-hint-bound", "1");
+      $(id).addEventListener("input", paintLegRoleHint);
+      $(id).addEventListener("change", paintLegRoleHint);
+    });
   }
 
   /* ---------- 版本号、更新记录、新版本公告 ---------- */
@@ -2619,7 +3110,7 @@
   }
 
   function storedHasTrips() {
-    var stored = loadAllTrips();
+    var stored = loadAllTrips({ readOnly: true });
     return !!(stored && stored.trips && stored.trips.some(function (t) {
       return t && t.items && t.items.length;
     }));
@@ -3196,7 +3687,7 @@
     fixHead: "给「{name}」找位置，点一个结果就补上",
     fixDone: "已补上位置",
     fixManual: "手动填地址",
-    fixNone: "没搜到。换个说法试试，或点下面「手动填地址」"
+    fixNone: "没搜到。换个说法试试，或点下面『找不到？换个方式加』"
   };
   var directName = "";
   var directIcon = "";
@@ -3261,6 +3752,7 @@
 
   function itemDay(item) {
     if (!item) return "";
+    if (isTransit(item)) return item.departDate || "";
     return item.type === "hotel" ? item.checkIn || "" : item.date || "";
   }
 
@@ -3659,7 +4151,7 @@
     put("am-place-main", C.place);
     put("am-place-sub", C.placeSub);
     put("am-whole", C.whole);
-    put("add-map-link", C.mapLink);
+    put("add-fallback", C.fallback);
     if ($("add-sheet-back")) {
       $("add-sheet-back").setAttribute("aria-label", C.back);
       $("add-sheet-back").addEventListener("click", function () {
@@ -3667,10 +4159,7 @@
         openAddMenu();
       });
     }
-    if ($("add-map-link")) $("add-map-link").addEventListener("click", function () {
-      var q = String(($("place-search") && $("place-search").value) || "").trim();
-      openMapPick(null, null, { label: "酒店", name: q || C.mapHotelName });
-    });
+    if ($("add-fallback")) $("add-fallback").addEventListener("click", openAddFallback);
     var menu = $("add-menu");
     if (!menu) return;
     menu.addEventListener("click", function (ev) {
@@ -3742,7 +4231,7 @@
       head.textContent = DIRECT_COPY.fixHead.replace("{name}", item.nameZh || itemTitle(item));
       head.hidden = false;
     }
-    if ($("fix-manual")) $("fix-manual").hidden = false;
+    syncAddFallback();
     openSheet("add-sheet");
     clearSearchUi(false);
     var q = item.nameZh || itemTitle(item) || "";
@@ -3759,7 +4248,7 @@
     var title = $("add-sheet-title");
     if (title && !editingId) title.textContent = "添加";
     if ($("fix-head")) $("fix-head").hidden = true;
-    if ($("fix-manual")) $("fix-manual").hidden = true;
+    syncAddFallback();
   }
 
   /** 选中搜索结果：只改这一条的地址和坐标（名字、日期、图标、备注不动），可撤销 */
@@ -3781,6 +4270,49 @@
       saveAllTrips();
       renderAll();
     });
+  }
+
+  /** v6：一行「找不到？换个方式加 ›」：加酒店页、补地址页都有；点开选「在地图上选」或「手动填地址」 */
+  function syncAddFallback() {
+    var b = $("add-fallback");
+    if (b) b.hidden = !(hotelMode || fixingId);
+  }
+  function openAddFallback() {
+    var C = ADD_MENU_COPY;
+    var q = String(($("place-search") && $("place-search").value) || "").trim();
+    var fixId = fixingId;
+    openConfirm({
+      title: C.fallbackTitle,
+      okText: C.fallbackMap,
+      tone: "primary",
+      altText: C.fallbackManual,
+      onOk: function () {
+        if (fixId) openMapPick(fixId);
+        else openMapPick(null, null, { label: "酒店", name: q || C.mapHotelName });
+      },
+      onAlt: function () {
+        if (fixId) fixManually();
+        else manualHotelFromSearch(q);
+      }
+    });
+  }
+  /** 加酒店页选「手动填地址」：打开手动填写，类型选好「酒店」，名字带上搜索框里的字 */
+  function manualHotelFromSearch(q) {
+    setHotelMode(false);
+    clearSearchUi(true);
+    var fold = $("manual-fold");
+    if (fold) fold.open = true;
+    if ($("manual-type")) $("manual-type").value = "酒店";
+    setVal("manual-name", q);
+    setTimeout(function () {
+      var n = $("manual-name");
+      if (n) {
+        try {
+          n.focus();
+          if (n.scrollIntoView) n.scrollIntoView({ block: "center" });
+        } catch (err) {}
+      }
+    }, 120);
   }
 
   /** 搜不到：改成手动填地址（打开这条的修改，光标放在地址栏） */
@@ -3893,10 +4425,6 @@
         hideDirectAdd();
         runLiveSearch(($("place-search") && $("place-search").value) || "");
       });
-      if ($("fix-manual")) {
-        $("fix-manual").textContent = DIRECT_COPY.fixManual;
-        $("fix-manual").addEventListener("click", fixManually);
-      }
     }
     var undo = $("toast-undo");
     if (undo && undo.getAttribute("data-bound") !== "1") {
@@ -4031,6 +4559,157 @@
     flashPill();
   }
 
+  /* ---------- v6「我的行程」：切换 / 新建 / 改名 / 删除 ---------- */
+  var tripsRenamingId = null;
+
+  function tripSummary(trip) {
+    var items = (trip && trip.items) || [];
+    if (!items.length) return "还没有内容";
+    var days = tripDays(items);
+    var range = days.length ? formatMd(days[0]) + (days.length > 1 ? " – " + formatMd(days[days.length - 1]) : "") : "日期待定";
+    return range + " · " + items.length + " 项";
+  }
+
+  function renderTripsList() {
+    var box = $("trips-list");
+    if (!box) return;
+    box.innerHTML = trips.map(function (t) {
+      var cur = t.id === activeTripId;
+      var id = escapeHtml(t.id);
+      if (tripsRenamingId === t.id) {
+        return '<li class="trip-row is-renaming' + (cur ? " is-current" : "") + '">' +
+          '<input type="text" class="trip-row-input" id="trip-row-input" maxlength="40" value="' + escapeHtml(t.nameZh || "") + '" aria-label="行程名称" enterkeyhint="done">' +
+          '<button type="button" class="trip-row-btn trip-row-save" data-trip-save="' + id + '">完成</button></li>';
+      }
+      return '<li class="trip-row' + (cur ? " is-current" : "") + '">' +
+        '<button type="button" class="trip-row-main" data-trip-switch="' + id + '"' + (cur ? ' aria-current="true"' : "") + ">" +
+        '<span class="trip-row-name">' + escapeHtml(t.nameZh || "我的行程") + (cur ? '<span class="trip-row-tag">正在看</span>' : "") + "</span>" +
+        '<span class="trip-row-sub">' + escapeHtml(tripSummary(t)) + "</span></button>" +
+        '<button type="button" class="trip-row-btn" data-trip-rename="' + id + '">改名</button>' +
+        '<button type="button" class="trip-row-btn trip-row-del" data-trip-delete="' + id + '">删除</button></li>';
+    }).join("");
+    var input = $("trip-row-input");
+    if (input) {
+      input.focus();
+      input.select();
+    }
+  }
+
+  function openTrips() {
+    tripsRenamingId = null;
+    closeNamePop(false);
+    renderTripsList();
+    openSheet("trips-sheet");
+  }
+
+  function tripById(id) {
+    var i;
+    for (i = 0; i < trips.length; i++) if (trips[i].id === id) return trips[i];
+    return null;
+  }
+
+  function switchTrip(id, quiet) {
+    var t = tripById(id);
+    if (!t) return;
+    activeTripId = id;
+    expanded = {};
+    selectedDay = defaultSelectedDay(t.items || []);
+    saveAllTrips();
+    closeSheet("trips-sheet");
+    renderAll();
+    if (!quiet) showToast("已切换到「" + (t.nameZh || "我的行程") + "」", null, 3000);
+  }
+
+  function createTrip() {
+    var t = {
+      id: TripStore.newTripId(trips),
+      nameZh: TripStore.newTripName(trips),
+      nameEn: "",
+      items: [],
+      legs: [],
+      imported: true
+    };
+    trips.push(t);
+    activeTripId = t.id;
+    expanded = {};
+    selectedDay = "all";
+    saveAllTrips();
+    renderAll();
+    tripsRenamingId = t.id;
+    renderTripsList();
+  }
+
+  function saveTripRename(id) {
+    var t = tripById(id);
+    var input = $("trip-row-input");
+    tripsRenamingId = null;
+    if (t && input) {
+      t.nameZh = String(input.value || "").trim() || t.nameZh || "我的行程";
+      if (t.id === activeTripId && window.TripName && !TripName.isDefaultName(t.nameZh)) lsSet(TripName.RENAMED_KEY, "1");
+      saveAllTrips();
+      updateTopBar();
+    }
+    renderTripsList();
+  }
+
+  function askDeleteTrip(id) {
+    var t = tripById(id);
+    if (!t) return;
+    var n = (t.items || []).length;
+    openConfirm({
+      title: "确定删除「" + (t.nameZh || "我的行程") + "」吗？",
+      sub: (n ? "这趟的 " + n + " 项会一起删掉，删除后不能撤销。" : "删除后不能撤销。") + "地点和备注会留在本机。",
+      okText: "删除",
+      checkbox: { label: "同时删掉这趟的足迹", checked: false },
+      onOk: function (alsoVisits) {
+        deleteTripNow(id, alsoVisits);
+      }
+    });
+  }
+
+  function deleteTripNow(id, alsoVisits) {
+    var t = tripById(id);
+    if (!t) return;
+    trips = trips.filter(function (x) { return x.id !== id; });
+    if (alsoVisits && window.Places) Places.removeTripVisits(places, id);
+    if (!trips.length) trips = [emptyTrip()];
+    if (activeTripId === id || !tripById(activeTripId)) {
+      activeTripId = trips[0].id;
+      expanded = {};
+      selectedDay = defaultSelectedDay(trips[0].items || []);
+    }
+    saveAllTrips();
+    renderAll();
+    renderTripsList();
+    showToast("已删除「" + (t.nameZh || "我的行程") + "」", null, 3000);
+  }
+
+  function bindTripsSheet() {
+    var list = $("trips-list");
+    if (list) {
+      list.addEventListener("click", function (ev) {
+        var b = ev.target.closest ? ev.target.closest("button") : null;
+        if (!b) return;
+        if (b.hasAttribute("data-trip-switch")) switchTrip(b.getAttribute("data-trip-switch"));
+        else if (b.hasAttribute("data-trip-rename")) {
+          tripsRenamingId = b.getAttribute("data-trip-rename");
+          renderTripsList();
+        } else if (b.hasAttribute("data-trip-save")) saveTripRename(b.getAttribute("data-trip-save"));
+        else if (b.hasAttribute("data-trip-delete")) askDeleteTrip(b.getAttribute("data-trip-delete"));
+      });
+      list.addEventListener("keydown", function (ev) {
+        if (ev.target && ev.target.id === "trip-row-input") {
+          if (ev.key === "Enter") saveTripRename(tripsRenamingId);
+          if (ev.key === "Escape") {
+            tripsRenamingId = null;
+            renderTripsList();
+          }
+        }
+      });
+    }
+    if ($("trips-new")) $("trips-new").addEventListener("click", createTrip);
+  }
+
   function finishRename(cancel) {
     if (!renaming) return;
     renaming = false;
@@ -4135,13 +4814,98 @@
     if (!trip.items) trip.items = [];
     var added = uniqueItemIds(trip.items, incoming);
     trip.items = trip.items.concat(added);
+    /* v6：酒店 / 地点连到地点库。够得上「自动」的直接连；像是上次那家的（批量导入也一样）一条一条问 */
+    var asks = linkAddedItems(added);
     saveAllTrips();
     if (!(opts && opts.keepDay)) {
       selectedDay = defaultSelectedDay(trip.items);
       dayPickedByUser = false;
     }
     renderAll();
+    askSamePlaces(asks);
     return added;
+  }
+
+  /** 连地点库；返回要问「是上次那家吗？」的 [{ item, place }]（还没连，等用户答） */
+  function linkAddedItems(list) {
+    if (!window.Places || demoMode) return [];
+    var asks = [];
+    list.forEach(function (it) {
+      var r = Places.linkItem(it, places, { onAsk: "defer", today: todayIso() });
+      if (r.action === "ask") asks.push({ item: it, place: r.place });
+    });
+    return asks;
+  }
+
+  /** 排队一条一条问。没答就关掉（点外面）当「不是」：建新地点，不合并 */
+  function askSamePlaces(queue) {
+    if (!queue || !queue.length) return;
+    var a = queue.shift();
+    askSamePlace(a.item, a.place, function () { askSamePlaces(queue); });
+  }
+
+  /** 「是上次那家吗？」：是 → 连到那个地点（备注跟过来）；不是 → 建一个新地点 */
+  function askSamePlace(item, place, then) {
+    var where = [place.city, place.address].filter(Boolean)[0] || "";
+    var noteLine = place.note ? "上次的备注：" + String(place.note).split("\n")[0] : "";
+    var asking = item.nameZh || item.nameEn || "";
+    openConfirm({
+      title: Places.ASK_TITLE,
+      sub: (asking && asking !== place.name ? "这次加的「" + asking + "」，" : "") + "本机已经有「" + (place.name || "") + "」" + (where ? "（" + where + "）" : "") + "。" + (noteLine ? "\n" + noteLine : ""),
+      okText: "是同一家",
+      cancelText: "不是",
+      tone: "primary",
+      onOk: function () {
+        var cur = findItem(item.id);
+        if (cur) Places.linkTo(cur, place);
+        saveAllTrips();
+        renderAll();
+      },
+      onClose: function () {
+        var cur = findItem(item.id);
+        if (cur && !cur.placeId) {
+          Places.linkItem(cur, places, { onAsk: "new", exclude: [place.id], today: todayIso() });
+          saveAllTrips();
+        }
+        if (typeof then === "function") then();
+      }
+    });
+  }
+
+  /**
+   * 合并导入时本机已有同一趟（同 id）：一趟一趟问「已经有一趟『…』了」覆盖 / 另存一份 / 取消。
+   * done({ id: "overwrite" | "copy" })；点「取消」或点外面关掉 → done(null)，什么都不导入。
+   */
+  /* 文案（19:17 定）：标题「已经有一趟『<行程名>』了」，小字「覆盖会换掉原来的内容」，按钮 覆盖 / 另存一份 / 取消 */
+  var TRIP_CONFLICT_COPY = { sub: "覆盖会换掉原来的内容", overwrite: "覆盖", copy: "另存一份", cancel: "取消" };
+  function tripConflictTitle(name) {
+    return "已经有一趟『" + (name || "我的行程") + "』了";
+  }
+  function askTripConflicts(list, done) {
+    var answers = {};
+    var queue = (list || []).slice();
+    function next() {
+      if (!queue.length) {
+        done(answers);
+        return;
+      }
+      var c = queue.shift();
+      var answered = false;
+      openConfirm({
+        title: tripConflictTitle(c.localName || c.name),
+        sub: TRIP_CONFLICT_COPY.sub,
+        okText: TRIP_CONFLICT_COPY.overwrite,
+        altText: TRIP_CONFLICT_COPY.copy,
+        cancelText: TRIP_CONFLICT_COPY.cancel,
+        onOk: function () { answered = true; answers[c.id] = "overwrite"; },
+        onAlt: function () { answered = true; answers[c.id] = "copy"; },
+        onClose: function () {
+          if (answered) next();
+          else done(null);
+        }
+      });
+    }
+    next();
   }
 
   function resolutionNote(res) {
@@ -4255,7 +5019,8 @@
   }
 
   function runStructuredImport(text) {
-    var result = ImportUtil.parseImport(text);
+    var cur = currentTrip();
+    var result = ImportUtil.parseImport(text, { items: cur && cur.items });
     var items = result.items || [];
     var errors = result.errors || [];
     var notes = result.notes || [];
@@ -4401,6 +5166,7 @@
   function exportState() {
     return {
       trips: trips,
+      places: places,
       activeTripId: activeTripId,
       examplesLoaded: examplesLoaded,
       legs: (function () {
@@ -4413,45 +5179,36 @@
     };
   }
 
-  function importState(state, mode) {
-    var incoming = state && Array.isArray(state.trips) ? state.trips : [];
+  /**
+   * 导入备份 / 分享文件。v6：
+   *   replace：整份替换行程和地点库；
+   *   merge：文件里的每个行程都加成单独的行程（id 撞了就换），不再并进同名行程；地点能自动认作同一个的用本机的。
+   * 旧文件（v5.3 及以前，没有 places）也照样导入：条目会现连地点库。
+   */
+  function importState(state, mode, opts) {
     var incomingLegs = state && state.legs && typeof state.legs === "object" ? state.legs : {};
-    if (mode === "replace") {
-      trips = incoming.length ? incoming : [emptyTrip()];
-      activeTripId =
-        state.activeTripId && trips.some(function (t) { return t.id === state.activeTripId; })
-          ? state.activeTripId
-          : trips[0].id;
-      examplesLoaded = !!state.examplesLoaded;
-      try {
-        localStorage.setItem(LEG_STORAGE_KEY, JSON.stringify(incomingLegs));
-      } catch (e) {}
-    } else {
-      incoming.forEach(function (t) {
-        var found = null;
-        trips.forEach(function (x) {
-          if (x.id === t.id) found = x;
-        });
-        if (found) {
-          found.items = (found.items || []).concat(uniqueItemIds(found.items || [], t.items || []));
-        } else {
-          trips.push(t);
-        }
+    var next = TripStore.importInto(
+      { trips: trips, places: places, activeTripId: activeTripId, examplesLoaded: examplesLoaded },
+      state || {},
+      mode === "replace" ? "replace" : "merge",
+      { today: todayIso(), onConflict: (opts && opts.onConflict) || {} }
+    );
+    trips = next.trips;
+    places = next.places;
+    activeTripId = next.activeTripId;
+    examplesLoaded = next.examplesLoaded;
+    try {
+      var legs = mode === "replace" ? {} : JSON.parse(localStorage.getItem(LEG_STORAGE_KEY) || "{}");
+      Object.keys(incomingLegs).forEach(function (k) {
+        legs[k] = incomingLegs[k];
       });
-      if (state && state.activeTripId) activeTripId = state.activeTripId;
-      examplesLoaded = examplesLoaded || !!(state && state.examplesLoaded);
-      try {
-        var legs = JSON.parse(localStorage.getItem(LEG_STORAGE_KEY) || "{}");
-        Object.keys(incomingLegs).forEach(function (k) {
-          legs[k] = incomingLegs[k];
-        });
-        localStorage.setItem(LEG_STORAGE_KEY, JSON.stringify(legs));
-      } catch (e) {}
-    }
+      localStorage.setItem(LEG_STORAGE_KEY, JSON.stringify(legs));
+    } catch (e) {}
     if (!trips.length) {
       trips = [emptyTrip()];
       activeTripId = trips[0].id;
     }
+    expanded = {};
     selectedDay = defaultSelectedDay((currentTrip().items || []));
     dayPickedByUser = false;
     saveAllTrips();
@@ -4461,6 +5218,11 @@
   window.TripApp = {
     exportState: exportState,
     importState: importState,
+    /** 合并导入前：文件里哪些行程本机已经有了 */
+    tripConflicts: function (state) {
+      return TripStore.tripConflicts({ trips: trips }, state || {});
+    },
+    askTripConflicts: askTripConflicts,
     getTrips: function () {
       return trips;
     },
@@ -4540,18 +5302,11 @@
     });
     fillAiWizardText();
     if ($("ai-copy-btn")) $("ai-copy-btn").addEventListener("click", copyAiPrompt);
-    if ($("ai-preview-toggle")) {
-      $("ai-preview-toggle").addEventListener("click", function () {
-        var view = $("ai-prompt-view");
-        if (!view) return;
-        if (view.hidden) {
-          view.textContent = aiPromptText();
-          view.hidden = false;
-          $("ai-preview-toggle").textContent = "收起提示词";
-        } else {
-          view.hidden = true;
-          $("ai-preview-toggle").textContent = "查看提示词";
-        }
+    if ($("ai-prompt-open")) {
+      $("ai-prompt-open").textContent = AI_WIZARD_COPY.promptBtn;
+      $("ai-prompt-open").addEventListener("click", function () {
+        var box = $("ai-prompt-box");
+        showAiPrompt(!!(box && box.hidden));
       });
     }
     if ($("manual-save")) $("manual-save").addEventListener("click", handleManualSave);
@@ -4594,7 +5349,8 @@
     } catch (err) {}
     applyInstallVisibility(currentEnv());
     bindPlaceSearch();
-    $("trip-name-btn").addEventListener("click", startRename);
+    $("trip-name-btn").addEventListener("click", openTrips);
+    bindTripsSheet();
     $("trip-name-input").addEventListener("blur", function () { finishRename(); });
     $("trip-name-input").addEventListener("keydown", function (ev) {
       if (ev.key === "Enter") {
@@ -4687,6 +5443,7 @@
       var stored = loadAllTrips();
       if (stored && stored.trips && stored.trips.length) {
         trips = stored.trips;
+        places = stored.places || [];
         examplesLoaded = !!stored.examplesLoaded;
         activeTripId =
           stored.activeTripId && trips.some(function (t) { return t.id === stored.activeTripId; })

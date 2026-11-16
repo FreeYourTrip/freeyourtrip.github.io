@@ -49,6 +49,7 @@ check("final copy, kept in one place", function () {
   const C = G.COPY;
   assert.strictEqual(C.wechatText, "微信里没法放到桌面。点右上角 ···，选『在 Safari 中打开』或『在默认浏览器中打开』");
   assert.strictEqual(C.copyUrl, "复制网址");
+  assert.strictEqual(C.iosOtherText, "这个浏览器里没法放到桌面。点『复制网址』，再打开 Safari，粘贴到地址栏打开");
   assert.strictEqual(C.iosTitle, "放到桌面，像 App 一样打开");
   /* v5.3：UI 要求每步说明一行，文案缩短（含义不变） */
   assert.deepStrictEqual(C.iosSteps, ["点底部分享按钮，没有就先点「···」", "往下滑，选「添加到主屏幕」", "点右上角「添加」"]);

@@ -1,7 +1,8 @@
 /**
- * 设置里的「推荐这个工具」：只分享产品介绍和网址，不带任何行程数据。
- * 有系统分享（navigator.share）就用它，网址放在 url 里、文字里不重复网址；
- * 没有就复制整段文字到剪贴板，并提示「已复制，去粘贴给朋友吧」。
+ * 设置里的「分享给朋友」：只发网址，不带任何行程数据。
+ * 有系统分享（navigator.share）就先弹分享面板（只传网址）；
+ * 没有，或分享失败（不是用户取消）时，复制网址并提示「网址已复制，发给朋友就行」。
+ * 用户取消分享（AbortError）不提示。
  * 浏览器里是 window.Recommend；node 里 require("./recommend.js")。
  */
 (function (root) {
@@ -12,11 +13,11 @@
   /* 系统分享时文字和网址分开传，文字到「打开就能用」为止（不带 👉）；复制时用整段，带 👉 和网址。 */
   var LEAD = "机票、酒店、想去的地方，一路串起来 ✈️ 不用下载不用注册，打开就能用";
   var FULL_TEXT = LEAD + " 👉 " + URL;
-  var COPIED = "已复制，去粘贴给朋友吧";
+  var COPIED = "网址已复制，发给朋友就行";
 
-  /** 给 navigator.share 的内容：文字不含网址，网址单独放。 */
+  /** 给 navigator.share 的内容：只发网址，不带行程、也不带介绍文字。 */
   function sharePayload() {
-    return { title: TITLE, text: LEAD, url: URL };
+    return { title: TITLE, url: URL };
   }
 
   function legacyCopy(doc, text) {
@@ -47,7 +48,7 @@
   }
 
   /**
-   * 执行推荐。env: { navigator, document, toast(msg) }。
+   * 「分享给朋友」。env: { navigator, document, toast(msg) }。
    * 返回 Promise<"shared" | "cancelled" | "copied" | "failed">。
    */
   function recommend(env) {
@@ -56,12 +57,12 @@
     var doc = env.document;
     var toast = env.toast || function () {};
     function fallback() {
-      return copyText(nav, doc, FULL_TEXT).then(function (ok) {
+      return copyText(nav, doc, URL).then(function (ok) {
         if (ok) {
           toast(COPIED);
           return "copied";
         }
-        toast("复制没成功，请手动复制：" + FULL_TEXT);
+        toast("复制没成功，请手动复制：" + URL);
         return "failed";
       });
     }

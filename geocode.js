@@ -13,6 +13,10 @@
   "use strict";
 
   var CACHE_KEY = "wishlist-map-geocode-v1";
+  var Transport = root.Transport || (typeof require === "function" ? require("./transport.js") : null);
+  function isGround(item) {
+    return !!(Transport && Transport.isGround(item));
+  }
   var NOMINATIM = "https://nominatim.openstreetmap.org/search";
   var AMAP_JS = "https://webapi.amap.com/maps";
   var MIN_INTERVAL_MS = 1000;
@@ -672,6 +676,8 @@
       });
     }
 
+    if (isGround(item)) return resolveGround(item, ctx, out);
+
     /* 酒店 / 地点：已有坐标则直接用；否则按地址或名称搜索 */
     if (typeof item.lat === "number" && typeof item.lng === "number") {
       out.chosen = already(item.lat, item.lng, item.address || item.nameZh || "", "stored");
@@ -777,13 +783,57 @@
     });
   }
 
+  /**
+   * v6 火车 / 船 / 大巴：按站名搜。出发站带上当天城市和当天区域；到达站多半在别的城市，只搜站名。
+   * 只有 1 个结果，或几个结果都挤在 2 公里内，才用；否则只留名字（地图上不画这一段）。
+   * 永远返回 status "ok"：交通没有导航按钮，不进「待补」，不催用户。
+   */
+  function pickStation(list) {
+    if (!list || !list.length) return null;
+    var first = list[0];
+    var close = list.every(function (r) { return kmBetween(first, r) <= 2; });
+    return list.length === 1 || close ? first : null;
+  }
+  function searchStation(name, city, bias) {
+    var n = String(name || "").trim();
+    if (!n) return Promise.resolve(null);
+    var opts = bias ? { bias: bias } : undefined;
+    var cq = city ? cityQuery(n, city) : "";
+    var first = cq ? searchAddress(cq, opts) : searchAddress(n, opts);
+    return first.then(function (list) {
+      var hit = pickStation(list);
+      if (hit || !cq) return hit;
+      return searchAddress(n, opts).then(pickStation);
+    }).catch(function () {
+      return null;
+    });
+  }
+  function resolveGround(item, ctx, out) {
+    var needFrom = typeof item.fromLat !== "number";
+    var needTo = typeof item.lat !== "number";
+    var fromP = needFrom ? searchStation(item.fromNameZh, ctx.city, ctx.bias) : Promise.resolve(null);
+    return fromP.then(function (f) {
+      if (f) out.fromChosen = { lat: f.lat, lng: f.lng, displayName: f.displayName, source: f.source || "nominatim" };
+      return needTo ? searchStation(item.nameZh, "", null) : null;
+    }).then(function (t) {
+      if (t) out.chosen = { lat: t.lat, lng: t.lng, displayName: t.displayName, source: t.source || "nominatim" };
+      out.status = "ok";
+      out.message = "";
+      return out;
+    }, function () {
+      out.status = "ok";
+      out.message = "";
+      return out;
+    });
+  }
+
   function applyChoice(item, chosen, fromChosen) {
     if (chosen && typeof chosen.lat === "number") {
       item.lat = chosen.lat;
       item.lng = chosen.lng;
-      if (item.type !== "flight" && chosen.city && String(chosen.city).trim()) item.city = String(chosen.city).trim();
+      if (item.type !== "flight" && !isGround(item) && chosen.city && String(chosen.city).trim()) item.city = String(chosen.city).trim();
     }
-    if (item.type === "flight" && fromChosen && typeof fromChosen.lat === "number") {
+    if ((item.type === "flight" || isGround(item)) && fromChosen && typeof fromChosen.lat === "number") {
       item.fromLat = fromChosen.lat;
       item.fromLng = fromChosen.lng;
     }

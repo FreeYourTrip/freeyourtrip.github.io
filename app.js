@@ -678,7 +678,8 @@
         Object.keys(incoming).forEach(function (k) { cur[k] = incoming[k]; });
         try { localStorage.setItem(STORAGE_KEY, JSON.stringify(cur)); } catch (e) {}
       }
-      if (state && state.loaded) loadWishlistExamples();
+      /* v6：页面上已没有心愿地图（#map），旧备份里 wishlistLoaded=true 时别去建地图，否则整个导入报错、地理缓存也没导进来 */
+      if (state && state.loaded && $("map")) loadWishlistExamples();
       else if (places.length) refresh();
     }
   };

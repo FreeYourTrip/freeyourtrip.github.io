@@ -75,11 +75,12 @@ check("asked once, only while the name is the default, only after items were add
   assert.ok(!/fetch\(|XMLHttpRequest|localStorage/.test(src.replace(/\/\*[\s\S]*?\*\//g, "")), "computed locally, no network");
 });
 
-check("pill markup + CSS (v6-ready: data-role), pencil SVG, hint, rename mode", function () {
+check("pill markup + CSS (v6: data-role=switch opens 「我的行程」), 14px chevron SVG, hint, rename mode kept for the name pop", function () {
   const html = fs.readFileSync(__dirname + "/index.html", "utf8");
   const css = fs.readFileSync(__dirname + "/styles.css", "utf8");
-  assert.ok(/<div class="trip-pill" id="trip-pill" data-role="rename">/.test(html));
-  assert.ok(/<svg class="trip-pill-ico"[^>]*width="14" height="14"[^>]*stroke="#8A9099"/.test(html), "self-drawn 14px pencil");
+  assert.ok(/<div class="trip-pill" id="trip-pill" data-role="switch">/.test(html));
+  assert.ok(/<svg class="trip-pill-ico"[^>]*width="14" height="14"[^>]*stroke="#8A9099"[^>]*><path d="M4 6l4 4 4-4"\/><\/svg>/.test(html), "self-drawn 14px chevron");
+  assert.ok(/\$\("trip-name-btn"\)\.addEventListener\("click", openTrips\);/.test(fs.readFileSync(__dirname + "/timeline.js", "utf8")), "tap the name → 「我的行程」");
   assert.ok(html.indexOf('id="trip-name-done">完成<') !== -1);
   /* 默认名：胶囊自己写「点这里起名」+ 铅笔，没有单独的提示 span */
   const tlp = fs.readFileSync(__dirname + "/timeline.js", "utf8");

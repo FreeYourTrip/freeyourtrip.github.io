@@ -30,9 +30,10 @@ function check(name, fn) {
   }
 }
 
-check("version is v5.4 and sw cache is v17", function () {
-  assert.strictEqual(V.APP_VERSION, "v5.4");
-  assert.ok(sw.indexOf('"xingcheng-map-shell-v17"') !== -1);
+check("version is v5.4 (or v6, which carries v5.4) and sw cache is v18", function () {
+  /* v6 合并 v5.4：版本号往前走，v5.4 的行为都还在 */
+  assert.ok(["v5.4", "v6", "v6.0"].indexOf(V.APP_VERSION) !== -1);
+  assert.ok(sw.indexOf('"xingcheng-map-shell-v18"') !== -1);
   assert.ok(sw.indexOf("xingcheng-map-shell-v16") === -1);
 });
 
@@ -200,21 +201,24 @@ check("flight import: landing earlier than departure goes to 待补 with 对的 
 check("help and announcement mention long-press drag, 带我去 button, and pills", function () {
   assert.ok(tl.indexOf("卡片右边的『带我去』，从你现在的位置出发；两站中间的『路线』，从上一站去下一站") !== -1);
   assert.ok(tl.indexOf("长按卡片，拖动换顺序") !== -1);
-  assert.deepStrictEqual(V.ANNOUNCEMENT.bullets, [
-    "加酒店先选入住和退房日期，退房那天也会显示",
-    "长按卡片就能拖动换顺序，拖错了可以撤销",
-    "卡片右边的『带我去』，从你现在的位置出发",
-    "两站中间的『路线』，从上一站去下一站"
-  ]);
-  assert.strictEqual(V.ANNOUNCEMENT.draft, false);
-  assert.deepStrictEqual(V.CHANGELOG[0].lines, [
+  const v54 = V.CHANGELOG.find((e) => e.version === "v5.4");
+  if (V.APP_VERSION === "v5.4") {
+    assert.deepStrictEqual(V.ANNOUNCEMENT.bullets, [
+      "加酒店先选入住和退房日期，退房那天也会显示",
+      "长按卡片就能拖动换顺序，拖错了可以撤销",
+      "卡片右边的『带我去』，从你现在的位置出发",
+      "两站中间的『路线』，从上一站去下一站"
+    ]);
+    assert.strictEqual(V.ANNOUNCEMENT.draft, false);
+  }
+  assert.deepStrictEqual(v54.lines, [
     "新增：长按卡片，在同一天里拖动换顺序，机票固定不动；拖完 5 秒内可以撤销",
     "新增：两站之间显示直线距离和『路线』，点一下从上一站导航到下一站；当天最后一站显示『回酒店』；缺位置的显示「补位置」",
     "新增：往返机票自动标「去程」「回程」；手动加机票可以点『再加一张返程』",
     "调整：加酒店要先选入住和退房日期，退房那天多一张「退房」卡；『带我去』挪到卡片右边，从你现在的位置出发",
     "调整：导入机票时，落地比起飞早的会先问一句；几处界面颜色和间距统一了"
   ]);
-  const copy = V.ANNOUNCEMENT.bullets.join("\n") + "\n" + V.CHANGELOG[0].lines.join("\n");
+  const copy = V.ANNOUNCEMENT.bullets.join("\n") + "\n" + v54.lines.join("\n");
   assert.ok(copy.indexOf("从我的位置出发") === -1, "公告/更新说明 do not mention the removed first-stop pill");
 });
 
@@ -322,7 +326,7 @@ check("round-trip pairing and 再加一张返程; documented 2-row import", func
   const sameBack = { id: "s2", type: "flight", flightNo: "BA8", fromAirport: "EDI", toAirport: "LHR", departDate: "2026-12-04", departTime: "20:00" };
   const sameDay = L.pairRoundTrips([sameOut, sameBack]);
   assert.strictEqual(sameDay.s1.label, "去程", "same-day later return still pairs");
-  assert.strictEqual(sameDay.s2.label, "回程");
+  assert.strictEqual(sameDay.s2.label, "返程");
   assert.strictEqual(sameDay.s1.otherId, "s2");
   const ret = L.buildReturnFlight(out);
   assert.strictEqual(ret.fromAirport, "HND");

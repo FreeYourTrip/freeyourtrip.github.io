@@ -247,6 +247,9 @@ a { color: var(--brand); }
   font-size: 18px;
   font-weight: 600;
 }
+/* v6：空的这一趟 */
+.empty-state strong { display: block; font-size: 18px; font-weight: 700; }
+.empty-state p { margin: 8px 0 0; font-size: 14px; font-weight: 400; color: #6B7A8F; }
 
 .day-block { margin: 8px 0 20px; }
 
@@ -1190,7 +1193,7 @@ a { color: var(--brand); }
 }
 .edit-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .edit-pair > div { min-width: 0; }
-.edit-only[hidden], .add-only[hidden], .edit-pair[hidden], #edit-address-row[hidden], #edit-end-time-box[hidden] { display: none !important; }
+.edit-only[hidden], .add-only[hidden], .edit-pair[hidden], #edit-address-row[hidden], #edit-end-time-box[hidden], #leg-role-row[hidden] { display: none !important; }
 #add-sheet.is-editing #manual-fold > summary { display: none; }
 #add-sheet.is-editing #manual-fold { border: 0; background: transparent; padding: 0; margin-top: 0; }
 .secondary-btn {
@@ -2683,6 +2686,49 @@ button.leg-pill { font-family: inherit; }
 .leg-tag { background: #EEF1F4; color: #6B7A8F; }
 .card-time.card-checkout-time { font-size: 13px; color: #6B7A8F; font-weight: 600; }
 #edit-add-return { margin-top: 8px; }
+#leg-role-row { margin: 10px 0 0; }
+.leg-role-label {
+  display: block;
+  margin: 0 0 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #16332F;
+}
+.leg-role-seg {
+  display: flex;
+  height: 36px;
+  border-radius: 18px;
+  background: #F1ECE4;
+  overflow: hidden;
+}
+.leg-role-opt {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 36px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font-size: 14px;
+  font-weight: 400;
+  color: #6B7A8F;
+  border-radius: 18px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.leg-role-opt.is-on {
+  background: #fff;
+  color: #0F9D8A;
+  font-weight: 600;
+  box-shadow: 0 1px 3px rgba(0,0,0,.12);
+}
+.leg-role-hint {
+  margin: 6px 0 0;
+  font-size: 12px;
+  line-height: 1.4;
+  font-weight: 400;
+  color: #9AA6B2;
+}
 .hotel-date-hint {
   margin: 10px 0 0;
   font-size: 13px;
@@ -2727,3 +2773,169 @@ button.leg-pill { font-family: inherit; }
 }
 .pending-ask-ok { border: 0; background: #0F9D8A; color: #fff; }
 .pending-ask-edit { border: 2px solid #0F9D8A; background: #fff; color: #0F9D8A; }
+
+/* ---------- v6「我的行程」列表（第 1 批，样式从简，跟设置面板一致） ---------- */
+/* 19:10（UI）：列表左边缩进 24px；「正在看」那一行浅绿底铺满整行 */
+.trips-list { list-style: none; margin: 0; padding: 0; }
+.trip-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px 10px 24px;
+  border-bottom: 1px solid #EEF0F2;
+}
+.trip-row.is-current { background: #E6F5F2; }
+.trip-row-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 6px 0;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+.trip-row-name { font-size: 16px; font-weight: 700; display: flex; align-items: center; gap: 6px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.trip-row-tag { font-size: 12px; font-weight: 600; color: var(--brand); background: #fff; border-radius: 8px; padding: 1px 6px; }
+.trip-row-sub { font-size: 13px; color: #6B7A8F; }
+.trip-row-btn {
+  flex: none;
+  height: 36px;
+  padding: 0 12px;
+  border: 1px solid #D9E2E0;
+  border-radius: 18px;
+  background: #fff;
+  font-size: 14px;
+  color: #1F2329;
+  cursor: pointer;
+}
+.trip-row-del { color: #E5484D; }
+.trip-row-input {
+  flex: 1;
+  min-width: 0;
+  height: 40px;
+  padding: 0 12px;
+  border: 1px solid var(--brand);
+  border-radius: 10px;
+  font-size: 16px;
+}
+.trip-row-save { background: var(--brand); border-color: var(--brand); color: #fff; }
+.trips-new {
+  display: block;
+  width: calc(100% - 40px);
+  margin: 14px 16px 18px 24px;
+  height: 46px;
+  border: 1px dashed var(--brand);
+  border-radius: 12px;
+  background: #fff;
+  color: var(--brand);
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.confirm-sub { white-space: pre-line; }
+.confirm-check {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 14px;
+  font-size: 15px;
+  color: #1F2329;
+}
+.confirm-check input { width: 20px; height: 20px; margin: 0; }
+.confirm-ok.is-primary { background: var(--brand); }
+/* v6：第三个按钮（「另存一份」），三个按钮一行 */
+.confirm-actions.has-alt { grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+.confirm-alt { background: #E8F5F2; color: #0F9D8A; }
+.confirm-alt:active { background: #D3EDE8; }
+.confirm-ok.is-primary:active { background: #0B7F70; }
+/* v6 火车 / 船 / 大巴：卡片和地图沿用交通的灰蓝，图标各自不同 */
+
+/* ---------- v6：卡片长按不选字、不出系统菜单（输入框照旧） ---------- */
+.card { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+.card input, .card textarea, .card select, .card [contenteditable] { -webkit-user-select: text; user-select: text; -webkit-touch-callout: default; }
+
+/* ---------- v6：退房卡第二行，给「带我去」留位置；宽屏放不下就先藏「· 共 X 晚」 ---------- */
+/* IT老板：第二行文字区 flex:1 + min-width:0；「带我去」钉在右边不缩。360 窄屏：「共 X 晚」改到第三行，12px #9AA6B2，不再丢掉 */
+.card-meta-main { flex: 1; min-width: 0; overflow: hidden; }
+.card-meta-main .card-checkout-time {
+  flex: 0 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  column-gap: 4px;
+  height: 20px;
+  line-height: 20px;
+  overflow: hidden;
+}
+.card-checkout-time .co-when, .card-checkout-time .co-nights, .card-checkout-time .co-dot { white-space: nowrap; }
+@media (max-width: 360px) {
+  .card-meta-row { align-items: flex-start; }
+  .card-meta-main { overflow: visible; }
+  .card-meta-main .card-checkout-time {
+    height: auto;
+    overflow: visible;
+    width: 100%;
+  }
+  .card-checkout-time .co-dot { display: none; }
+  .card-checkout-time .co-nights {
+    flex: 0 0 100%;
+    font-size: 12px;
+    font-weight: 400;
+    color: #9AA6B2;
+    line-height: 16px;
+    margin-top: 2px;
+  }
+}
+
+/* ---------- v6：「全部」日程表样式 —— 每天一条日期带（UI 定稿 19:26） ---------- */
+.day-subhead {
+  position: sticky;
+  top: var(--subhead-top, 0px);
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  height: 40px;
+  margin: 0 -16px 8px;
+  padding: 0 16px 0 24px;
+  background: #F1ECE4;
+  font-size: 14px;
+  font-weight: 600;
+  color: #6B7A8F;
+}
+.day-rail.day-empty { height: 48px; background: transparent; }
+.day-rail.day-empty::before { display: none; }
+.day-block.is-drop-target { background: #E8F5F2; border-radius: 12px; }
+.day-block.is-drop-target .day-rail.day-empty { background: #E8F5F2; border: 1.5px dashed #0F9D8A; }
+.day-block.is-drop-target .day-subhead { background: #E8F5F2; }
+/* 「还没定哪天」：最下面，卡片左边 2px 灰虚线；空的时候藏起来，拖动时才出现当落点 */
+.undated-block .card { border-left: 2px dashed #C9D2DA; }
+.undated-block .card .card-stripe { display: none; }
+.undated-block .day-rail::before { display: none; }
+.undated-block.is-empty { display: none; }
+.timeline.is-dragging-any .undated-block.is-empty { display: block; }
+.undated-block.is-empty .day-rail { min-height: 48px; background: #fff; border-radius: 12px; }
+.day-block.is-drop-target.undated-block.is-empty .day-rail { background: #E8F5F2; border: 1.5px dashed #0F9D8A; }
+/* v6：勾选框只在需要时出现（display:flex 会盖过 hidden） */
+.confirm-check[hidden], .confirm-alt[hidden] { display: none; }
+/* v6：「手动填写」图标 6 个，3×2，三列平分，圆点大小不变 */
+#icon-picker.icon-picker { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+/* v6：「咖啡甜点酒吧」6 个字，一行放下，不换行不截断（360 宽也够） */
+.icon-name { white-space: nowrap; }
+.icon-opt[data-icon="dessert"] .icon-name { font-size: 12px; letter-spacing: -0.2px; }
+/* v6：机票 / 火车 / 船时间旁的「当地时间」小字 */
+.card-meta-main .tz-note { flex: none; font-size: 11px; color: #8A9099; font-weight: 400; }
+/* v6：「清空本机数据」在使用说明最下面，跟上面内容隔开 */
+.help-danger { margin: 24px 0 8px; padding: 16px 16px 0; border-top: 1px solid #ECE6DC; }
+.help-danger .more-btn { width: 100%; }
+.ai-prompt-box { margin-top: 10px; }
+.ai-prompt-box .copy-btn { margin-top: 10px; }
+.help-sheet.help-first .help-danger { display: none; }
+/* v6：确认框要盖在使用说明（全屏）上面——清空本机数据现在从使用说明里点 */
+.sheet.confirm-sheet { z-index: 55; }

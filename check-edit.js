@@ -185,7 +185,7 @@ check("UI wiring: help text, undo 10s, no 无法恢复, sw v15 caches item-edit.
   assert.strictEqual(ItemEdit.CLEAR_UNDO_MS, 10000, "清空全部: 10 s");
   assert.ok(/showToast\("已删除", [\s\S]*?\}, UNDO_MS\);/.test(tl), "single delete uses 5 s");
   assert.ok(/showToast\("已清空", [\s\S]*?\}, CLEAR_UNDO_MS\);/.test(tl), "clear-all uses 10 s");
-  assert.ok(tl.indexOf("删除后 5 秒内可以撤销。") !== -1 && tl.indexOf("建议先备份（在“设置”里点“完整备份”导出文件）。删除后 10 秒内可以撤销。") !== -1);
+  assert.ok(tl.indexOf("删除后 5 秒内可以撤销。") !== -1 && tl.indexOf('title: "清空『" + (trip.nameZh || "我的行程") + "』里的所有内容吗？",\n      sub: "其他行程不受影响",\n      okText: "清空这趟",') !== -1 /* v6：只清这一趟 */);
   assert.ok(/<button type="button" class="toast-close" id="toast-close" aria-label="关闭"/.test(html), "toast ✕");
   const css = fs.readFileSync(__dirname + "/styles.css", "utf8");
   assert.ok(/\.toast-close \{[^}]*width: 44px;[^}]*height: 44px;/.test(css), "✕ tap target 44px");
@@ -194,7 +194,7 @@ check("UI wiring: help text, undo 10s, no 无法恢复, sw v15 caches item-edit.
   assert.ok(tl.indexOf("确定删除这一项吗？") !== -1);
   assert.ok(tl.indexOf("window.confirm") === -1);
   assert.ok((tl + html).indexOf("无法恢复") === -1);
-  assert.ok(sw.indexOf('"xingcheng-map-shell-v17"') !== -1);
+  assert.ok(sw.indexOf('"xingcheng-map-shell-v18"') !== -1);
   assert.ok(sw.indexOf("./item-edit.js") !== -1);
   assert.ok(html.indexOf('src="./item-edit.js"') !== -1);
   assert.ok(html.indexOf('id="clear-all-btn"') !== -1);
@@ -205,11 +205,78 @@ check("清空本机数据 uses the in-app confirm; toast sits above the add bar"
   const css = fs.readFileSync(__dirname + "/styles.css", "utf8");
   const tl = fs.readFileSync(__dirname + "/timeline.js", "utf8");
   assert.ok(bk.indexOf("TripApp.confirm") !== -1);
-  assert.ok(bk.indexOf("确定清空本机全部数据吗？") !== -1);
-  assert.ok(bk.indexOf("全部清空") !== -1);
-  assert.ok(bk.indexOf("建议先备份（点“完整备份”导出文件）。") !== -1);
+  /* v6 文案定稿（19:43） */
+  assert.ok(bk.indexOf('var CLEAR_LOCAL_COPY = { title: "手机上所有行程和地点都会删掉，删了找不回来", ok: "全部删掉", cancel: "取消" };') !== -1);
+  assert.ok(/title: CLEAR_LOCAL_COPY\.title,\s*okText: CLEAR_LOCAL_COPY\.ok,\s*cancelText: CLEAR_LOCAL_COPY\.cancel,/.test(bk));
   assert.ok(/confirm:\s*openConfirm/.test(tl));
   assert.ok(css.indexOf("bottom: calc(78px + env(safe-area-inset-bottom, 0px));") !== -1);
+});
+
+check("legRole is kept on date edit and can be set or cleared from the form", function () {
+  const item = {
+    id: "f-role", type: "flight", flightNo: "BA1",
+    fromAirport: "LHR", toAirport: "HND",
+    departDate: "2026-12-01", departTime: "09:30",
+    arriveDate: "2026-12-02", arriveTime: "07:00",
+    legRole: "out"
+  };
+  const f = ItemEdit.formFields(item);
+  assert.strictEqual(f.legRole, "out");
+  const dated = ItemEdit.applyForm(item, Object.assign({}, f, { date: "2026-12-03" }));
+  assert.strictEqual(dated.error, "");
+  assert.strictEqual(dated.item.departDate, "2026-12-03");
+  assert.strictEqual(dated.item.legRole, "out", "date edit must not drop a manual role");
+  const cleared = ItemEdit.applyForm(item, Object.assign({}, f, { legRole: "auto" }));
+  assert.ok(!cleared.item.legRole, "auto means the field is absent");
+  const setBack = ItemEdit.applyForm(Object.assign({}, item, { legRole: undefined }), Object.assign({}, f, { legRole: "back" }));
+  assert.strictEqual(setBack.item.legRole, "back");
+});
+
+check("import never sets legRole; full backup export keeps it", function () {
+  const Imp = require("./import.js");
+  const internal = {
+    type: "flight",
+    flightNo: "BA1",
+    nameZh: "HND",
+    fromAirport: "LHR",
+    toAirport: "HND",
+    departDate: "2026-12-01",
+    departTime: "09:30",
+    arriveDate: "2026-12-02",
+    arriveTime: "07:00",
+    legRole: "out"
+  };
+  const parsed = Imp.parseImport(JSON.stringify([internal]));
+  assert.deepStrictEqual(parsed.errors, []);
+  assert.strictEqual(parsed.items.length, 1);
+  assert.ok(!parsed.items[0].legRole, "paste-import must not copy legRole");
+
+  const pipe = Imp.parseImport("机票 | BA1 | LHR - HND | 2026-12-01 09:30 ~ 2026-12-02 07:00 | ");
+  assert.ok(!pipe.items[0].legRole);
+
+  const ls = {};
+  globalThis.localStorage = globalThis.localStorage || {
+    getItem: (k) => (k in ls ? ls[k] : null),
+    setItem: (k, v) => { ls[k] = String(v); },
+    removeItem: (k) => { delete ls[k]; }
+  };
+  const flight = {
+    id: "keep-role", type: "flight", flightNo: "BA9",
+    fromAirport: "LHR", toAirport: "CDG",
+    departDate: "2026-12-03", departTime: "09:00",
+    arriveDate: "2026-12-03", arriveTime: "11:00",
+    legRole: "back"
+  };
+  globalThis.TripApp = {
+    exportState: function () {
+      return { trips: [{ id: "t1", nameZh: "示例", items: [flight] }], places: [], activeTripId: "t1", examplesLoaded: false, legs: {} };
+    }
+  };
+  const Backup = require("./backup.js");
+  const payload = Backup.collect({ includeGeocodeCache: false });
+  assert.strictEqual(payload.trips[0].items[0].legRole, "back", "full backup keeps legRole");
+  const share = Backup.redactForShare(payload);
+  assert.strictEqual(share.trips[0].items[0].legRole, "back");
 });
 
 if (failures) {

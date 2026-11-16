@@ -49,9 +49,9 @@
           <span class="brand-name"><span class="brand-free">Free</span> Your Trip</span>
         </h1>
         <div class="trip-line">
-          <!-- v5.2 行程名胶囊：现在点一下改名；v6 多行程时同一个胶囊改成切换行程（换 data-role 和右侧图标即可） -->
-          <div class="trip-pill" id="trip-pill" data-role="rename">
-            <button type="button" class="trip-name" id="trip-name-btn" aria-label="行程名称，点一下可以改"><span class="trip-name-text" id="trip-name-text">我的行程</span><svg class="trip-pill-ico" id="trip-pill-ico" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="#8A9099" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.5 2.5l3 3L6 13H3v-3z"/><path d="M9 4l3 3"/></svg></button>
+          <!-- v6 行程名胶囊：点一下打开「我的行程」（切换 / 新建 / 改名 / 删除）；改名挪进列表里 -->
+          <div class="trip-pill" id="trip-pill" data-role="switch">
+            <button type="button" class="trip-name" id="trip-name-btn" aria-label="当前行程，点一下切换或管理行程" aria-haspopup="dialog"><span class="trip-name-text" id="trip-name-text">我的行程</span><svg class="trip-pill-ico" id="trip-pill-ico" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="#8A9099" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6l4 4 4-4"/></svg></button>
             <span class="trip-rename-box" id="trip-rename-box" hidden>
               <input type="text" class="trip-name-input" id="trip-name-input" maxlength="40" aria-label="行程名称" enterkeyhint="done">
               <button type="button" class="trip-name-done" id="trip-name-done">完成</button>
@@ -93,7 +93,7 @@
       <section id="list-view" class="panel">
         <div class="list-head" id="list-head">
           <span class="list-count" id="list-count"></span>
-          <button type="button" class="clear-all-btn" id="clear-all-btn">清空全部</button>
+          <button type="button" class="clear-all-btn" id="clear-all-btn">清空这趟</button>
         </div>
         <div id="timeline" class="timeline"></div>
       </section>
@@ -148,7 +148,7 @@
       <label class="sr-only" for="place-search">输入地名</label>
       <input type="search" id="place-search" placeholder="输入店名，或粘贴地址" autocomplete="off" enterkeyhint="search" spellcheck="false">
       <!-- v5.3 只在「加酒店」页显示 -->
-      <button type="button" class="add-map-link" id="add-map-link" hidden>找不到？在地图上选 ›</button>
+      <button type="button" class="add-map-link" id="add-fallback" hidden>找不到？换个方式加 ›</button>
       <div class="search-status" id="search-status" role="status"></div>
       <ul class="search-results" id="search-results" hidden></ul>
       <button type="button" class="search-fallback" id="search-fallback" hidden><span class="sf-main" id="sf-main">＋ 直接添加</span><span class="sf-sub">没有地图位置，也能放进行程</span></button>
@@ -161,7 +161,6 @@
           <button type="button" class="direct-add-go" id="direct-add-go">添加</button>
         </div>
       </div>
-      <button type="button" class="fix-manual" id="fix-manual" hidden>手动填地址</button>
       </div>
 
       <section class="ai-wizard add-only" id="ai-help" hidden>
@@ -172,9 +171,12 @@
         <ol class="ai-steps">
           <li class="ai-step is-current" data-step="1">
             <p class="ai-step-text" id="ai-step1-text"></p>
-            <button type="button" class="primary-btn copy-btn" id="ai-copy-btn">复制给 AI 的话</button>
-            <button type="button" class="text-link-btn" id="ai-preview-toggle">查看提示词</button>
-            <pre class="prompt-view" id="ai-prompt-view" hidden></pre>
+            <!-- v6：原来的看提示词和复制两个按钮合成一个：先打开全文，下面一个「复制」 -->
+            <button type="button" class="primary-btn" id="ai-prompt-open" aria-expanded="false" aria-controls="ai-prompt-box">给 AI 的话</button>
+            <div class="ai-prompt-box" id="ai-prompt-box" hidden>
+              <pre class="prompt-view" id="ai-prompt-view"></pre>
+              <button type="button" class="primary-btn copy-btn" id="ai-copy-btn">复制</button>
+            </div>
           </li>
           <li class="ai-step" data-step="2">
             <p class="ai-step-text" id="ai-step2-text"></p>
@@ -211,6 +213,16 @@
           </select>
           <label for="manual-name">名称</label>
           <input type="text" id="manual-name" placeholder="比如「大英博物馆」" autocomplete="off">
+          <div id="leg-role-row" hidden>
+            <span class="leg-role-label" id="leg-role-label">这段是</span>
+            <div class="leg-role-seg" role="radiogroup" aria-labelledby="leg-role-label">
+              <button type="button" class="leg-role-opt is-on" data-leg-role="auto" role="radio" aria-checked="true">自动</button>
+              <button type="button" class="leg-role-opt" data-leg-role="out" role="radio" aria-checked="false">去程</button>
+              <button type="button" class="leg-role-opt" data-leg-role="back" role="radio" aria-checked="false">返程</button>
+              <button type="button" class="leg-role-opt" data-leg-role="transfer" role="radio" aria-checked="false">转机</button>
+            </div>
+            <p class="leg-role-hint" id="leg-role-hint">没认出来，可以自己选</p>
+          </div>
           <div class="icon-pick-row" id="icon-pick-row">
             <span class="icon-pick-label" id="icon-pick-label">图标（可不选）</span>
             <div class="icon-picker" id="icon-picker" role="radiogroup" aria-labelledby="icon-pick-label"></div>
@@ -252,6 +264,19 @@
     </div>
   </div>
 
+  <div class="sheet" id="trips-sheet" hidden>
+    <div class="sheet-backdrop" data-close="trips-sheet"></div>
+    <div class="sheet-panel" role="dialog" aria-labelledby="trips-sheet-title">
+      <div class="sheet-handle" aria-hidden="true"></div>
+      <div class="sheet-head">
+        <h2 id="trips-sheet-title">我的行程</h2>
+        <button type="button" class="icon-btn sheet-close" data-close="trips-sheet" aria-label="关闭"></button>
+      </div>
+      <ul class="trips-list" id="trips-list"></ul>
+      <button type="button" class="trips-new" id="trips-new">＋ 新建行程</button>
+    </div>
+  </div>
+
   <div class="sheet" id="settings-sheet" hidden>
     <div class="sheet-backdrop" data-close="settings-sheet"></div>
     <div class="sheet-panel" role="dialog" aria-labelledby="settings-sheet-title">
@@ -264,11 +289,10 @@
         <button type="button" class="more-btn" id="help-open-btn">使用说明</button>
         <button type="button" class="more-btn more-btn-sub" id="install-btn" data-sub="像 App 一样，点图标就打开">放到手机桌面</button>
         <button type="button" class="more-btn more-btn-sub" id="backup-export-share" data-sub="发给同行的人，对方导入就能看到">分享我的行程</button>
-        <button type="button" class="more-btn more-btn-sub" id="recommend-btn" data-sub="只发网址，不含你的行程">推荐这个工具</button>
+        <button type="button" class="more-btn more-btn-sub" id="recommend-btn" data-sub="只发网址，不含你的行程">分享给朋友</button>
         <button type="button" class="more-btn" id="backup-import">导入</button>
         <input type="file" id="backup-file" accept="application/json,.json" hidden>
         <button type="button" class="more-btn" id="backup-export-full" title="含确认号和座位，仅自己保存">完整备份</button>
-        <button type="button" class="more-btn more-btn-danger" id="backup-clear">清空本机数据</button>
       </div>
       <p class="settings-note">行程只存在你的手机里，没有账号，也没有服务器，我们看不到。只有搜索、显示地图和导航时，地名、地址和大概位置会发给地图服务（OpenStreetMap、高德或 Google 地图）。</p>
       <div class="version-block">
@@ -339,8 +363,10 @@
     <div class="confirm-panel" role="alertdialog" aria-labelledby="confirm-title" aria-describedby="confirm-sub">
       <h2 class="confirm-title" id="confirm-title">确定删除这一项吗？</h2>
       <p class="confirm-sub" id="confirm-sub"></p>
+      <label class="confirm-check" id="confirm-check-row" hidden><input type="checkbox" id="confirm-check"><span id="confirm-check-text"></span></label>
       <div class="confirm-actions">
         <button type="button" class="confirm-cancel" id="confirm-cancel">取消</button>
+        <button type="button" class="confirm-alt" id="confirm-alt" hidden></button>
         <button type="button" class="confirm-ok" id="confirm-ok">删除</button>
       </div>
     </div>
@@ -382,6 +408,8 @@
         <h2 id="help-sheet-title">使用说明</h2>
       </div>
       <div class="help-body" id="help-body"></div>
+      <!-- v6：「清空本机数据」挪到使用说明最下面，离「清空这趟」远一点 -->
+      <div class="help-danger"><button type="button" class="more-btn more-btn-danger" id="backup-clear">清空本机数据</button></div>
       <div class="help-foot">
         <label><input type="checkbox" id="help-dont-show"> 不再自动弹出</label>
         <button type="button" class="help-ok" id="help-ok">知道了</button>
@@ -463,6 +491,9 @@
   <script src="./airports.js"></script>
   <script src="./config.js"></script>
   <script src="./geo.js"></script>
+  <script src="./transport.js"></script>
+  <script src="./places.js"></script>
+  <script src="./trip-store.js"></script>
   <script src="./geocode.js"></script>
   <script src="./import.js"></script>
   <script src="./guess-type.js"></script>

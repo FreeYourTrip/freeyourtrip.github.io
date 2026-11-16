@@ -9,6 +9,11 @@
  */
 (function (root) {
   "use strict";
+  /* v6：火车 / 船 / 大巴跟机票一样按「出发 ~ 到达」处理，见 transport.js */
+  var Transport = root.Transport || (typeof require === "function" ? require("./transport.js") : null);
+  function isTransit(item) {
+    return Transport ? Transport.isTransit(item) : !!item && item.type === "flight";
+  }
 
   var MAX = 3;
 
@@ -93,7 +98,7 @@
 
   /* ---------- 哪些条目待补 ---------- */
   function needsFix(it) {
-    if (!it || it.type === "flight") return false;
+    if (!it || isTransit(it)) return false;
     return !(typeof it.lat === "number" && typeof it.lng === "number" && isFinite(it.lat) && isFinite(it.lng));
   }
 

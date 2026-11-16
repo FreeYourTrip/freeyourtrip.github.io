@@ -262,7 +262,7 @@ check("「直接添加」 items (IT老板 c) get the background candidate search
   const fin = tl.slice(tl.indexOf("function finishDirectAdd"), tl.indexOf("var fixingId = null"));
   assert.ok(/addPlaceAndToast\(it, DIRECT_COPY\.added\);\s*queueCandidates\(real \|\| it\);/.test(fin), "v5.4: still queues candidates after the date panel");
   assert.ok(/return real;\s*\}\s*function nameOrBlank/.test(tl), "addPlaceAndToast hands back the stored item");
-  assert.ok(/if \(expanded\[eid\] && eit && eit\.type !== "flight" && itemUnlocated\(eit\)\) queueCandidates\(eit\);/.test(tl), "expanding a 待补 card searches too");
+  assert.ok(/if \(expanded\[eid\] && eit && !isTransit\(eit\) && itemUnlocated\(eit\)\) queueCandidates\(eit\);/.test(tl), "expanding a 待补 card searches too (v6: not for transport)");
 });
 
 check("no new external hosts (same set as v5.2)", function () {
@@ -285,7 +285,7 @@ check("location never persisted: candidates and map-pick state live in memory; n
   const days = tl.slice(tl.indexOf("function dayArgsFor"), tl.indexOf("function locPinSvg"));
   assert.ok(/TripName\.dayArea\(items, day, opts\)/.test(days), "area comes from trip items only");
   const sw = read("sw.js");
-  assert.ok(sw.indexOf('"./fix-cand.js"') !== -1 && sw.indexOf('"xingcheng-map-shell-v17"') !== -1);
+  assert.ok(sw.indexOf('"./fix-cand.js"') !== -1 && sw.indexOf('"xingcheng-map-shell-v18"') !== -1);
   assert.ok(/<script src="\.\/fix-cand\.js"><\/script>\s*/.test(html) && html.indexOf("fix-cand.js") < html.indexOf("<script src=\"./timeline.js\""));
 });
 
@@ -316,7 +316,7 @@ check("UI: while a card lists candidates, the grey 带我去 / 看位置 row and
   F.setCached(it, [{ name: "示例", lat: 1, lng: 2 }]);
   assert.ok(F.getCached(it).length === 1);
   /* fixed item: has coords → needsAddr false → nav is pushed again (the normal teal 带我去) */
-  assert.ok(/var needsAddr = item\.type !== "flight" && itemUnlocated\(item\);/.test(tl));
+  assert.ok(/var needsAddr = !isTransit\(item\) && itemUnlocated\(item\);/.test(tl));
 });
 
 check("「＋ 添加」 opens 「添加什么？」: 加机票 / 加酒店 / 加地点 + whole-trip AI button; final copy in one constant; UI values", function () {
@@ -346,9 +346,9 @@ check("「＋ 添加」 opens 「添加什么？」: 加机票 / 加酒店 / 加
 
 check("加酒店 page: title 加酒店, ‹ back to the menu, no AI button / 手动填写, 找不到？在地图上选 › saves a hotel, purple bed rows; 加地点 page unchanged", function () {
   const C = tl.slice(tl.indexOf("var ADD_MENU_COPY = {"), tl.indexOf("var addPreset"));
-  ['hotelTitle: "加酒店"', 'mapLink: "找不到？在地图上选 ›"'].forEach((x) => assert.ok(C.indexOf(x) !== -1, x));
+  ['hotelTitle: "加酒店"', 'fallback: "找不到？换个方式加 ›"', 'fallbackMap: "在地图上选"', 'fallbackManual: "手动填地址"'].forEach((x) => assert.ok(C.indexOf(x) !== -1, x));
   assert.ok(/<button type="button" class="sheet-back" id="add-sheet-back" aria-label="[^"]+" hidden>‹<\/button>\s*<h2 id="add-sheet-title">/.test(html), "‹ before the title");
-  assert.ok(/<input type="search" id="place-search"[^>]*>\s*<!--[^>]*-->\s*<button type="button" class="add-map-link" id="add-map-link" hidden>找不到？在地图上选 ›<\/button>/.test(html), "link right under the box");
+  assert.ok(/<input type="search" id="place-search"[^>]*>\s*<!--[^>]*-->\s*<button type="button" class="add-map-link" id="add-fallback" hidden>找不到？换个方式加 ›<\/button>/.test(html), "one fallback row right under the box (v6)");
   assert.ok(/\.sheet-back \{[^}]*font-size: 20px;/.test(css), "20px back arrow");
   assert.ok(/\.add-map-link \{[^}]*margin: 12px 0 4px;[^}]*font-size: 13px;[^}]*color: #0F9D8A;/.test(css), "13px teal link, 12px under the box");
   assert.ok(/#add-sheet\.is-hotel #add-search-block \{ margin-top: 8px; \}/.test(css), "8px top gap");
@@ -360,7 +360,8 @@ check("加酒店 page: title 加酒店, ‹ back to the menu, no AI button / 手
   assert.ok(/if \(hotelMode\) setHotelMode\(false\);/.test(tl) && /setAddPreset\("place"\);\s*setHotelMode\(false\);/.test(tl) && /if \(isEdit && hotelMode\) setHotelMode\(false\);/.test(tl), "reset on close / 补地址 / edit");
   const bind = tl.slice(tl.indexOf("function bindAddMenu"), tl.indexOf("function bindPasteSearch"));
   assert.ok(/closeSheet\("add-sheet"\);\s*openAddMenu\(\);/.test(bind), "‹ returns to 添加什么？");
-  assert.ok(/openMapPick\(null, null, \{ label: "酒店", name: q \|\| C\.mapHotelName \}\)/.test(bind), "map link opens map-pick for a new hotel");
+  const fb = tl.slice(tl.indexOf("function openAddFallback"), tl.indexOf("function manualHotelFromSearch"));
+  assert.ok(/\$\("add-fallback"\)\.addEventListener\("click", openAddFallback\)/.test(bind) && /else openMapPick\(null, null, \{ label: "酒店", name: q \|\| C\.mapHotelName \}\);/.test(fb), "v6: 在地图上选 (from the one fallback row) opens map-pick for a new hotel");
   const save = tl.slice(tl.indexOf("function saveMapPick"), tl.indexOf("function saveMapPick") + 900);
   assert.ok(/itemFromType\(spec\.name, "", spec\.label, null, selectedDateOrEmpty\(\)\);\s*fresh\.address = "";\s*fresh = FC\(\)\.applyMapPick/.test(save), "saved as a hotel, lat/lng only");
   assert.ok(/afterHotelReady\(fresh,/.test(save), "v5.4: map-pick hotel goes through the date panel before adding");
