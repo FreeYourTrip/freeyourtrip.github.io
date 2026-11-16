@@ -3,14 +3,32 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#0F9D8A">
+  <meta name="theme-color" content="#FFFFFF">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
-  <meta name="apple-mobile-web-app-title" content="我的行程">
-  <title>行程地图</title>
+  <meta name="apple-mobile-web-app-title" content="FreeYourTrip">
+  <title>Free Your Trip</title>
+  <meta name="description" content="机票、酒店、想去的地方，一路串起来">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Free Your Trip">
+  <meta property="og:description" content="机票、酒店、想去的地方，一路串起来">
+  <meta property="og:url" content="https://freeyourtrip.github.io/">
+  <meta property="og:image" content="https://freeyourtrip.github.io/cover-1200x630.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Free Your Trip">
+  <meta name="twitter:description" content="机票、酒店、想去的地方，一路串起来">
+  <meta name="twitter:image" content="https://freeyourtrip.github.io/cover-1200x630.png">
+  <link rel="apple-touch-startup-image" href="./splash-1290x2796.png" media="(device-width: 430px) and (device-height: 932px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)">
   <link rel="manifest" href="./manifest.webmanifest">
-  <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png">
-  <link rel="icon" type="image/png" sizes="192x192" href="./icons/icon-192.png">
+  <link rel="apple-touch-icon" href="./icons/icon-180.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="./icons/icon-180.png">
+  <link rel="apple-touch-icon" sizes="167x167" href="./icons/icon-167.png">
+  <link rel="apple-touch-icon" sizes="152x152" href="./icons/icon-152.png">
+  <link rel="apple-touch-icon" sizes="120x120" href="./icons/icon-120.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="./icons/icon-32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="./icons/icon-16.png">
   <link rel="stylesheet" href="./vendor/leaflet.css">
   <link rel="stylesheet" href="./styles.css">
 </head>
@@ -18,9 +36,15 @@
   <div class="app">
     <header class="topbar">
       <div class="brand-block">
-        <button type="button" class="trip-name" id="trip-name-btn">我的行程</button>
-        <input type="text" class="trip-name-input" id="trip-name-input" maxlength="40" hidden aria-label="行程名称">
-        <p class="trip-dates" id="trip-dates" hidden></p>
+        <h1 class="brand-row" aria-label="Free Your Trip">
+          <img class="brand-icon" src="./icons/icon-192.png" width="24" height="24" alt="">
+          <span class="brand-name"><span class="brand-free">Free</span> Your Trip</span>
+        </h1>
+        <div class="trip-line">
+          <button type="button" class="trip-name" id="trip-name-btn" aria-label="行程名称，点一下可以改">我的行程</button>
+          <input type="text" class="trip-name-input" id="trip-name-input" maxlength="40" hidden aria-label="行程名称">
+          <p class="trip-dates" id="trip-dates" hidden></p>
+        </div>
       </div>
       <div class="top-actions">
         <button type="button" class="top-help-btn" id="help-top-btn">使用说明</button>
@@ -31,7 +55,13 @@
       </div>
     </header>
 
-    <div class="day-chips" id="day-chips" hidden role="tablist" aria-label="按天查看"></div>
+    <div class="update-banner" id="update-banner" role="status" hidden>
+      <span class="update-lead"><span>有新版本</span></span>
+      <button type="button" class="update-later" id="update-later">稍后</button>
+      <button type="button" class="update-now" id="update-now">立即更新</button>
+    </div>
+
+    <div class="day-chips" id="day-chips" hidden role="tablist" aria-label="日期条：按天查看"></div>
     <div class="install-banner" id="install-banner" hidden>
       <button type="button" class="install-banner-go" id="install-banner-go"></button>
       <button type="button" class="install-banner-x" id="install-banner-dismiss" aria-label="关闭"></button>
@@ -39,6 +69,10 @@
 
     <main class="main">
       <section id="list-view" class="panel">
+        <div class="list-head" id="list-head">
+          <span class="list-count" id="list-count"></span>
+          <button type="button" class="clear-all-btn" id="clear-all-btn">清空全部</button>
+        </div>
         <div id="timeline" class="timeline"></div>
       </section>
       <section id="map-view" class="panel panel-map" hidden>
@@ -59,13 +93,15 @@
         <h2 id="add-sheet-title">添加</h2>
         <button type="button" class="icon-btn sheet-close" data-close="add-sheet" aria-label="关闭"></button>
       </div>
+      <div class="add-only" id="add-search-block">
       <label class="sr-only" for="place-search">输入地名</label>
       <input type="search" id="place-search" placeholder="输入地名，比如 大英博物馆" autocomplete="off" enterkeyhint="search" spellcheck="false">
       <div class="search-status" id="search-status" role="status"></div>
       <ul class="search-results" id="search-results" hidden></ul>
       <button type="button" class="search-fallback" id="search-fallback" hidden>找不到？直接用这个名字添加</button>
+      </div>
 
-      <details class="fold" id="ai-help">
+      <details class="fold add-only" id="ai-help">
         <summary>用 AI 帮我整理（截图也行）</summary>
         <div class="fold-body">
           <ol class="fold-steps">
@@ -99,7 +135,36 @@
           </select>
           <label for="manual-name">名称</label>
           <input type="text" id="manual-name" placeholder="比如「大英博物馆」" autocomplete="off">
+          <div class="edit-only" id="edit-fields" hidden>
+            <div id="edit-address-row">
+              <label for="edit-address">地址</label>
+              <input type="text" id="edit-address" autocomplete="off" placeholder="改了地址会重新找位置">
+            </div>
+            <div class="edit-pair">
+              <div>
+                <label for="edit-date" id="edit-date-label">日期</label>
+                <input type="date" id="edit-date">
+              </div>
+              <div>
+                <label for="edit-time" id="edit-time-label">时间</label>
+                <input type="time" id="edit-time">
+              </div>
+            </div>
+            <div class="edit-pair" id="edit-end-row">
+              <div>
+                <label for="edit-end-date" id="edit-end-date-label">退房日期</label>
+                <input type="date" id="edit-end-date">
+              </div>
+              <div id="edit-end-time-box">
+                <label for="edit-end-time">到达时间</label>
+                <input type="time" id="edit-end-time">
+              </div>
+            </div>
+            <label for="edit-note">备注</label>
+            <input type="text" id="edit-note" autocomplete="off" placeholder="可以不填">
+          </div>
           <button type="button" class="primary-btn" id="manual-save">保存</button>
+          <button type="button" class="secondary-btn edit-only" id="edit-cancel" hidden>取消</button>
           <div class="add-status" id="manual-status" role="status"></div>
         </div>
       </details>
@@ -124,6 +189,89 @@
         <button type="button" class="more-btn more-btn-danger" id="backup-clear">清空本机数据</button>
       </div>
       <p class="settings-note">行程只存在你的手机里，没有账号，也没有服务器，我们看不到。只有搜索、显示地图和导航时，地名或地址会发给地图服务（OpenStreetMap、高德或 Google 地图）。</p>
+      <div class="version-block">
+        <p class="version-label" id="version-label">当前版本</p>
+        <button type="button" class="changelog-row" id="changelog-open">
+          <span>更新记录</span>
+          <span class="changelog-chev" aria-hidden="true">›</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div class="sheet" id="month-sheet" hidden>
+    <div class="sheet-backdrop" data-close="month-sheet"></div>
+    <div class="sheet-panel month-panel" role="dialog" aria-labelledby="month-title">
+      <div class="sheet-handle" aria-hidden="true"></div>
+      <div class="sheet-head month-head">
+        <button type="button" class="month-nav" id="month-prev" aria-label="上个月">‹</button>
+        <h2 id="month-title">月历</h2>
+        <button type="button" class="month-nav" id="month-next" aria-label="下个月">›</button>
+        <button type="button" class="icon-btn sheet-close" data-close="month-sheet" aria-label="关闭"></button>
+      </div>
+      <div class="month-body" id="month-body"></div>
+    </div>
+  </div>
+
+  <div class="sheet" id="changelog-sheet" hidden>
+    <div class="sheet-backdrop" data-close="changelog-sheet"></div>
+    <div class="sheet-panel" role="dialog" aria-labelledby="changelog-title">
+      <div class="sheet-handle" aria-hidden="true"></div>
+      <div class="sheet-head">
+        <h2 id="changelog-title">更新记录</h2>
+        <button type="button" class="icon-btn sheet-close" data-close="changelog-sheet" aria-label="关闭"></button>
+      </div>
+      <div class="changelog-body" id="changelog-body"></div>
+    </div>
+  </div>
+
+  <div class="sheet announce-sheet" id="announce-sheet" hidden>
+    <div class="sheet-backdrop"></div>
+    <div class="announce-card" role="dialog" aria-modal="true" aria-labelledby="announce-title">
+      <svg class="announce-illu" viewBox="0 0 120 80" width="120" height="80" aria-hidden="true">
+        <circle cx="60" cy="42" r="34" fill="#EAF2FF"/>
+        <rect x="44" y="14" width="32" height="56" rx="6" fill="#fff" stroke="#4C8DFF" stroke-width="3"/>
+        <rect x="50" y="24" width="20" height="6" rx="3" fill="#4C8DFF"/>
+        <rect x="50" y="35" width="20" height="5" rx="2.5" fill="#BFD6FF"/>
+        <rect x="50" y="45" width="14" height="5" rx="2.5" fill="#BFD6FF"/>
+        <circle cx="60" cy="61" r="2.5" fill="#4C8DFF"/>
+        <path d="M90 18l2.4 5.6L98 26l-5.6 2.4L90 34l-2.4-5.6L82 26l5.6-2.4z" fill="#FFC53D"/>
+        <path d="M28 46l1.6 3.4 3.4 1.6-3.4 1.6L28 56l-1.6-3.4-3.4-1.6 3.4-1.6z" fill="#FFC53D"/>
+        <circle cx="96" cy="52" r="3" fill="#4C8DFF" opacity=".5"/>
+        <circle cx="24" cy="24" r="2.5" fill="#4C8DFF" opacity=".5"/>
+      </svg>
+      <h2 class="announce-title" id="announce-title">新版本</h2>
+      <ul class="announce-list" id="announce-list"></ul>
+      <p class="announce-tip" id="announce-tip"></p>
+      <button type="button" class="announce-ok" id="announce-ok">知道了</button>
+    </div>
+  </div>
+
+  <div class="sheet" id="detail-sheet" hidden>
+    <div class="sheet-backdrop" data-close="detail-sheet"></div>
+    <div class="sheet-panel" role="dialog" aria-labelledby="detail-title">
+      <div class="sheet-handle" aria-hidden="true"></div>
+      <div class="sheet-head">
+        <h2 id="detail-title">详情</h2>
+        <button type="button" class="icon-btn sheet-close" data-close="detail-sheet" aria-label="关闭"></button>
+      </div>
+      <div class="detail-body" id="detail-body"></div>
+      <div class="detail-actions">
+        <button type="button" class="detail-btn detail-edit" id="detail-edit">修改</button>
+        <button type="button" class="detail-btn detail-delete" id="detail-delete">删除</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="sheet confirm-sheet" id="confirm-sheet" hidden>
+    <div class="sheet-backdrop" data-close="confirm-sheet"></div>
+    <div class="confirm-panel" role="alertdialog" aria-labelledby="confirm-title" aria-describedby="confirm-sub">
+      <h2 class="confirm-title" id="confirm-title">确定删除这一项吗？</h2>
+      <p class="confirm-sub" id="confirm-sub"></p>
+      <div class="confirm-actions">
+        <button type="button" class="confirm-cancel" id="confirm-cancel">取消</button>
+        <button type="button" class="confirm-ok" id="confirm-ok">删除</button>
+      </div>
     </div>
   </div>
 
@@ -152,6 +300,23 @@
     </div>
   </div>
 
+  <div class="ios-guide" id="ios-guide" role="dialog" aria-labelledby="ios-guide-title" hidden>
+    <div class="ios-guide-card">
+      <button type="button" class="ios-guide-x" id="ios-guide-x" aria-label="关闭">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+      <h2 class="ios-guide-title" id="ios-guide-title">添加到主屏幕，像 App 一样打开</h2>
+      <ol class="ios-guide-steps">
+        <li><span class="ios-guide-n">①</span>点底部的分享按钮
+          <svg class="ios-share-ico" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#4C8DFF" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-label="分享按钮" role="img"><path d="M12 3v12"/><path d="M8 7l4-4 4 4"/><path d="M8.5 10H6a1 1 0 0 0-1 1v9a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-9a1 1 0 0 0-1-1h-2.5"/></svg>
+        </li>
+        <li><span class="ios-guide-n">②</span>选「添加到主屏幕」</li>
+      </ol>
+      <button type="button" class="ios-guide-later" id="ios-guide-later">下次再说</button>
+    </div>
+    <svg class="ios-guide-arrow" viewBox="0 0 32 32" width="32" height="32" aria-hidden="true"><path d="M16 4v22" stroke="#4C8DFF" stroke-width="3" stroke-linecap="round" fill="none"/><path d="M7 18l9 9 9-9" stroke="#4C8DFF" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>
+  </div>
+
   <div class="toast" id="toast" hidden>
     <span id="toast-msg"></span>
     <button type="button" id="toast-undo">撤销</button>
@@ -169,13 +334,12 @@
   <script src="./ai-prompt.js"></script>
   <script src="./backup.js"></script>
   <script src="./legs.js"></script>
+  <script src="./calendar.js"></script>
+  <script src="./item-edit.js"></script>
+  <script src="./version.js"></script>
   <script src="./icons.js"></script>
   <script src="./app.js"></script>
   <script src="./timeline.js"></script>
-  <script>
-    if ("serviceWorker" in navigator && (location.protocol === "http:" || location.protocol === "https:")) {
-      navigator.serviceWorker.register("./sw.js").catch(function () {});
-    }
-  </script>
+  <script src="./update-banner.js"></script>
 </body>
 </html>

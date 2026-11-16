@@ -88,10 +88,12 @@ check("full backup payload keeps secrets when includeGeocodeCache is true", func
 check("share filename pattern uses compact YYYYMMDD", function () {
   const stamp = BackupUtil.todayStamp();
   assert.ok(/^\d{8}$/.test(stamp), stamp);
-  const shareName = "行程分享-" + stamp + ".json";
-  const fullName = "行程完整备份-" + stamp + ".json";
-  assert.ok(shareName.indexOf("行程分享-") === 0);
-  assert.ok(fullName.indexOf("行程完整备份-") === 0);
+  const src = require("fs").readFileSync(__dirname + "/backup.js", "utf8");
+  assert.ok(src.indexOf('"freeyourtrip-share-" + todayStamp() + ".json"') !== -1, "share file uses freeyourtrip- prefix");
+  assert.ok(src.indexOf('"freeyourtrip-full-backup-" + todayStamp() + ".json"') !== -1, "full backup uses freeyourtrip- prefix");
+  assert.ok(src.indexOf("行程分享-") === -1 && src.indexOf("行程完整备份-") === -1, "old names gone");
+  const shareName = "freeyourtrip-share-" + stamp + ".json";
+  const fullName = "freeyourtrip-full-backup-" + stamp + ".json";
   assert.notStrictEqual(shareName, fullName);
 });
 

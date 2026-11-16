@@ -110,7 +110,10 @@
     return p.m + "/" + p.d;
   }
 
+  var todayOverride = "";
+
   function todayIso() {
+    if (todayOverride) return todayOverride;
     var n = new Date();
     return n.getFullYear() + "-" + pad2(n.getMonth() + 1) + "-" + pad2(n.getDate());
   }
@@ -283,6 +286,33 @@
     };
   }
 
+  /* 日期条演示用的假行程（?demo=japan），只含公开景点，不含真实个人信息。 */
+  function demoJapanTrip() {
+    function place(id, sub, name, date, time, lat, lng) {
+      return { id: id, type: "place", subtype: sub, nameZh: name, address: name, date: date, time: time, lat: lat, lng: lng, example: true };
+    }
+    return {
+      id: "demo-japan",
+      nameZh: "日本示例行程",
+      example: true,
+      items: [
+        { id: "j-f1", type: "flight", flightNo: "XX101", fromAirport: "LHR", toAirport: "HND", fromNameZh: "希思罗机场", nameZh: "羽田机场",
+          fromLat: 51.47, fromLng: -0.4543, lat: 35.5494, lng: 139.7798, departDate: "2026-11-09", departTime: "19:00", arriveDate: "2026-11-10", arriveTime: "16:00", example: true },
+        { id: "j-h1", type: "hotel", nameZh: "东京示例酒店", city: "东京", address: "Shinjuku, Tokyo", checkIn: "2026-11-10", checkInTime: "18:00", checkOut: "2026-11-14", lat: 35.6938, lng: 139.7034, example: true },
+        place("j-p1", "景点", "浅草寺", "2026-11-11", "10:00", 35.7148, 139.7967),
+        place("j-p2", "餐厅", "筑地场外市场", "2026-11-12", "09:00", 35.6655, 139.7707),
+        { id: "j-h2", type: "hotel", nameZh: "京都示例旅馆", city: "京都", address: "Higashiyama, Kyoto", checkIn: "2026-11-14", checkInTime: "16:00", checkOut: "2026-11-18", lat: 34.9961, lng: 135.7786, example: true },
+        place("j-p3", "景点", "伏见稻荷大社", "2026-11-15", "09:00", 34.9671, 135.7727),
+        place("j-p4", "景点", "清水寺", "2026-11-16", "10:00", 34.9949, 135.785),
+        place("j-p5", "街道", "花见小路", "2026-11-16", "17:00", 35.0025, 135.7751),
+        { id: "j-h3", type: "hotel", nameZh: "大阪示例酒店", city: "大阪", address: "Namba, Osaka", checkIn: "2026-11-18", checkInTime: "15:00", checkOut: "2026-11-21", lat: 34.6659, lng: 135.5013, example: true },
+        place("j-p6", "餐厅", "道顿堀", "2026-11-19", "19:00", 34.6687, 135.5013),
+        { id: "j-f2", type: "flight", flightNo: "XX102", fromAirport: "KIX", toAirport: "LHR", fromNameZh: "关西机场", nameZh: "希思罗机场",
+          fromLat: 34.4347, fromLng: 135.244, lat: 51.47, lng: -0.4543, departDate: "2026-11-21", departTime: "11:00", arriveDate: "2026-11-21", arriveTime: "16:00", example: true }
+      ]
+    };
+  }
+
   function itemTimeLabel(item) {
     if (item.type === "flight") {
       var offset = formatDayOffset(civilDayOffset(item.departDate, item.arriveDate));
@@ -345,10 +375,192 @@
   }
 
   function defaultSelectedDay(items) {
+    if (window.TripCalendar) return TripCalendar.defaultDay(items, todayIso());
     var days = tripDays(items);
     var today = todayIso();
     if (days.indexOf(today) !== -1) return today;
     return "all";
+  }
+
+  /* ---------- 顶部日期条（规则见 calendar.js） ---------- */
+  var CAL_CELL = 52;
+  var monthView = null;
+
+  function reducedMotion() {
+    try {
+      return window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    } catch (err) {
+      return false;
+    }
+  }
+
+  function dotHtml(entry, size) {
+    var meta = typeStyle(entry.item);
+    return '<i class="cal-dot" style="background:' + (meta.color || "#27AE60") + '"></i>';
+  }
+
+  function renderStrip(items) {
+    var box = $("day-chips");
+    if (!box) return;
+    var C = window.TripCalendar;
+    var today = todayIso();
+    var days = C.stripDays(items, today);
+    if (!days.length) {
+      box.hidden = true;
+      box.innerHTML = "";
+      return;
+    }
+    box.hidden = false;
+    box.classList.add("cal");
+    var dots = C.dotsByDay(items);
+    var segs = C.deriveSegments(items, today);
+    var col = {};
+    days.forEach(function (d, i) { col[d] = i + 2; });
+    var monthIso = selectedDay !== "all" && col[selectedDay] ? selectedDay : (col[today] ? today : days[0]);
+    var hasToday = !!col[today];
+    var segHtml = segs.map(function (sg, i) {
+      var start = col[sg.start];
+      if (!start) return "";
+      var endDay = sg.end;
+      var next = segs[i + 1];
+      if (next && next.start <= endDay && next.start > sg.start) endDay = C.addDays(next.start, -1);
+      var end = col[endDay] || start;
+      var span = Math.max(1, end - start + 1);
+      var room = (next && col[next.start] ? col[next.start] : days.length + 2) - start;
+      var textW = Math.max(span, room) * CAL_CELL - 8;
+      return (
+        '<div class="cal-seg' + (sg.past ? " is-past" : "") + '" style="grid-column:' + start + " / span " + span + '" title="' + escapeHtml(sg.label) + '">' +
+        '<span class="cal-seg-bar"></span><span class="cal-seg-text" style="max-width:' + textW + 'px">' + escapeHtml(sg.label) + "</span></div>"
+      );
+    }).join("");
+    var cells =
+      '<button type="button" class="cal-cell cal-all' + (selectedDay === "all" ? " is-active" : "") + '" data-day="all" role="tab" aria-selected="' + (selectedDay === "all") + '" style="grid-column:1"><span class="cal-date">全部</span><span class="cal-wd">' + C.daysWithItems(items).length + ' 天</span></button>' +
+      days.map(function (d) {
+        var cls = "cal-cell";
+        if (C.isPast(d, today)) cls += " is-past";
+        if (d === today) cls += " is-today";
+        if (d === selectedDay) cls += " is-active";
+        var ds = (dots[d] || []).map(function (e) { return dotHtml(e); }).join("");
+        return (
+          '<button type="button" class="' + cls + '" data-day="' + d + '" role="tab" aria-selected="' + (d === selectedDay) + '" aria-label="' +
+          escapeHtml(formatMd(d) + " " + C.weekday(d) + (d === today ? " 今天" : "") + (ds ? " 有安排" : "")) + '" style="grid-column:' + col[d] + '">' +
+          '<span class="cal-date">' + C.shortDate(d) + "</span>" +
+          '<span class="cal-wd">' + C.weekday(d) + "</span>" +
+          '<span class="cal-dots">' + ds + "</span></button>"
+        );
+      }).join("");
+    box.innerHTML =
+      '<div class="cal-top"><button type="button" class="cal-month" id="cal-month" aria-haspopup="dialog">' +
+      escapeHtml(C.monthLabel(monthIso)) + ico("chevron", "ico-sm") + "</button></div>" +
+      '<div class="cal-row"><div class="cal-scroll" id="cal-scroll"><div class="cal-grid' + (segHtml ? " has-segs" : "") + '" style="grid-template-columns:repeat(' + (days.length + 1) + "," + CAL_CELL + 'px)">' +
+      segHtml + cells + "</div></div>" +
+      (hasToday ? '<button type="button" class="cal-today" id="cal-today">今天</button>' : "") +
+      "</div>";
+    scrollStripTo(selectedDay === "all" ? null : selectedDay, false);
+  }
+
+  function scrollStripTo(iso, smooth) {
+    var sc = $("cal-scroll");
+    if (!sc) return;
+    var cell = iso ? sc.querySelector('[data-day="' + iso + '"]') : sc.querySelector(".cal-all");
+    if (!cell) return;
+    var target = cell.offsetLeft - (sc.clientWidth - cell.offsetWidth) / 2;
+    var left = Math.max(0, target);
+    if (smooth && !reducedMotion() && sc.scrollTo) sc.scrollTo({ left: left, behavior: "smooth" });
+    else sc.scrollLeft = left;
+  }
+
+  function selectDay(iso) {
+    selectedDay = iso || "all";
+    renderAll();
+    scrollStripTo(selectedDay === "all" ? null : selectedDay, true);
+    if (currentView === "list") {
+      var el = selectedDay === "all" ? $("timeline") : document.getElementById("day-" + selectedDay);
+      if (el && el.scrollIntoView) el.scrollIntoView({ block: "start" });
+    }
+  }
+
+  function openMonth() {
+    var items = currentTrip().items || [];
+    var C = window.TripCalendar;
+    var today = todayIso();
+    var days = C.stripDays(items, today);
+    var base = selectedDay !== "all" ? selectedDay : (days.indexOf(today) !== -1 ? today : days[0]);
+    if (!base) return;
+    monthView = { year: +base.slice(0, 4), month: +base.slice(5, 7) };
+    renderMonth();
+    openSheet("month-sheet");
+  }
+
+  function renderMonth() {
+    if (!monthView) return;
+    var C = window.TripCalendar;
+    var items = currentTrip().items || [];
+    var today = todayIso();
+    var days = C.stripDays(items, today);
+    var dots = C.dotsByDay(items);
+    var g = C.monthGrid(monthView.year, monthView.month);
+    $("month-title").textContent = g.label;
+    var html = '<div class="mg-head">' + ["一", "二", "三", "四", "五", "六", "日"].map(function (w) { return "<span>" + w + "</span>"; }).join("") + "</div>";
+    html += '<div class="mg-grid">';
+    g.weeks.forEach(function (row) {
+      row.forEach(function (c) {
+        var ok = days.indexOf(c.iso) !== -1;
+        var cls = "mg-cell";
+        if (!c.inMonth) cls += " is-out";
+        if (C.isPast(c.iso, today)) cls += " is-past";
+        if (c.iso === today) cls += " is-today";
+        if (c.iso === selectedDay) cls += " is-active";
+        var ds = (dots[c.iso] || []).map(function (e) { return dotHtml(e); }).join("");
+        html +=
+          '<button type="button" class="' + cls + '" data-pick-day="' + c.iso + '"' + (ok ? "" : " disabled") +
+          ' aria-label="' + escapeHtml(formatMd(c.iso) + " " + C.weekday(c.iso)) + '"><span class="mg-num">' + c.day + '</span><span class="cal-dots">' + ds + "</span></button>";
+      });
+    });
+    html += "</div>";
+    html += '<p class="mg-note">只有行程里的日子可以点；有圆点的是有安排的日子。</p>';
+    $("month-body").innerHTML = html;
+  }
+
+  function bindStrip() {
+    var box = $("day-chips");
+    if (box) {
+      box.addEventListener("click", function (ev) {
+        if (ev.target.closest && ev.target.closest("#cal-month")) {
+          openMonth();
+          return;
+        }
+        if (ev.target.closest && ev.target.closest("#cal-today")) {
+          var today = todayIso();
+          selectDay(today);
+          return;
+        }
+        var cell = ev.target.closest && ev.target.closest("[data-day]");
+        if (cell) selectDay(cell.getAttribute("data-day"));
+      });
+    }
+    var body = $("month-body");
+    if (body) {
+      body.addEventListener("click", function (ev) {
+        var b = ev.target.closest && ev.target.closest("[data-pick-day]");
+        if (!b || b.disabled) return;
+        var C = window.TripCalendar;
+        var picked = C.pickFromGrid(b.getAttribute("data-pick-day"), C.stripDays(currentTrip().items || [], todayIso()));
+        if (!picked) return;
+        closeSheet("month-sheet");
+        selectDay(picked);
+      });
+    }
+    if ($("month-prev")) $("month-prev").addEventListener("click", function () {
+      var m = TripCalendar.shiftMonth(monthView.year, monthView.month, -1);
+      monthView = m;
+      renderMonth();
+    });
+    if ($("month-next")) $("month-next").addEventListener("click", function () {
+      var m = TripCalendar.shiftMonth(monthView.year, monthView.month, 1);
+      monthView = m;
+      renderMonth();
+    });
   }
 
   function updateTopBar() {
@@ -369,6 +581,10 @@
         dates.hidden = true;
         dates.textContent = "";
       }
+    }
+    if (window.TripCalendar) {
+      renderStrip((trip && trip.items) || []);
+      return;
     }
     var chips = $("day-chips");
     var days = tripDays((trip && trip.items) || []);
@@ -467,6 +683,7 @@
       (meta.tint || "#E3F7EA") +
       '">' +
       '<div class="card-stripe" aria-hidden="true"></div>' +
+      '<div class="card-main">' +
       '<div class="card-top">' +
       '<div class="type-badge" title="' +
       escapeHtml(meta.label) +
@@ -490,6 +707,14 @@
       '<div class="card-extra">' +
       extra.join("") +
       "</div>" +
+      "</div>" +
+      '<button type="button" class="card-del" data-delete="' +
+      escapeHtml(item.id) +
+      '" aria-label="删除 ' +
+      escapeHtml(itemTitle(item)) +
+      '">' +
+      ico("trash") +
+      "<span>删除</span></button>" +
       "</article>"
     );
   }
@@ -520,11 +745,20 @@
     if (!root) return;
     var trip = currentTrip();
     var items = (trip && trip.items) || [];
+    updateListHead(items);
     if (!items.length) {
       root.innerHTML = '<div class="empty-state">点＋添加你的第一个地方</div>';
       return;
     }
     var groups = Legs.groupByDay(items);
+    if (selectedDay !== "all" && !groups.some(function (g) { return g.date === selectedDay; })) {
+      root.innerHTML =
+        '<div class="empty-state empty-day">' + escapeHtml(formatMd(selectedDay)) + ' 没有安排' +
+        '<button type="button" class="text-link-btn" data-day-all="1">看全部日子</button></div>';
+      var allBtn = root.querySelector("[data-day-all]");
+      if (allBtn) allBtn.addEventListener("click", function () { selectDay("all"); });
+      return;
+    }
     var connectors = Legs.buildConnectors(items);
     var all = Legs.sortedItems(items);
     var html = "";
@@ -556,6 +790,17 @@
     bindListEvents(root);
   }
 
+  function updateListHead(items) {
+    var count = $("list-count");
+    var btn = $("clear-all-btn");
+    var n = (items || []).length;
+    if (count) count.textContent = n ? "共 " + n + " 项" : "还没有行程";
+    if (btn) {
+      btn.disabled = !n;
+      btn.setAttribute("aria-disabled", n ? "false" : "true");
+    }
+  }
+
   function findItem(id) {
     var items = (currentTrip().items || []);
     var i;
@@ -578,6 +823,13 @@
         renderList();
         return;
       }
+      var del = ev.target.closest && ev.target.closest("[data-delete]");
+      if (del) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        askDeleteItem(del.getAttribute("data-delete"));
+        return;
+      }
       var pick = ev.target.closest && ev.target.closest("[data-pick]");
       if (pick) {
         ev.preventDefault();
@@ -587,9 +839,7 @@
       }
       var card = ev.target.closest && ev.target.closest(".card");
       if (card && !ev.target.closest("a, button")) {
-        var cid = card.getAttribute("data-item");
-        expanded[cid] = !expanded[cid];
-        renderList();
+        openDetail(card.getAttribute("data-item"));
       }
     });
   }
@@ -700,13 +950,15 @@
     { icon: "plus", title: "添加", text: "点“＋ 添加”，输入地名，从结果里点一下就加好了。" },
     { icon: "copy", title: "用 AI 整理截图", text: "在添加页点“复制给 AI 的话”，连同机票、酒店截图一起发给任意 AI，再把它回复的内容粘贴回来。" },
     { icon: "pencil", title: "手动填写", text: "搜不到的地方，可以在添加页选“手动填写”。" },
-    { icon: "calendar", title: "看行程", text: "按日期自动排好，点顶部的“第1天、第2天”切换，点卡片看详情。" },
+    { icon: "calendar", title: "看行程", text: "按日期自动排好。顶部日期条左右滑，点某一天只看那天，点最前面的“全部”看所有日子；“今天”回到今天，点月份打开整月日历。紫色横条是每段住宿，过去的标“已去”。点卡片看详情。" },
+    { icon: "trash", title: "修改和删除", text: "卡片右边的“删除”可以删掉这一项，点开卡片还能修改；列表右上角“清空全部”一次删光。删错了 10 秒内点底部的“撤销”就能恢复。" },
     { icon: "map", title: "看地图", text: "点顶部的地图图标，所有地点都标在地图上。" },
     { icon: "bus", title: "带我去", text: "点两站之间的“带我去”，自动打开高德或 Google 地图导航。" },
     { icon: "share", title: "分享给朋友", text: "在“设置”里点“分享给朋友”，把文件发给对方，对方点“导入”就能看到。分享时会自动隐藏订单号和座位。" },
     { icon: "device", title: "放到桌面", text: "点“添加到桌面”，以后像 App 一样打开。iPhone 请用 Safari 打开，按提示操作。" },
     { icon: "backup", title: "备份", text: "换手机前，在“设置”里点“完整备份”，到新手机上再点“导入”。" },
     { icon: "trash", title: "清空", text: "在“设置”里点“清空本机数据”，所有行程都会删除。" },
+    { icon: "refresh", title: "更新", text: "更新不会删除你的行程。如果看到的还是旧版：把网页彻底关掉再打开。放在桌面的，就从后台划掉，再点图标打开。" },
     { icon: "lock", title: "隐私", text: "行程只存在你的手机里，没有账号，也没有服务器，我们看不到。只有搜索、显示地图和导航时，地名或地址会发给地图服务（OpenStreetMap、高德或 Google 地图）。" }
   ];
 
@@ -754,6 +1006,7 @@
       else localStorage.removeItem(HELP_HIDE_KEY);
     } catch (err) {}
     closeSheet("help-sheet");
+    afterOpenDialogClosed();
   }
 
   function openHelp() {
@@ -837,6 +1090,10 @@
   }
 
   function handleManualSave() {
+    if (editingId) {
+      saveEdit();
+      return;
+    }
     var type = (($("manual-type") && $("manual-type").value) || "地点").trim() || "地点";
     var name = (($("manual-name") && $("manual-name").value) || "").trim();
     if (!name) {
@@ -896,6 +1153,399 @@
           []
         );
       });
+  }
+
+
+  /* ---------- 详情 / 修改 / 删除 / 清空全部 ---------- */
+  var UNDO_MS = (window.ItemEdit && ItemEdit.UNDO_MS) || 10000;
+  var detailId = null;
+  var editingId = null;
+  var confirmAction = null;
+
+  function detailRowsHtml(item) {
+    var meta = typeStyle(item);
+    var rows = [];
+    function row(label, valueHtml) {
+      if (!valueHtml) return;
+      rows.push('<div class="detail-row"><span class="detail-label">' + escapeHtml(label) + "</span><span class=\"detail-value\">" + valueHtml + "</span></div>");
+    }
+    row("类型", escapeHtml(item.type === "place" && item.subtype ? item.subtype : meta.label || ""));
+    if (item.type === "flight") {
+      row("航班", escapeHtml(formatFlightLocal(item)));
+      row("日期", escapeHtml(item.departDate ? formatMd(item.departDate) : ""));
+    } else if (item.type === "hotel") {
+      row("入住", escapeHtml(((item.checkIn ? formatMd(item.checkIn) : "") + " " + (item.checkInTime || "")).trim()));
+      row("退房", escapeHtml(item.checkOut ? formatMd(item.checkOut) : ""));
+    } else {
+      row("日期", escapeHtml(item.date ? formatMd(item.date) : ""));
+      row("时间", escapeHtml(item.time || ""));
+    }
+    row("地址", escapeHtml(item.address || ""));
+    row("备注", escapeHtml(item.note || ""));
+    if (item.confirmationNo) row("确认号", secretToggleHtml(item.confirmationNo));
+    row("座位", escapeHtml(item.seat || ""));
+    var html =
+      '<div class="detail-hero" style="--type:' + (meta.color || "#27AE60") + ";--type-tint:" + (meta.tint || "#E3F7EA") + '">' +
+      '<div class="type-badge">' + ico(meta.icon) + "</div>" +
+      '<div><p class="detail-name">' + escapeHtml(itemTitle(item)) + "</p>" +
+      (itemTimeLabel(item) ? '<p class="card-time">' + escapeHtml(itemTimeLabel(item)) + "</p>" : "") +
+      "</div></div>" +
+      rows.join("") +
+      '<p class="detail-nav"><a class="here-link" href="' + escapeHtml(transitHref(null, cardTarget(item))) + '" target="_blank" rel="noopener">从我的位置导航</a></p>';
+    if (itemUnlocated(item)) {
+      html += '<p class="detail-hint">还没有位置，地图上不显示。可以点“修改”改一下地址。</p>';
+    }
+    return html;
+  }
+
+  function openDetail(id) {
+    var item = findItem(id);
+    if (!item) return;
+    detailId = id;
+    var body = $("detail-body");
+    if (body) {
+      body.innerHTML = detailRowsHtml(item);
+      bindSecretToggles(body);
+    }
+    var title = $("detail-title");
+    if (title) title.textContent = "详情";
+    openSheet("detail-sheet");
+  }
+
+  function openConfirm(opts) {
+    $("confirm-title").textContent = opts.title;
+    $("confirm-sub").textContent = opts.sub || "";
+    $("confirm-sub").hidden = !opts.sub;
+    $("confirm-ok").textContent = opts.okText || "删除";
+    confirmAction = opts.onOk;
+    openSheet("confirm-sheet");
+    try { $("confirm-cancel").focus(); } catch (err) {}
+  }
+
+  function closeConfirm() {
+    confirmAction = null;
+    closeSheet("confirm-sheet");
+  }
+
+  function fixSelectedDay(items) {
+    if (selectedDay !== "all" && tripDays(items).indexOf(selectedDay) === -1) selectedDay = "all";
+  }
+
+  function askDeleteItem(id) {
+    var item = findItem(id);
+    if (!item) return;
+    openConfirm({
+      title: "确定删除这一项吗？",
+      sub: "删除后 10 秒内可以撤销。",
+      okText: "删除",
+      onOk: function () {
+        deleteItemNow(id);
+      }
+    });
+  }
+
+  function deleteItemNow(id) {
+    var trip = currentTrip();
+    var res = ItemEdit.removeItem(trip.items || [], id);
+    if (!res.removed) return;
+    var prevDay = selectedDay;
+    trip.items = res.items;
+    delete expanded[id];
+    fixSelectedDay(trip.items);
+    saveAllTrips();
+    closeSheet("detail-sheet");
+    detailId = null;
+    renderAll();
+    showToast("已删除", function () {
+      var t = currentTrip();
+      t.items = ItemEdit.restoreItem(t.items || [], res.removed, res.index);
+      if (prevDay !== "all" && tripDays(t.items).indexOf(prevDay) !== -1) selectedDay = prevDay;
+      saveAllTrips();
+      renderAll();
+    }, UNDO_MS);
+  }
+
+  function askClearAll() {
+    var trip = currentTrip();
+    if (!(trip.items || []).length) return;
+    openConfirm({
+      title: "确定清空全部行程吗？",
+      sub: "建议先备份（在“设置”里点“完整备份”导出文件）。删除后 10 秒内可以撤销。",
+      okText: "清空全部",
+      onOk: clearAllNow
+    });
+  }
+
+  function clearAllNow() {
+    var trip = currentTrip();
+    var res = ItemEdit.clearItems(trip.items || []);
+    var prevDay = selectedDay;
+    trip.items = res.items;
+    expanded = {};
+    selectedDay = "all";
+    saveAllTrips();
+    renderAll();
+    showToast("已清空", function () {
+      var t = currentTrip();
+      t.items = res.removed.concat(t.items || []);
+      if (prevDay !== "all" && tripDays(t.items).indexOf(prevDay) !== -1) selectedDay = prevDay;
+      saveAllTrips();
+      renderAll();
+    }, UNDO_MS);
+  }
+
+  function setAddMode(isEdit) {
+    var sheet = $("add-sheet");
+    if (sheet) sheet.classList.toggle("is-editing", !!isEdit);
+    Array.prototype.forEach.call(document.querySelectorAll("#add-sheet .add-only"), function (el) {
+      el.hidden = !!isEdit;
+    });
+    Array.prototype.forEach.call(document.querySelectorAll("#add-sheet .edit-only"), function (el) {
+      el.hidden = !isEdit;
+    });
+    var title = $("add-sheet-title");
+    if (title) title.textContent = isEdit ? "修改" : "添加";
+    var save = $("manual-save");
+    if (save) save.textContent = isEdit ? "保存修改" : "保存";
+    var fold = $("manual-fold");
+    if (fold && isEdit) fold.open = true;
+  }
+
+  function setVal(id, v) {
+    if ($(id)) $(id).value = v == null ? "" : v;
+  }
+  function getVal(id) {
+    return $(id) ? $(id).value : "";
+  }
+
+  function enterEditMode(id) {
+    var item = findItem(id);
+    if (!item) return;
+    editingId = id;
+    var f = ItemEdit.formFields(item);
+    var sel = $("manual-type");
+    var isFlight = item.type === "flight";
+    if (sel) {
+      Array.prototype.forEach.call(sel.options, function (o) {
+        o.disabled = isFlight ? o.value !== "机票" : o.value === "机票";
+      });
+      sel.value = f.type;
+      sel.disabled = isFlight;
+    }
+    setVal("manual-name", f.name);
+    setVal("edit-address", f.address);
+    setVal("edit-date", f.date);
+    setVal("edit-time", f.time);
+    setVal("edit-end-date", f.endDate);
+    setVal("edit-end-time", f.endTime);
+    setVal("edit-note", f.note);
+    paintEditLabels(isFlight ? "机票" : f.type);
+    if ($("manual-status")) $("manual-status").innerHTML = "";
+    setAddMode(true);
+    if ($("edit-address-row")) $("edit-address-row").hidden = isFlight;
+    closeSheet("detail-sheet");
+    openSheet("add-sheet");
+  }
+
+  function paintEditLabels(type) {
+    var isFlight = type === "机票";
+    var isHotel = type === "酒店";
+    var nameLabel = document.querySelector('label[for="manual-name"]');
+    if (nameLabel) nameLabel.textContent = isFlight ? "航班号" : "名称";
+    if ($("edit-date-label")) $("edit-date-label").textContent = isFlight ? "起飞日期" : isHotel ? "入住日期" : "日期";
+    if ($("edit-time-label")) $("edit-time-label").textContent = isFlight ? "起飞时间" : isHotel ? "入住时间" : "时间";
+    if ($("edit-end-row")) $("edit-end-row").hidden = !(isFlight || isHotel);
+    if ($("edit-end-date-label")) $("edit-end-date-label").textContent = isFlight ? "到达日期" : "退房日期";
+    if ($("edit-end-time-box")) $("edit-end-time-box").hidden = !isFlight;
+  }
+
+  function exitEditMode() {
+    editingId = null;
+    var sel = $("manual-type");
+    if (sel) {
+      sel.disabled = false;
+      Array.prototype.forEach.call(sel.options, function (o) {
+        o.disabled = false;
+      });
+      sel.value = "地点";
+    }
+    setVal("manual-name", "");
+    ["edit-address", "edit-date", "edit-time", "edit-end-date", "edit-end-time", "edit-note"].forEach(function (id) {
+      setVal(id, "");
+    });
+    paintEditLabels("地点");
+    if ($("manual-status")) $("manual-status").innerHTML = "";
+    var fold = $("manual-fold");
+    if (fold) fold.open = false;
+    setAddMode(false);
+  }
+
+  function saveEdit() {
+    var id = editingId;
+    var item = findItem(id);
+    if (!item) {
+      exitEditMode();
+      closeSheet("add-sheet");
+      return;
+    }
+    var type = getVal("manual-type");
+    var form = {
+      type: type,
+      name: getVal("manual-name"),
+      address: item.type === "flight" ? "" : getVal("edit-address"),
+      date: getVal("edit-date"),
+      time: getVal("edit-time"),
+      endDate: type === "酒店" || item.type === "flight" ? getVal("edit-end-date") : null,
+      endTime: getVal("edit-end-time"),
+      note: getVal("edit-note")
+    };
+    var res = ItemEdit.applyForm(item, form);
+    if (res.error) {
+      showManualStatus('<p class="err">' + escapeHtml(res.error) + "</p>");
+      return;
+    }
+    var trip = currentTrip();
+    trip.items = ItemEdit.updateItem(trip.items || [], id, res.item);
+    fixSelectedDay(trip.items);
+    saveAllTrips();
+    exitEditMode();
+    closeSheet("add-sheet");
+    renderAll();
+    if (res.addressChanged && window.Geocode && res.item.address) {
+      showToast("已保存，正在找新地址的位置…");
+      Geocode.resolveItem(res.item)
+        .then(function (r) {
+          var cur = findItem(id);
+          if (!cur) return;
+          var fresh = Object.assign({}, cur);
+          if (r && r.chosen) Geocode.applyChoice(fresh, r.chosen, r.fromChosen);
+          var t = currentTrip();
+          t.items = ItemEdit.updateItem(t.items || [], id, fresh);
+          saveAllTrips();
+          renderAll();
+          showToast(r && r.chosen ? "已保存，位置已更新" : "已保存。" + Geocode.FRIENDLY_NOT_FOUND);
+        })
+        .catch(function () {
+          showToast("已保存。" + Geocode.FRIENDLY_NOT_FOUND);
+        });
+    } else {
+      showToast("已保存修改");
+    }
+  }
+
+  function bindEditDelete() {
+    if ($("detail-edit")) {
+      $("detail-edit").addEventListener("click", function () {
+        if (detailId) enterEditMode(detailId);
+      });
+    }
+    if ($("detail-delete")) {
+      $("detail-delete").addEventListener("click", function () {
+        if (detailId) askDeleteItem(detailId);
+      });
+    }
+    if ($("confirm-cancel")) $("confirm-cancel").addEventListener("click", closeConfirm);
+    if ($("confirm-ok")) {
+      $("confirm-ok").addEventListener("click", function () {
+        var fn = confirmAction;
+        closeConfirm();
+        if (typeof fn === "function") fn();
+      });
+    }
+    if ($("clear-all-btn")) $("clear-all-btn").addEventListener("click", askClearAll);
+    if ($("edit-cancel")) {
+      $("edit-cancel").addEventListener("click", function () {
+        exitEditMode();
+        closeSheet("add-sheet");
+      });
+    }
+    if ($("manual-type")) {
+      $("manual-type").addEventListener("change", function () {
+        if (editingId) paintEditLabels(getVal("manual-type"));
+      });
+    }
+  }
+
+  /* ---------- 版本号、更新记录、新版本公告 ---------- */
+  function lsGet(key) {
+    try {
+      return localStorage.getItem(key);
+    } catch (err) {
+      return null;
+    }
+  }
+  function lsSet(key, val) {
+    try {
+      localStorage.setItem(key, val);
+    } catch (err) {}
+  }
+
+  function storedHasTrips() {
+    var stored = loadAllTrips();
+    return !!(stored && stored.trips && stored.trips.some(function (t) {
+      return t && t.items && t.items.length;
+    }));
+  }
+
+  function runOpenFlow() {
+    if (!window.AppVersion) {
+      if (!helpHidden()) openHelp();
+      return;
+    }
+    var decision = AppVersion.decideOnOpen({
+      lastSeen: lsGet(AppVersion.LAST_SEEN_KEY),
+      hasTrips: storedHasTrips(),
+      helpHidden: helpHidden()
+    });
+    if (decision.markSeenNow) lsSet(AppVersion.LAST_SEEN_KEY, AppVersion.APP_VERSION);
+    if (decision.show === "announce") openAnnouncement();
+    else if (decision.show === "help") openHelp();
+    if (decision.show === "none") maybeAutoIosGuide();
+    else iosGuidePending = true;
+  }
+
+  function renderVersionInfo() {
+    if (!window.AppVersion) return;
+    var label = $("version-label");
+    if (label) label.textContent = AppVersion.versionLabel();
+  }
+
+  function openChangelog() {
+    var body = $("changelog-body");
+    if (body && window.AppVersion) {
+      body.innerHTML = AppVersion.CHANGELOG.map(function (v) {
+        return (
+          '<section class="changelog-item">' +
+          '<h3><span class="changelog-ver">' + escapeHtml(v.version) + "</span>" +
+          '<span class="changelog-date">' + escapeHtml(v.date) + "</span>" +
+          (v.version === AppVersion.APP_VERSION ? '<span class="changelog-now">当前</span>' : "") +
+          "</h3><ul>" +
+          v.lines.map(function (l) {
+            return "<li>" + escapeHtml(l) + "</li>";
+          }).join("") +
+          "</ul></section>"
+        );
+      }).join("");
+    }
+    openSheet("changelog-sheet");
+  }
+
+  function openAnnouncement() {
+    if (!window.AppVersion) return;
+    var a = AppVersion.ANNOUNCEMENT;
+    $("announce-title").textContent = a.title;
+    $("announce-list").innerHTML = a.bullets.slice(0, 4).map(function (b) {
+      return "<li>" + escapeHtml(b) + "</li>";
+    }).join("");
+    $("announce-tip").textContent = a.tip;
+    closeSheet("help-sheet");
+    openSheet("announce-sheet");
+  }
+
+  function dismissAnnouncement() {
+    if (window.AppVersion) lsSet(AppVersion.LAST_SEEN_KEY, AppVersion.APP_VERSION);
+    closeSheet("announce-sheet");
+    afterOpenDialogClosed();
   }
 
   var SEARCH_DEBOUNCE_MS = 600;
@@ -1029,9 +1679,61 @@
       '<p class="install-tip">在微信里打开的话，先点右上角 ··· 选“在浏览器打开”。</p>';
   }
 
+  /* ---------- iPhone Safari「添加到主屏幕」引导卡 ---------- */
+  var iosGuidePending = false;
+
+  function iosGuideEligibleHere() {
+    if (!window.InstallEnv || typeof InstallEnv.iosGuideEligible !== "function") return false;
+    var env = currentEnv();
+    if (env.kind !== "ios-safari") return false;
+    return InstallEnv.iosGuideEligible(navigator.userAgent || "", {
+      standalone: env.standalone,
+      platform: navigator.platform,
+      maxTouchPoints: navigator.maxTouchPoints
+    });
+  }
+
+  function openIosGuide() {
+    var el = $("ios-guide");
+    if (!el) return;
+    closeSheet("settings-sheet");
+    closeSheet("help-sheet");
+    closeSheet("install-sheet");
+    el.hidden = false;
+    document.body.classList.add("ios-guide-open");
+  }
+
+  function closeIosGuide() {
+    var el = $("ios-guide");
+    if (el) el.hidden = true;
+    document.body.classList.remove("ios-guide-open");
+    if (window.InstallEnv) lsSet(InstallEnv.IOS_GUIDE_KEY, String(Date.now()));
+  }
+
+  function maybeAutoIosGuide() {
+    if (!window.InstallEnv || typeof InstallEnv.shouldAutoShowIosGuide !== "function") return;
+    var ok = InstallEnv.shouldAutoShowIosGuide({
+      eligible: iosGuideEligibleHere(),
+      closedAt: lsGet(InstallEnv.IOS_GUIDE_KEY),
+      now: Date.now()
+    });
+    if (ok) openIosGuide();
+  }
+
+  /* 说明或公告关掉之后，再按规则决定要不要弹引导，避免叠在一起。 */
+  function afterOpenDialogClosed() {
+    if (!iosGuidePending) return;
+    iosGuidePending = false;
+    maybeAutoIosGuide();
+  }
+
   function openInstall(forceKind) {
     var env = currentEnv(forceKind);
     if (env.hideInstall) return;
+    if (!forceKind && iosGuideEligibleHere()) {
+      openIosGuide();
+      return;
+    }
     applyInstallVisibility(env);
     if (!forceKind && env.kind === "other" && installPromptEvent && typeof installPromptEvent.prompt === "function") {
       installPromptEvent.prompt();
@@ -1053,15 +1755,17 @@
     }
   }
 
-  function showToast(message, onUndo) {
+  function showToast(message, onUndo, ms) {
     var el = $("toast");
     var msg = $("toast-msg");
     if (!el || !msg) return;
     msg.textContent = message;
     toastUndo = onUndo || null;
+    var undoBtn = $("toast-undo");
+    if (undoBtn) undoBtn.hidden = !toastUndo;
     el.hidden = false;
     if (toastTimer) clearTimeout(toastTimer);
-    toastTimer = setTimeout(hideToast, 5000);
+    toastTimer = setTimeout(hideToast, ms || 5000);
   }
 
   function candidateName(c) {
@@ -1329,7 +2033,10 @@
     actions.classList.remove("is-compact");
     var overflow = bar.scrollWidth > bar.clientWidth + 1;
     var brand = document.querySelector(".brand-block");
-    var tight = brand && brand.getBoundingClientRect().width < 72;
+    var brandRow = document.querySelector(".brand-row");
+    var tight =
+      (brand && brand.getBoundingClientRect().width < 72) ||
+      (brand && brandRow && brandRow.scrollWidth > brand.clientWidth + 1);
     if (overflow || tight) {
       for (i = 0; i < labels.length; i++) labels[i].hidden = true;
       actions.classList.add("is-compact");
@@ -1716,7 +2423,11 @@
       renderSearchHits(query || "", results || []);
     },
     openInstall: openInstall,
-    openHelp: openHelp
+    openHelp: openHelp,
+    openDetail: openDetail,
+    confirm: openConfirm,
+    openAnnouncement: openAnnouncement,
+    openIosGuide: openIosGuide
   };
 
   function applyDemo(which) {
@@ -1727,7 +2438,7 @@
       examplesLoaded = false;
       selectedDay = "all";
     } else {
-      trips = [demoTrip()];
+      trips = [which === "japan" || which === "japan-month" ? demoJapanTrip() : demoTrip()];
       activeTripId = trips[0].id;
       examplesLoaded = true;
       selectedDay = defaultSelectedDay(trips[0].items);
@@ -1743,6 +2454,7 @@
       openSheet("settings-sheet");
     });
     $("add-fab").addEventListener("click", function () {
+      if (editingId) exitEditMode();
       openSheet("add-sheet");
       if ($("place-search")) {
         try { $("place-search").focus(); } catch (err) {}
@@ -1802,28 +2514,37 @@
         ev.target.blur();
       }
     });
-    $("day-chips").addEventListener("click", function (ev) {
-      var chip = ev.target.closest && ev.target.closest("[data-day]");
-      if (!chip) return;
-      selectedDay = chip.getAttribute("data-day") || "all";
-      renderAll();
-      if (currentView === "list") {
-        var el = selectedDay === "all" ? $("timeline") : document.getElementById("day-" + selectedDay);
-        if (el && el.scrollIntoView) el.scrollIntoView({ block: "start" });
-      }
-    });
+    bindStrip();
     document.addEventListener("click", function (ev) {
       var closer = ev.target.closest && ev.target.closest("[data-close]");
-      if (closer) closeSheet(closer.getAttribute("data-close"));
+      if (closer) {
+        var which = closer.getAttribute("data-close");
+        if (which === "confirm-sheet") closeConfirm();
+        else closeSheet(which);
+        if (which === "add-sheet" && editingId) exitEditMode();
+      }
     });
     document.addEventListener("keydown", function (ev) {
       if (ev.key === "Escape") {
+        if ($("confirm-sheet") && !$("confirm-sheet").hidden) {
+          closeConfirm();
+          return;
+        }
+        closeSheet("detail-sheet");
+        if (editingId) exitEditMode();
         closeSheet("add-sheet");
         closeSheet("settings-sheet");
         closeSheet("install-sheet");
+        closeSheet("month-sheet");
       }
     });
     bindAddPick();
+    bindEditDelete();
+    if ($("changelog-open")) $("changelog-open").addEventListener("click", openChangelog);
+    if ($("announce-ok")) $("announce-ok").addEventListener("click", dismissAnnouncement);
+    if ($("ios-guide-x")) $("ios-guide-x").addEventListener("click", closeIosGuide);
+    if ($("ios-guide-later")) $("ios-guide-later").addEventListener("click", closeIosGuide);
+    renderVersionInfo();
     renderHelpBody();
   }
 
@@ -1831,6 +2552,7 @@
     initChrome();
     var params = new URLSearchParams(window.location.search);
     var demo = params.get("demo");
+    if (demo && /^\d{4}-\d{2}-\d{2}$/.test(params.get("today") || "")) todayOverride = params.get("today");
     if (demo) {
       applyDemo(demo);
     } else {
@@ -1853,6 +2575,7 @@
     if (wantTrip && trips.some(function (t) { return t.id === wantTrip; })) activeTripId = wantTrip;
     renderAll();
     if (demo === "map") setView("map");
+    if (demo === "japan-month") openMonth();
     else setView("list");
     if (demo === "add" || demo === "add-search") {
       openSheet("add-sheet");
@@ -1864,9 +2587,16 @@
     if (demo === "settings" || demo === "more") openSheet("settings-sheet");
     if (demo === "help" || demo === "help-bottom") openHelp();
     if (demo === "install-ios") openInstall("ios-safari");
+    if (demo === "ios-guide") openIosGuide();
     if (demo === "install-inapp") openInstall("inapp");
-    /* Auto-open on every load until 「不再自动弹出」 was ticked when closing. */
-    if (!demo && !helpHidden()) openHelp();
+    if (demo === "announce") openAnnouncement();
+    if (demo === "changelog") {
+      openSheet("settings-sheet");
+      openChangelog();
+    }
+    /* 打开时：版本变了的老用户弹「新版本」公告；第一次用的人弹使用说明；两者不同时弹。
+       使用说明在勾「不再自动弹出」之前每次打开都弹。 */
+    if (!demo) runOpenFlow();
   }
 
   if (document.readyState === "loading") {

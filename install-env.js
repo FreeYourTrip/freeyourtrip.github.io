@@ -82,7 +82,34 @@
     return detectInstallEnv(ua, hints);
   }
 
+  var IOS_GUIDE_KEY = "wishlist-map-ios-guide-closed-v1";
+  var IOS_GUIDE_SNOOZE_MS = 7 * 24 * 60 * 60 * 1000;
+
+  /** 只有 iPhone（含 iPod）上的 Safari、且不是从桌面图标打开时，才适合显示「添加到主屏幕」引导。 */
+  function iosGuideEligible(ua, hints) {
+    ua = String(ua == null ? "" : ua);
+    var env = detectInstallEnv(ua, hints);
+    return env.kind === "ios-safari" && /iPhone|iPod/i.test(ua);
+  }
+
+  /**
+   * 是否自动弹出引导。closedAt：上次关掉的时间戳（毫秒），没有则为空。
+   * 关掉后 7 天内不再自动弹；按「添加到桌面」随时可以手动打开（不经过这里）。
+   */
+  function shouldAutoShowIosGuide(state) {
+    state = state || {};
+    if (!state.eligible) return false;
+    var closedAt = Number(state.closedAt);
+    if (!closedAt || !isFinite(closedAt)) return true;
+    var now = Number(state.now) || Date.now();
+    return now - closedAt >= IOS_GUIDE_SNOOZE_MS;
+  }
+
   var api = {
+    IOS_GUIDE_KEY: IOS_GUIDE_KEY,
+    IOS_GUIDE_SNOOZE_MS: IOS_GUIDE_SNOOZE_MS,
+    iosGuideEligible: iosGuideEligible,
+    shouldAutoShowIosGuide: shouldAutoShowIosGuide,
     detectInstallEnv: detectInstallEnv,
     currentInstallEnv: currentInstallEnv,
     isInAppBrowser: isInAppBrowser,

@@ -125,14 +125,14 @@
   /** 分享给朋友：隐藏订单号/座位，不含地理编码缓存。 */
   function downloadShare() {
     var payload = redactForShare(collect({ includeGeocodeCache: false }));
-    return triggerDownload(payload, "行程分享-" + todayStamp() + ".json");
+    return triggerDownload(payload, "freeyourtrip-share-" + todayStamp() + ".json");
   }
 
   /** 完整备份：含确认号、座位和地理编码缓存，仅自己保存。 */
   function downloadFullBackup() {
     var payload = collect({ includeGeocodeCache: true });
     payload.kind = "full";
-    return triggerDownload(payload, "行程完整备份-" + todayStamp() + ".json");
+    return triggerDownload(payload, "freeyourtrip-full-backup-" + todayStamp() + ".json");
   }
 
   function downloadBackup() {
@@ -143,7 +143,7 @@
   function applyBackup(payload, mode) {
     if (!payload || payload.app !== "行程地图" || !payload.version) {
       if (!payload || !Array.isArray(payload.trips)) {
-        throw new Error("这不是一份有效的行程地图备份或分享文件。");
+        throw new Error("这不是一份有效的 Free Your Trip 备份或分享文件。");
       }
     }
     mode = mode === "merge" ? "merge" : "replace";
@@ -260,10 +260,22 @@
     }
     if (clearBtn) {
       clearBtn.addEventListener("click", function () {
-        var ok = window.confirm("将清空本机全部行程和缓存，且不可恢复。建议先做「完整备份」。确定清空吗？");
+        var wipe = function () {
+          clearAllLocalData();
+          window.location.reload();
+        };
+        if (window.TripApp && typeof window.TripApp.confirm === "function") {
+          window.TripApp.confirm({
+            title: "确定清空本机全部数据吗？",
+            sub: "会删除这台手机上的全部行程和设置，清空后不可恢复。建议先备份（点“完整备份”导出文件）。",
+            okText: "全部清空",
+            onOk: wipe
+          });
+          return;
+        }
+        var ok = window.confirm("确定清空本机全部数据吗？清空后不可恢复。建议先备份（点“完整备份”导出文件）。");
         if (!ok) return;
-        clearAllLocalData();
-        window.location.reload();
+        wipe();
       });
     }
   }
