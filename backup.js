@@ -1,6 +1,6 @@
 /**
  * 导出 / 导入本地数据。
- * 「分享给朋友」会去掉确认号、座位及备注里的对应字样，且不含地理编码缓存。
+ * 「分享我的行程」会去掉确认号、座位及备注里的对应字样，且不含地理编码缓存。
  * 「完整备份」保留全部内容，仅供自己保存。
  */
 (function (root) {
@@ -122,7 +122,7 @@
     return payload;
   }
 
-  /** 分享给朋友：隐藏订单号/座位，不含地理编码缓存。 */
+  /** 分享我的行程：隐藏订单号/座位，不含地理编码缓存。 */
   function downloadShare() {
     var payload = redactForShare(collect({ includeGeocodeCache: false }));
     return triggerDownload(payload, "freeyourtrip-share-" + todayStamp() + ".json");

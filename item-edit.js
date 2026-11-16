@@ -80,7 +80,7 @@
         address: "",
         date: item.departDate || item.dateGuess || "",
         time: item.departTime || "",
-        endDate: item.arriveDate || "",
+        endDate: item.arriveDate || item.pendingTo || "",
         endTime: item.arriveTime || "",
         note: item.note || ""
       };
@@ -92,7 +92,7 @@
         address: item.address || "",
         date: item.checkIn || item.dateGuess || "",
         time: item.checkInTime || "",
-        endDate: item.checkOut || "",
+        endDate: item.checkOut || item.pendingTo || "",
         endTime: "",
         note: item.note || ""
       };
@@ -186,45 +186,62 @@
   }
 
   function isIso(v) {
-
     return /^\d{4}-\d{2}-\d{2}$/.test(v || "");
-
   }
 
+  function daysBetween(a, b) {
+    return dayDiff(a, b);
+  }
 
-  /** 「日期待确认」的条目：修改后有了有效日期就去掉标记、原文和猜测日期。 */
+  /** 机票到达比出发早超过 2 天才算不对（向东飞越日期变更线早到 1 天是正常的）。 */
+  var FLIGHT_EARLY_LIMIT_DAYS = 2;
 
+  /** 这条的日期是否“说得通”：酒店退房不早于入住；机票到达不比出发早超过 2 天。 */
+  function rangeProblem(item) {
+    if (!item) return "";
+    if (item.type === "hotel" && isIso(item.checkIn) && isIso(item.checkOut) && item.checkOut < item.checkIn) return "hotel-reversed";
+    if (item.type === "flight" && isIso(item.departDate) && isIso(item.arriveDate) && daysBetween(item.departDate, item.arriveDate) < -FLIGHT_EARLY_LIMIT_DAYS) return "flight-reversed";
+    return "";
+  }
+
+  var PENDING_KEYS = ["pendingDate", "dateRaw", "dateGuess", "pendingReason", "pendingKind", "pendingFrom", "pendingTo"];
+
+  /**
+   * 「日期待确认」的条目：修改后有了有效、说得通的日期就去掉标记和原文。
+   * 日期还是倒过来的：保持待确认，记下新填的两个日期（卡片上显示），并把日期字段清空，避免日期条按错的日期显示。
+   */
   function clearPendingIfDated(next) {
-
     if (!next || !next.pendingDate) return next;
-
     var d = next.type === "flight" ? next.departDate : next.type === "hotel" ? next.checkIn : next.date;
-
-    if (isIso(d)) {
-
-      delete next.pendingDate;
-
-      delete next.dateRaw;
-
-      delete next.dateGuess;
-
-      delete next.pendingReason;
-
+    if (!isIso(d)) return next;
+    var problem = rangeProblem(next);
+    if (problem) {
+      next.pendingKind = problem;
+      if (problem === "hotel-reversed") {
+        next.pendingFrom = next.checkIn;
+        next.pendingTo = next.checkOut;
+        next.dateGuess = next.checkIn;
+        next.checkIn = "";
+        next.checkOut = "";
+      } else {
+        next.pendingFrom = next.departDate;
+        next.pendingTo = next.arriveDate;
+        next.dateGuess = next.departDate;
+        next.departDate = "";
+        next.arriveDate = "";
+      }
+      return next;
     }
-
+    PENDING_KEYS.forEach(function (k) {
+      delete next[k];
+    });
     return next;
-
   }
-
 
   /** 是否「日期待确认」。 */
-
   function isPendingDate(item) {
-
     return !!(item && item.pendingDate);
-
   }
-
 
   /** 原地替换同 id 的一条（位置不变）。 */
   function updateItem(items, id, nextItem) {
@@ -246,7 +263,9 @@
     applyForm: applyForm,
     updateItem: updateItem,
     isPendingDate: isPendingDate,
-    clearPendingIfDated: clearPendingIfDated
+    clearPendingIfDated: clearPendingIfDated,
+    rangeProblem: rangeProblem,
+    FLIGHT_EARLY_LIMIT_DAYS: FLIGHT_EARLY_LIMIT_DAYS
   };
   root.ItemEdit = api;
   if (typeof module !== "undefined" && module.exports) module.exports = api;

@@ -1,8 +1,10 @@
 # Free Your Trip（原「我的行程」，仓库 Trip-Map）
 
-> **v5（2026-11-16，尚未上线）**：改名 Free Your Trip；单条修改/删除、清空全部（10 秒撤销）；「有新版本」横条和每次发版的更新公告；设置里显示版本号和更新记录（版本号只在 `version.js` 里改）。备份/分享文件名改为 `freeyourtrip-share-日期.json`、`freeyourtrip-full-backup-日期.json`，文件格式不变，旧文件照样能导入。
+> **当前版本 v5.1（2026-11-16，未推送；线上为 v5）**：v5.1 = 导入日期宽容与「日期待确认」黄卡、日期颠倒提醒、设置里分成「分享我的行程」和「推荐这个工具」（各带一行说明）、地图「定位到我」按钮（位置只在内存里，不保存不上传）、窄屏顶栏与日期条标签、iPhone 启动图。版本规则：大版本 v5、v6…，小更新只变小数点（v5.1、v5.2…），版本号只在 `version.js` 里改。
 >
-> **网址**：https://freeyourtrip.github.io/ （仓库 `FreeYourTrip/freeyourtrip.github.io`，部署在根路径；v5 已上线）。本项目全部用相对路径，`manifest` 的 `start_url` / `scope` 为 `./`，service worker 以 `./sw.js` 注册，放在根路径或子目录都能用。旧网址 chickenbb52-hub.github.io/Trip-Map 已停用（返回 404，不做跳转）；两个网址的浏览器数据互不相通。
+> **v5（2026-11-16，已上线）**：改名 Free Your Trip；单条修改/删除、清空全部（10 秒撤销）；「有新版本」横条和每次发版的更新公告；设置里显示版本号和更新记录（版本号只在 `version.js` 里改）。备份/分享文件名改为 `freeyourtrip-share-日期.json`、`freeyourtrip-full-backup-日期.json`，文件格式不变，旧文件照样能导入。
+>
+> **网址**：https://freeyourtrip.github.io/ （仓库 `FreeYourTrip/freeyourtrip.github.io`，部署在根路径；线上为 v5，提交 `b71917b`）。本项目全部用相对路径，`manifest` 的 `start_url` / `scope` 为 `./`，service worker 以 `./sw.js` 注册，放在根路径或子目录都能用。旧网址 chickenbb52-hub.github.io/Trip-Map 已停用（返回 404，不做跳转）；两个网址的浏览器数据互不相通。
 
 一份可直接在浏览器里打开的小工具。打开后是手机友好的行程列表：顶栏显示行程名称（可点按改名）和日期，右边用地图图标切换地图、用齿轮打开设置。用底部「＋ 添加」粘贴旅行顾问的清单或输入一个地名。相邻卡片之间的「带我去」胶囊会直接打开公共交通导航（中国大陆两端用高德，否则用谷歌地图）。首次打开是空行程。心愿清单逻辑仍保留在代码里，但界面上不再入口。
 
@@ -19,6 +21,12 @@
 - 左上角月份（如 2026年11月）点开是整月日历：每天有圆点，‹ › 换月；只有日期条范围内的日子能点，点了就选中并关闭。
 - 住宿段：只按酒店算，入住日到退房日（没写退房日就到下一家酒店入住日，再没有就只算入住当天）；段名用酒店的 `city` 字段，没有就取地址最后一个逗号后面的部分（去掉邮编数字），再没有就用酒店名；整段都早于今天时标「已去」。
 - 演示：`index.html?demo=japan&today=2026-11-16`（假数据，`today` 只在演示模式下生效），`demo=japan-month` 直接打开月历。
+
+## 折叠屏 / 双屏（v5.1，大概适配）
+
+- 600–799px 宽（折叠屏内屏等）：列表和日期条最宽 640px 居中，「＋ 添加」也最宽 640px，地图铺满。
+- 双屏（`horizontal-viewport-segments: 2`）：左屏列表，右屏地图，转轴上不放东西；其他浏览器不受影响。
+- 只在无头 Chrome 里模拟测过（344 / 600 / 768 / 900 宽；双屏用注入 CSS 的方式模拟），没上真机。
 
 ## 如何打开
 
@@ -53,7 +61,8 @@ python3 -m http.server 8080 --directory .
 | `guess-type.js` | 按 OSM class/type 猜测地点类型 |
 | `install-env.js` | 判断独立窗口 / iOS Safari / 微信等，决定「添加到桌面」提示 |
 | `item-edit.js` | 单条删除 / 撤销 / 清空全部 / 修改的纯函数 |
-| `recommend.js` | 设置里的「推荐给朋友」：系统分享（`navigator.share`）或复制介绍文字和网址，不含任何行程数据 |
+| `locate.js` | 地图「定位到我」按钮：只在点按钮时取一次位置，位置只放在内存里，不保存、不上传、不进分享 / 备份；高德（GCJ-02）底图下大陆坐标先转换 |
+| `recommend.js` | 设置里的「推荐这个工具」：系统分享（`navigator.share`）或复制介绍文字和网址，不含任何行程数据 |
 | `calendar.js` | 顶部日期条与月历的纯函数：日期范围、默认选中哪天、过去变灰、类型圆点、住宿段（规则写在文件开头） |
 | `DESIGN.md` | 设计规范：从 `styles.css` 整理的颜色、字号、间距、圆角和组件规格，以及重复颜色清单 |
 | `update-banner.js` | 注册 service worker；有新版本时显示「有新版本」横条（不强制更新） |
@@ -62,7 +71,7 @@ python3 -m http.server 8080 --directory .
 | `manifest.webmanifest` / `sw.js` / `icons/` | 可安装到手机主屏幕（相对路径，根路径或子目录都能用）。`icons/` 为 v5 新图标：16、32、120、152、167、180、192、512 和 `icon-maskable-512.png`，换图时保持文件名不变 |
 | `cover-1200x630.png` / `splash-*.png` | 链接预览封面（og:image）和 iPhone 启动图（9 张：1290×2796、1179×2556、1170×2532、1284×2778、1125×2436、1242×2688、828×1792、1080×2340、750×1334，按 device-width / device-height / 像素比 / 竖屏匹配），都不进预缓存 |
 | `导入格式说明.txt` | 导入格式说明（推荐管道格式） |
-| `check.js` / `check-import.js` / `check-privacy.js` / `check-legs.js` / `check-guess-type.js` / `check-install-env.js` / `check-edit.js` / `check-update.js` / `check-version.js` / `check-calendar.js` / `check-patch.js` / `check-pending.js` | 可选的离线校验 |
+| `check.js` / `check-import.js` / `check-privacy.js` / `check-legs.js` / `check-guess-type.js` / `check-install-env.js` / `check-edit.js` / `check-update.js` / `check-version.js` / `check-calendar.js` / `check-patch.js` / `check-pending.js` / `check-locate.js` | 可选的离线校验 |
 
 ## 心愿清单字段（`DESTINATIONS`）
 
@@ -163,7 +172,7 @@ flightFromLondon: {
 
 航班的日期时间按**各自身机场的当地墙钟时间**书写，例如 `2026-12-01 09:30 ~ 2026-12-02 07:00`。文字地址和名称会通过 OpenStreetMap Nominatim 查找坐标（无需密钥，每秒 1 次，结果缓存在本机）。机票先查内置机场表。找不到或多个候选时，预览行会标成黄色，可挑选或重试；不会因此中断整批导入。页面不计算导航路线。
 
-行程只存在你的手机里，没有账号，也没有服务器，我们看不到。数据保存在本机浏览器（`localStorage` 键 `wishlist-map-trips-v1` 等）。只有搜索、显示地图和导航时，地名或地址会发给地图服务（OpenStreetMap、高德或 Google 地图）。在「设置」里可以「分享给朋友」（去掉确认号、座位及备注里的对应字样，也不含地理编码缓存，文件名如 `行程分享-YYYYMMDD.json`）或做「完整备份」（保留全部内容，仅自己保存，文件名如 `行程完整备份-YYYYMMDD.json`）。两种文件都可以用「导入」合并或替换。换手机或清缓存前请先做完整备份；也可以「清空本机数据」。
+行程只存在你的手机里，没有账号，也没有服务器，我们看不到。数据保存在本机浏览器（`localStorage` 键 `wishlist-map-trips-v1` 等）。只有搜索、显示地图和导航时，地名或地址会发给地图服务（OpenStreetMap、高德或 Google 地图）。在「设置」里可以「分享我的行程」（去掉确认号、座位及备注里的对应字样，也不含地理编码缓存，文件名如 `行程分享-YYYYMMDD.json`）或做「完整备份」（保留全部内容，仅自己保存，文件名如 `行程完整备份-YYYYMMDD.json`）。两种文件都可以用「导入」合并或替换。换手机或清缓存前请先做完整备份；也可以「清空本机数据」。
 
 把站点放到 GitHub Pages 时，所有本地资源都使用相对路径（`./styles.css`、`./sw.js`、`start_url: "./"`），可部署在子目录如 `/repo-name/`。可用浏览器「添加到主屏幕」安装。service worker 只在 http/https 下注册，用 file:// 直接打开时不会启用，但不影响基本功能。
 

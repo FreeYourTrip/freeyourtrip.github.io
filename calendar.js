@@ -230,6 +230,24 @@
     return (days || []).indexOf(iso) !== -1 ? iso : null;
   }
 
+  /**
+   * 住宿段文字放不下时只截地名：返回放得下的地名（必要时末尾加「…」），日期部分不动。
+   * measure(text) 返回文字像素宽；gap 是地名和「·」之间的空隙（.seg-range 的 margin-left）。
+   * 用 JS 截断而不是 CSS 省略号：CSS 截断会在「…」后面留下被裁掉的半个字的空白，看起来像多了一个空格。
+   */
+  function fitCity(city, rest, maxW, measure, gap) {
+    city = String(city || "");
+    var restW = measure(rest || "");
+    var avail = maxW - restW - (gap || 0);
+    if (measure(city) <= avail) return city;
+    var chars = Array.from ? Array.from(city) : city.split("");
+    for (var n = chars.length - 1; n >= 1; n--) {
+      var t = chars.slice(0, n).join("") + "…";
+      if (measure(t) <= avail) return t;
+    }
+    return "…";
+  }
+
   var api = {
     WEEKDAYS: WEEKDAYS,
     EXTEND_TO_TODAY_MAX_DAYS: EXTEND_TO_TODAY_MAX_DAYS,
@@ -249,7 +267,8 @@
     deriveSegments: deriveSegments,
     monthGrid: monthGrid,
     shiftMonth: shiftMonth,
-    pickFromGrid: pickFromGrid
+    pickFromGrid: pickFromGrid,
+    fitCity: fitCity
   };
   root.TripCalendar = api;
   if (typeof module !== "undefined" && module.exports) module.exports = api;

@@ -20,7 +20,9 @@ check("recommend text is exact; share payload puts URL only in url", function ()
   assert.strictEqual(p.title, "Free Your Trip");
   assert.strictEqual(p.url, "https://freeyourtrip.github.io");
   assert.ok(p.text.indexOf("http") === -1, "no URL inside text");
-  assert.strictEqual(p.text + " " + p.url, FULL);
+  assert.strictEqual(p.text, "机票、酒店、想去的地方，一路串起来 ✈️ 不用下载不用注册，打开就能用", "share text ends at 打开就能用, no 👉");
+  assert.ok(p.text.indexOf("👉") === -1);
+  assert.strictEqual(p.text + " 👉 " + p.url, FULL);
 });
 
 check("uses navigator.share when available, no toast, no trip data", async function () {
@@ -58,15 +60,24 @@ check("share failing (not cancel) falls back to copy", async function () {
   assert.strictEqual(copied, FULL);
 });
 
-check("settings markup: 推荐给朋友 separate from 分享给朋友; script + precache; v5 unchanged", function () {
+check("settings markup: 分享我的行程 / 推荐这个工具 with subtitles; old labels gone; script + precache", function () {
   const html = fs.readFileSync(__dirname + "/index.html", "utf8");
   const sw = fs.readFileSync(__dirname + "/sw.js", "utf8");
+  assert.ok(html.indexOf('id="recommend-btn"') !== -1 && html.indexOf('data-sub="只发网址，不含你的行程">推荐这个工具<') !== -1);
+  assert.ok(html.indexOf('id="backup-export-share"') !== -1 && html.indexOf('data-sub="发给同行的人，对方导入就能看到">分享我的行程<') !== -1);
+  const tl = fs.readFileSync(__dirname + "/timeline.js", "utf8");
+  const css = fs.readFileSync(__dirname + "/styles.css", "utf8");
+  assert.ok(/\.more-sub \{ font-size: 12px; font-weight: 400; color: #8A9099;/.test(css));
+  assert.ok(/#backup-export-share \+ #recommend-btn \{ margin-top: 8px; \}/.test(css));
+  const docs = ["index.html", "timeline.js", "README.md", "DESIGN.md", "backup.js", "recommend.js"].map((f) => fs.readFileSync(__dirname + "/" + f, "utf8")).join("\n");
+  ["分享给朋友", "分享行程」", "「分享行程", "推荐给朋友"].forEach((old) => assert.ok(docs.indexOf(old) === -1, "old label gone: " + old));
   const v = require("./version.js");
-  assert.ok(html.indexOf('id="recommend-btn"') !== -1 && html.indexOf(">推荐给朋友<") !== -1);
-  assert.ok(html.indexOf('id="backup-export-share"') !== -1 && html.indexOf(">分享给朋友<") !== -1);
+  const v51 = v.ANNOUNCEMENT.bullets.concat(v.CHANGELOG[0].lines).join("\n");
+  assert.ok(v51.indexOf("推荐给朋友") === -1 && v51.indexOf("「分享行程」") === -1, "v5.1 texts use the final names");
+  assert.ok(tl.indexOf('title: "分享我的行程"') !== -1 && tl.indexOf("点“分享我的行程”") !== -1 && tl.indexOf("点“推荐这个工具”") !== -1, "help sheet uses final names");
   assert.ok(html.indexOf('src="./recommend.js"') !== -1);
-  assert.ok(sw.indexOf('"./recommend.js"') !== -1 && sw.indexOf('"xingcheng-map-shell-v13"') !== -1);
-  assert.strictEqual(v.APP_VERSION, "v5");
+  assert.ok(sw.indexOf('"./recommend.js"') !== -1 && sw.indexOf('"xingcheng-map-shell-v14"') !== -1);
+  assert.strictEqual(v.APP_VERSION, "v5.1");
 });
 
 check("narrow top bar CSS: ≤360px brand 16px nowrap, icon-only buttons, 44px; help button keeps aria-label", function () {
@@ -84,7 +95,9 @@ check("segment label: only the city truncates, range kept, 72px min, bar-only ta
   const css = fs.readFileSync(__dirname + "/styles.css", "utf8");
   const tl = fs.readFileSync(__dirname + "/timeline.js", "utf8");
   assert.ok(/\.cal-grid \{ padding-right: 16px; \}/.test(css));
-  assert.ok(/\.seg-city \{[^}]*text-overflow: ellipsis/.test(css));
+  assert.ok(/\.seg-city \{[^}]*overflow: hidden/.test(css));
+  assert.ok(tl.indexOf("C.fitCity(sg.city, segRest(sg), textW, measureSegText, SEG_GAP_PX)") !== -1, "city truncated in JS");
+  assert.ok(/return sg\.label\.slice\(sg\.city\.length\)\.replace\(\/\^\\s\+\/, ""\)/.test(tl), "range has no leading space");
   assert.ok(/\.seg-range \{ flex: 0 0 auto; white-space: nowrap;/.test(css));
   assert.ok(/min-width: 72px/.test(css));
   assert.ok(tl.indexOf("var SEG_LABEL_MIN = 72;") !== -1);

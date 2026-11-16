@@ -1,5 +1,5 @@
 /**
- * 设置里的「推荐给朋友」：只分享产品介绍和网址，不带任何行程数据。
+ * 设置里的「推荐这个工具」：只分享产品介绍和网址，不带任何行程数据。
  * 有系统分享（navigator.share）就用它，网址放在 url 里、文字里不重复网址；
  * 没有就复制整段文字到剪贴板，并提示「已复制，去粘贴给朋友吧」。
  * 浏览器里是 window.Recommend；node 里 require("./recommend.js")。
@@ -9,8 +9,9 @@
 
   var URL = "https://freeyourtrip.github.io";
   var TITLE = "Free Your Trip";
-  var LEAD = "机票、酒店、想去的地方，一路串起来 ✈️ 不用下载不用注册，打开就能用 👉";
-  var FULL_TEXT = LEAD + " " + URL;
+  /* 系统分享时文字和网址分开传，文字到「打开就能用」为止（不带 👉）；复制时用整段，带 👉 和网址。 */
+  var LEAD = "机票、酒店、想去的地方，一路串起来 ✈️ 不用下载不用注册，打开就能用";
+  var FULL_TEXT = LEAD + " 👉 " + URL;
   var COPIED = "已复制，去粘贴给朋友吧";
 
   /** 给 navigator.share 的内容：文字不含网址，网址单独放。 */

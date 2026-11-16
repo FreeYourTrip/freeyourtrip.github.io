@@ -1696,7 +1696,8 @@ body.ios-guide-open .add-dock { visibility: hidden; }
 .pending-count { font-size: 12px; font-weight: 600; color: #8A9099; }
 .card.is-pending { background: #FFF4CC; --type: #F2B705; box-shadow: inset 4px 0 0 #F2B705, var(--shadow); }
 .card.is-pending .card-stripe { background: #F2B705; }
-.card-raw { margin: 2px 0 0; font-size: 13px; font-weight: 600; color: #5C4A12; word-break: break-all; }
+.card-raw { margin: 2px 0 0; font-size: 13px; font-weight: 600; color: #5C4A12; overflow-wrap: anywhere; }
+.card-raw .nowrap { white-space: nowrap; }
 .pending-banner {
   display: flex; align-items: center; gap: 8px; width: 100%;
   min-height: 44px; margin: 0 0 12px; padding: 0 12px;
@@ -1705,3 +1706,93 @@ body.ios-guide-open .add-dock { visibility: hidden; }
 }
 .pending-banner .ico-sm { color: #F2B705; }
 .pending-banner-go { margin-left: auto; font-size: 18px; }
+
+/* v5.1 地图「定位到我」按钮：右下角，「＋ 添加」上方 16px；44×44 白色圆 */
+/* 地图自己成一层，Leaflet 内部的 z-index（400+）不会盖住定位按钮 */
+#trip-map { z-index: 0; }
+
+.locate-btn {
+  position: fixed;
+  right: 16px;
+  bottom: calc(82px + env(safe-area-inset-bottom, 0px));
+  z-index: 25;
+  width: 44px;
+  height: 44px;
+  border: 0;
+  border-radius: 50%;
+  background: #fff;
+  color: #16332F;
+  box-shadow: 0 2px 8px rgba(22, 51, 47, 0.16);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+}
+.locate-btn .locate-ico { width: 22px; height: 22px; }
+.locate-btn.is-locating { color: #0F9D8A; }
+.locate-btn.is-locating .locate-ico { animation: locate-pulse 1s ease-in-out infinite alternate; }
+.locate-btn.is-active { color: #0F9D8A; }
+.locate-btn.is-active .locate-ico circle:last-of-type { fill: #0F9D8A; }
+.locate-btn.is-denied { color: #8A9099; }
+.locate-btn:focus-visible { outline: 3px solid #0F9D8A; outline-offset: 2px; }
+@keyframes locate-pulse { from { opacity: 1; } to { opacity: 0.4; } }
+@media (prefers-reduced-motion: reduce) {
+  .locate-btn.is-locating .locate-ico { animation: none; }
+}
+.me-dot-wrap { background: transparent; border: 0; }
+.me-dot {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  border-radius: 50%;
+  background: #4C8DFF;
+  border: 3px solid #fff;
+  box-sizing: content-box;
+  box-shadow: 0 1px 4px rgba(22, 51, 47, 0.3);
+}
+.leaflet-bottom.leaflet-right { margin-bottom: calc(66px + env(safe-area-inset-bottom, 0px)); }
+
+/* v5.1 设置里「分享我的行程」「推荐这个工具」带一行灰色说明，点击区仍 ≥44px */
+.more-btn-sub { padding-top: 6px; padding-bottom: 6px; }
+.more-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.more-sub { font-size: 12px; font-weight: 400; color: #8A9099; line-height: 1.35; }
+#backup-export-share + #recommend-btn { margin-top: 8px; }
+
+/* v5.1 折叠屏内屏 / 中等宽度（600–799px）：内容列最宽 640px 居中，两侧露出底色；地图仍铺满 */
+@media (min-width: 600px) and (max-width: 799px) {
+  .timeline { max-width: 640px; }
+  .list-head { max-width: 640px; margin-left: auto; margin-right: auto; }
+  .day-chips.cal .cal-top,
+  .day-chips.cal .cal-row { max-width: 640px; margin-left: auto; margin-right: auto; }
+  .add-dock { max-width: 640px; left: 50%; right: auto; width: 100%; transform: translateX(-50%); }
+  .sheet-panel { left: 50%; right: auto; width: min(640px, 100%); transform: translateX(-50%); }
+  .toast { left: 50%; right: auto; width: min(608px, calc(100% - 32px)); transform: translateX(-50%); }
+  body { background: #FBF6EE; }
+}
+
+/* v5.1 双屏（Surface Duo 等，横向两块屏）：左屏列表和所有按钮 / 面板，右屏地图，转轴上不放东西。
+   不支持 viewport-segments 的浏览器不会进入这段，显示和以前完全一样。 */
+@media (horizontal-viewport-segments: 2) {
+  :root {
+    --seg0-w: env(viewport-segment-width 0 0, 50vw);
+    --seg1-left: env(viewport-segment-left 1 0, 50vw);
+  }
+  .app { width: var(--seg0-w); max-width: var(--seg0-w); margin: 0; }
+  #list-view[hidden] { display: block; }
+  #map-view,
+  #map-view[hidden] { display: block; position: fixed; top: 0; bottom: 0; left: var(--seg1-left); right: 0; z-index: 1; }
+  .add-dock { left: 0; right: auto; width: var(--seg0-w); max-width: none; transform: none; }
+  .toast { left: 16px; right: auto; width: calc(var(--seg0-w) - 32px); transform: none; }
+  .sheet { right: auto; width: var(--seg0-w); }
+  .sheet-panel { left: 0; right: 0; width: auto; transform: none; }
+  .ios-guide { right: auto; width: var(--seg0-w); }
+  #map-view .locate-btn { right: 16px; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); }
+  .leaflet-bottom.leaflet-right { margin-bottom: 0; }
+  #view-toggle-btn { display: none; }
+}
+
+/* 宽屏（≥800px）内容列 720px 居中：定位按钮跟着地图右边缘，不要飘到地图外 */
+@media (min-width: 800px) {
+  .locate-btn { right: calc(50% - 360px + 16px); }
+}

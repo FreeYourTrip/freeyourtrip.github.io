@@ -104,6 +104,64 @@ check("UI wiring: 待确认日期 group, banner, colours, raw text, toast wordin
   assert.ok(/\.card\.is-pending \{ background: #FFF4CC;/.test(css) && css.indexOf("#F2B705") !== -1);
 });
 
+check("reversed hotel (checkout before check-in) -> 待确认, row kept, raw text kept", function () {
+  const r = ImportUtil.parseImport("酒店 | 示例酒店 | Example St 3 | 2026/12/07 ~ 2026/12/04 | 确认号 FAKE-2");
+  assert.deepStrictEqual(r.errors, []);
+  const h = r.items[0];
+  assert.strictEqual(h.pendingDate, true);
+  assert.strictEqual(h.pendingKind, "hotel-reversed");
+  assert.strictEqual(h.dateRaw, "2026/12/07 ~ 2026/12/04");
+  assert.strictEqual(h.pendingFrom, "2026-12-07");
+  assert.strictEqual(h.pendingTo, "2026-12-04");
+  assert.strictEqual(h.checkIn, "");
+  assert.strictEqual(h.confirmationNo, "FAKE-2");
+  assert.deepStrictEqual(C.stripDays([h], "2026-11-16"), [], "calendar ignores it");
+});
+
+check("flight Tokyo→LA arriving 1 day earlier (date line) is NOT flagged; -2 not flagged; -3 flagged", function () {
+  const r = ImportUtil.parseImport([
+    "机票 | XX201 | HND - LAX | 2026-12-10 17:00 ~ 2026-12-09 10:30 |",
+    "机票 | XX202 | HND - LAX | 2026-12-10 17:00 ~ 2026-12-08 10:30 |",
+    "机票 | XX203 | HND - LAX | 2026-12-10 17:00 ~ 2026-12-07 10:30 |"
+  ].join("\n"));
+  assert.deepStrictEqual(r.errors, []);
+  const [a, b, c] = r.items;
+  assert.strictEqual(a.pendingDate, undefined);
+  assert.strictEqual(a.departDate, "2026-12-10");
+  assert.strictEqual(a.arriveDate, "2026-12-09");
+  assert.strictEqual(b.pendingDate, undefined);
+  assert.strictEqual(c.pendingDate, true);
+  assert.strictEqual(c.pendingKind, "flight-reversed");
+  assert.strictEqual(c.dateRaw, "2026-12-10 17:00 ~ 2026-12-07 10:30");
+  assert.strictEqual(c.departTime, "17:00", "times kept for the edit form");
+});
+
+check("editing a reversed item: still reversed keeps the flag; fixed clears it", function () {
+  const h = ImportUtil.parseImport("酒店 | 示例酒店 | x | 2026-12-07 ~ 2026-12-04 |").items[0];
+  const f = ItemEdit.formFields(h);
+  assert.strictEqual(f.date, "2026-12-07");
+  assert.strictEqual(f.endDate, "2026-12-04");
+  const still = ItemEdit.applyForm(h, Object.assign({}, f)).item;
+  assert.strictEqual(still.pendingDate, true);
+  assert.strictEqual(still.checkIn, "");
+  const fixed = ItemEdit.applyForm(h, Object.assign({}, f, { endDate: "2026-12-09" })).item;
+  assert.strictEqual(fixed.pendingDate, undefined);
+  assert.strictEqual(fixed.pendingKind, undefined);
+  assert.strictEqual(fixed.checkIn, "2026-12-07");
+  assert.strictEqual(fixed.checkOut, "2026-12-09");
+  const fl = ImportUtil.parseImport("机票 | XX203 | HND - LAX | 2026-12-10 17:00 ~ 2026-12-07 10:30 |").items[0];
+  const okFl = ItemEdit.applyForm(fl, Object.assign(ItemEdit.formFields(fl), { endDate: "2026-12-09" })).item;
+  assert.strictEqual(okFl.pendingDate, undefined, "-1 day after edit is fine");
+  assert.strictEqual(okFl.arriveDate, "2026-12-09");
+});
+
+check("card wording for reversed items is plain language", function () {
+  const tl = fs.readFileSync(__dirname + "/timeline.js", "utf8");
+  assert.ok(tl.indexOf('"退房比入住还早：" + mmdd(item.pendingFrom) + " ~ " + mmdd(item.pendingTo) + "，点我改一下"') !== -1);
+  assert.ok(tl.indexOf('"到达比出发早太多，点我改一下"') !== -1);
+  assert.ok(tl.indexOf('"这个时间看不懂：" + item.dateRaw + "，点我改一下"') !== -1);
+});
+
 if (failures) {
   console.log("\n" + failures + " check(s) failed.");
   process.exit(1);

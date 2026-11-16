@@ -118,6 +118,22 @@ check("mask pattern for UI (ABC123 -> AB****23)", function () {
   assert.strictEqual(maskSecret("AB"), "****");
 });
 
+check("locate: position stays in memory only — never stored, sent, or exported", function () {
+  const fs = require("fs");
+  const src = fs.readFileSync(__dirname + "/locate.js", "utf8").replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
+  ["localStorage", "sessionStorage", "indexedDB", "fetch(", "XMLHttpRequest", "sendBeacon", "WebSocket", "watchPosition", "document.cookie"].forEach((bad) => {
+    assert.ok(src.indexOf(bad) === -1, "locate.js must not use " + bad);
+  });
+  const tl = fs.readFileSync(__dirname + "/timeline.js", "utf8");
+  const bk = fs.readFileSync(__dirname + "/backup.js", "utf8");
+  assert.ok(tl.indexOf("LocateMe") === -1 && tl.indexOf("geolocation") === -1, "timeline.js never touches the position");
+  assert.ok(bk.indexOf("LocateMe") === -1 && bk.indexOf("geolocation") === -1, "backup/share never include the position");
+  const ex = fs.readFileSync(__dirname + "/timeline.js", "utf8").match(/function exportState\(\)[\s\S]*?\n  \}/);
+  assert.ok(ex && !/position|coords|locate/i.test(ex[0]), "exportState has no position fields");
+  const html = fs.readFileSync(__dirname + "/index.html", "utf8");
+  assert.ok(!/geolocation|getCurrentPosition/.test(html), "no geolocation call on page load");
+});
+
 if (failures) {
   console.log("\n" + failures + " failure(s)");
   process.exit(1);

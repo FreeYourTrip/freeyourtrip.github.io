@@ -85,6 +85,7 @@
       </section>
       <section id="map-view" class="panel panel-map" hidden>
         <div id="trip-map" role="application" aria-label="行程地图"></div>
+        <button type="button" class="locate-btn" id="locate-btn" aria-label="定位到我" title="定位到我"><svg class="locate-ico" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2.5"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg></button>
       </section>
     </main>
 
@@ -190,8 +191,8 @@
       <div class="more-actions">
         <button type="button" class="more-btn" id="help-open-btn">使用说明</button>
         <button type="button" class="more-btn" id="install-btn">添加到桌面</button>
-        <button type="button" class="more-btn" id="backup-export-share" title="导出后发给朋友，对方点导入即可">分享给朋友</button>
-        <button type="button" class="more-btn" id="recommend-btn" title="把 Free Your Trip 的介绍和网址发给朋友，不含你的行程">推荐给朋友</button>
+        <button type="button" class="more-btn more-btn-sub" id="backup-export-share" data-sub="发给同行的人，对方导入就能看到">分享我的行程</button>
+        <button type="button" class="more-btn more-btn-sub" id="recommend-btn" data-sub="只发网址，不含你的行程">推荐这个工具</button>
         <button type="button" class="more-btn" id="backup-import">导入</button>
         <input type="file" id="backup-file" accept="application/json,.json" hidden>
         <button type="button" class="more-btn" id="backup-export-full" title="含确认号和座位，仅自己保存">完整备份</button>
@@ -345,6 +346,7 @@
   <script src="./legs.js"></script>
   <script src="./calendar.js"></script>
   <script src="./recommend.js"></script>
+  <script src="./locate.js"></script>
   <script src="./item-edit.js"></script>
   <script src="./version.js"></script>
   <script src="./icons.js"></script>

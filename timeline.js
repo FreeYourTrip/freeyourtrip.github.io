@@ -12,6 +12,7 @@
   var examplesLoaded = false;
   var demoMode = false;
   var tripMap = null;
+  var mapTiles = "osm"; // 现在只用 OpenStreetMap（WGS-84）；以后换高德底图时改成 "gcj02"，定位点会自动转换
   var tripMarkers = [];
   var expanded = {};
   var pendingPick = null;
@@ -386,7 +387,29 @@
 
   /* ---------- 顶部日期条（规则见 calendar.js） ---------- */
   var CAL_CELL = 52;
-  var SEG_LABEL_MIN = 72; // 住宿段文字最小宽度；放不下就只显示 4px 横条，点它弹出完整名称
+  var SEG_LABEL_MIN = 72;
+  var SEG_GAP_PX = 4; // .seg-range 的 margin-left 0.3em ≈ 3.3px，向上取整
+  var segCtx = null;
+
+  /** 住宿段文字里地名之后的部分，以「·」开头，前面不带空格（空隙由 .seg-range 的 margin 给）。 */
+  function segRest(sg) {
+    return sg.label.slice(sg.city.length).replace(/^\s+/, "");
+  }
+
+  /** 量 11px 600 文字宽度（与 .cal-seg-text 一致）；量不了就按 CJK 11px、其他 6.5px 估算。 */
+  function measureSegText(text) {
+    try {
+      if (!segCtx) {
+        var cv = document.createElement("canvas");
+        segCtx = cv.getContext && cv.getContext("2d");
+        if (segCtx) segCtx.font = "600 11px " + getComputedStyle(document.body).fontFamily;
+      }
+      if (segCtx) return Math.ceil(segCtx.measureText(String(text)).width);
+    } catch (err) {}
+    var w = 0;
+    String(text).split("").forEach(function (ch) { w += /[\u2E80-\uFFFF]/.test(ch) ? 11 : 6.5; });
+    return Math.ceil(w);
+  } // 住宿段文字最小宽度；放不下就只显示 4px 横条，点它弹出完整名称
   var monthView = null;
 
   function reducedMotion() {
@@ -437,8 +460,9 @@
         '<span class="cal-seg-bar"></span>' +
         (textW < SEG_LABEL_MIN
           ? ""
-          : '<span class="cal-seg-text" style="max-width:' + textW + 'px"><span class="seg-city">' + escapeHtml(sg.city) +
-            '</span><span class="seg-range">' + escapeHtml(sg.label.slice(sg.city.length).replace(/^\s+/, "")) + "</span></span>") +
+          : '<span class="cal-seg-text" style="max-width:' + textW + 'px"><span class="seg-city">' +
+            escapeHtml(C.fitCity(sg.city, segRest(sg), textW, measureSegText, SEG_GAP_PX)) +
+            '</span><span class="seg-range">' + escapeHtml(segRest(sg)) + "</span></span>") +
         "</div>"
       );
     }).join("");
@@ -670,6 +694,20 @@
     );
   }
 
+  function mmdd(iso) {
+    var m = /^\d{4}-(\d{2})-(\d{2})$/.exec(iso || "");
+    return m ? m[1] + "/" + m[2] : String(iso || "");
+  }
+
+  /** 黄色「待确认」卡片上的一句话，写给不懂技术的人看。 */
+  function pendingText(item) {
+    if (item.pendingKind === "hotel-reversed") {
+      return "退房比入住还早：" + mmdd(item.pendingFrom) + " ~ " + mmdd(item.pendingTo) + "，点我改一下";
+    }
+    if (item.pendingKind === "flight-reversed") return "到达比出发早太多，点我改一下";
+    return item.dateRaw ? "这个时间看不懂：" + item.dateRaw + "，点我改一下" : "没写日期，点我改一下";
+  }
+
   function isPendingItem(item) {
     return !!(item && item.pendingDate);
   }
@@ -677,7 +715,7 @@
   function cardHtml(item) {
     var meta = typeStyle(item);
     var pendingLine = isPendingItem(item)
-      ? '<p class="card-raw">' + (item.dateRaw ? "这个时间看不懂：" + escapeHtml(item.dateRaw) + "，点我改一下" : "没写日期，点我改一下") + "</p>"
+      ? '<p class="card-raw">' + escapeHtml(pendingText(item)).replace(/(\d{2}\/\d{2} ~ \d{2}\/\d{2})/, '<span class="nowrap">$1</span>') + "</p>"
       : "";
     var open = expanded[item.id] ? " is-open" : "";
     var extra = [];
@@ -977,10 +1015,19 @@
     else if (bounds.length > 1) tripMap.fitBounds(bounds, { padding: [40, 40] });
   }
 
+  /** 双屏设备（左右两块屏）：列表和地图同时显示，地图在右屏。其他设备返回 false，行为不变。 */
+  function isDualScreen() {
+    try {
+      return !!(window.matchMedia && window.matchMedia("(horizontal-viewport-segments: 2)").matches);
+    } catch (err) {
+      return false;
+    }
+  }
+
   function renderAll() {
     updateTopBar();
     renderList();
-    if (currentView === "map") {
+    if (currentView === "map" || isDualScreen()) {
       initTripMap();
       renderMap();
     }
@@ -1006,8 +1053,9 @@
     { icon: "calendar", title: "看行程", text: "按日期自动排好。顶部日期条左右滑，点某一天只看那天，点最前面的“全部”看所有日子；“今天”回到今天，点月份打开整月日历。紫色横条是每段住宿，过去的标“已去”。点卡片看详情。" },
     { icon: "trash", title: "修改和删除", text: "卡片右边的“删除”可以删掉这一项，点开卡片还能修改；列表右上角“清空全部”一次删光。删错了 10 秒内点底部的“撤销”就能恢复。" },
     { icon: "map", title: "看地图", text: "点顶部的地图图标，所有地点都标在地图上。" },
+    { icon: "locate", title: "定位", text: "地图右下角的定位按钮可以显示你现在在哪（位置只在你手机上用，不保存不上传）" },
     { icon: "bus", title: "带我去", text: "点两站之间的“带我去”，自动打开高德或 Google 地图导航。" },
-    { icon: "share", title: "分享给朋友", text: "在“设置”里点“分享给朋友”，把文件发给对方，对方点“导入”就能看到。分享时会自动隐藏订单号和座位。" },
+    { icon: "share", title: "分享我的行程", text: "在“设置”里点“分享我的行程”，把文件发给同行的人，对方点“导入”就能看到。分享时会自动隐藏订单号和座位。想把这个工具推荐给别人，点“推荐这个工具”，只发网址，不含你的行程。" },
     { icon: "device", title: "放到桌面", text: "点“添加到桌面”，以后像 App 一样打开。iPhone 请用 Safari 打开，按提示操作。" },
     { icon: "backup", title: "备份", text: "换手机前，在“设置”里点“完整备份”，到新手机上再点“导入”。" },
     { icon: "trash", title: "清空", text: "在“设置”里点“清空本机数据”，所有行程都会删除。" },
@@ -1587,7 +1635,7 @@
     if (!window.AppVersion) return;
     var a = AppVersion.ANNOUNCEMENT;
     $("announce-title").textContent = a.title;
-    $("announce-list").innerHTML = a.bullets.slice(0, 4).map(function (b) {
+    $("announce-list").innerHTML = a.bullets.slice(0, 5).map(function (b) {
       return "<li>" + escapeHtml(b) + "</li>";
     }).join("");
     $("announce-tip").textContent = a.tip;
@@ -2109,7 +2157,11 @@
       if (!el || el.getAttribute("data-iconified") === "1") return;
       el.setAttribute("data-iconified", "1");
       var label = el.textContent;
-      el.innerHTML = ico(name) + "<span>" + escapeHtml(label) + "</span>";
+      var sub = el.getAttribute("data-sub");
+      el.innerHTML = ico(name) + (sub
+        ? '<span class="more-text"><span class="more-label">' + escapeHtml(label) + '</span><span class="more-sub">' + escapeHtml(sub) + "</span></span>"
+        : "<span>" + escapeHtml(label) + "</span>");
+      if (sub) el.setAttribute("aria-label", label + "：" + sub);
     }
     put("help-open-btn", "help");
     put("install-btn", "device");
@@ -2494,6 +2546,12 @@
     confirm: openConfirm,
     openAnnouncement: openAnnouncement,
     openIosGuide: openIosGuide,
+    getMap: function () {
+      return tripMap;
+    },
+    mapTileKind: function () {
+      return mapTiles;
+    },
     toast: function (msg) {
       showToast(msg, null, 5000);
     }
@@ -2569,6 +2627,15 @@
       applyInstallVisibility({ hideInstall: true });
     });
     window.addEventListener("resize", fitTopActions);
+    try {
+      var dualMq = window.matchMedia && window.matchMedia("(horizontal-viewport-segments: 2)");
+      if (dualMq && dualMq.addEventListener) {
+        dualMq.addEventListener("change", function () {
+          renderAll();
+          if (tripMap) setTimeout(function () { tripMap.invalidateSize(); }, 80);
+        });
+      }
+    } catch (err) {}
     applyInstallVisibility(currentEnv());
     bindPlaceSearch();
     $("trip-name-btn").addEventListener("click", startRename);

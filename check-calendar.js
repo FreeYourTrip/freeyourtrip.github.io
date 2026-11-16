@@ -145,13 +145,24 @@ check("UI wiring: strip, month sheet, 今天, 全部, help text, sw precache", f
   const v = require("./version.js");
   assert.ok(html.indexOf('src="./calendar.js"') !== -1 && html.indexOf('src="./calendar.js"') < html.indexOf('src="./timeline.js"'));
   assert.ok(html.indexOf('id="month-sheet"') !== -1 && html.indexOf('id="month-prev"') !== -1 && html.indexOf('id="month-next"') !== -1);
-  assert.ok(sw.indexOf('"./calendar.js"') !== -1 && sw.indexOf('"xingcheng-map-shell-v13"') !== -1);
+  assert.ok(sw.indexOf('"./calendar.js"') !== -1 && sw.indexOf('"xingcheng-map-shell-v14"') !== -1);
   assert.ok(tl.indexOf('id="cal-today"') !== -1 && tl.indexOf('data-day="all"') !== -1 && tl.indexOf('id="cal-month"') !== -1);
   assert.ok(tl.indexOf("prefers-reduced-motion") !== -1);
   assert.ok(tl.indexOf("顶部日期条左右滑") !== -1 && tl.indexOf("第1天、第2天") === -1);
-  assert.ok(v.ANNOUNCEMENT.bullets.some((b) => b.indexOf("日期条") !== -1) && v.ANNOUNCEMENT.bullets.length <= 4);
-  assert.ok(v.CHANGELOG[0].version === "v5" && v.CHANGELOG[0].lines.some((l) => l.indexOf("日期条") !== -1));
-  assert.strictEqual(v.APP_VERSION, "v5");
+  assert.ok(v.CHANGELOG.filter((e) => e.version === "v5")[0].lines.some((b) => b.indexOf("日期条") !== -1) && v.ANNOUNCEMENT.bullets.length <= 5);
+  const v5 = v.CHANGELOG.filter((e) => e.version === "v5")[0];
+  assert.ok(v5 && v5.lines.some((l) => l.indexOf("日期条") !== -1));
+  assert.strictEqual(v.APP_VERSION, "v5.1");
+});
+
+check("fitCity truncates only the name, keeps the range, no stray space before ·", function () {
+  const m = (t) => Array.from(t).length * 10; // 每个字 10px 的假尺子
+  assert.strictEqual(C.fitCity("东京", "· 12/1–12/7", 200, m, 4), "东京");
+  const cut = C.fitCity("大阪难波心斋桥一带", "· 11/18–11/20", 160, m, 4);
+  assert.ok(/…$/.test(cut) && cut.indexOf(" ") === -1, cut);
+  assert.ok(m(cut) + 4 + m("· 11/18–11/20") <= 160);
+  assert.strictEqual(cut, "大…");
+  assert.strictEqual(C.fitCity("很长的名字", "· 11/18", 60, m, 4), "…");
 });
 
 if (failures) {

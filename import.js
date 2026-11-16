@@ -363,6 +363,27 @@
     return item;
   }
 
+  var FLIGHT_EARLY_LIMIT_DAYS = 2;
+
+  function dayGap(a, b) {
+    if (!isValidIsoDate(a) || !isValidIsoDate(b)) return 0;
+    var pa = a.split("-"), pb = b.split("-");
+    return Math.round((Date.UTC(+pb[0], +pb[1] - 1, +pb[2]) - Date.UTC(+pa[0], +pa[1] - 1, +pa[2])) / 86400000);
+  }
+
+  /** 日期倒过来（退房早于入住 / 到达比出发早太多）：保留这一行，标待确认，记下两个日期给卡片显示，日期字段清空。 */
+  function markReversed(item, rawText, kind, fromKey, toKey) {
+    item.pendingDate = true;
+    item.pendingKind = kind;
+    item.dateRaw = String(rawText == null ? "" : rawText).trim();
+    item.pendingFrom = item[fromKey];
+    item.pendingTo = item[toKey];
+    item.dateGuess = item[fromKey];
+    item[fromKey] = "";
+    item[toKey] = "";
+    return item;
+  }
+
   function itemFromFields(fields, usedIds) {
     var rawDateText = fields ? fields.datetime : "";
     if (fields && fields.datetime != null) {
@@ -408,6 +429,10 @@
         example: false
       };
       if (flightPending) markPending(item, rawDateText, fields.datetime, when.reason);
+      else if (dayGap(item.departDate, item.arriveDate) < -FLIGHT_EARLY_LIMIT_DAYS) {
+        /* 到达比出发早超过 2 天：肯定写反或写错了（向东飞越日期变更线早到 1 天是正常的，不标） */
+        markReversed(item, rawDateText, "flight-reversed", "departDate", "arriveDate");
+      }
     } else if (typeInfo.kind === "hotel") {
       var stay = parseRangeDateTime(fields.datetime, {
         requireTimes: false,
@@ -432,6 +457,9 @@
         example: false
       };
       if (stayPending) markPending(item, rawDateText, fields.datetime, stayPending);
+      else if (item.checkOut && item.checkIn && item.checkOut < item.checkIn) {
+        markReversed(item, rawDateText, "hotel-reversed", "checkIn", "checkOut");
+      }
     } else {
       var whenP = parsePlaceDateTime(fields.datetime);
       var placePending = whenP.error || "";
