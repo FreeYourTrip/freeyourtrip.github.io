@@ -95,7 +95,7 @@
         date: item.checkIn || item.dateGuess || "",
         time: item.checkInTime || "",
         endDate: item.checkOut || item.pendingTo || "",
-        endTime: "",
+        endTime: item.checkOutTime || "",
         note: item.note || ""
       };
     }
@@ -173,6 +173,7 @@
       setOrDelete(next, "checkIn", date);
       setOrDelete(next, "checkInTime", time);
       if (form.endDate != null) setOrDelete(next, "checkOut", clean(form.endDate));
+      if (form.endTime != null) setOrDelete(next, "checkOutTime", clean(form.endTime));
     } else {
       next.type = "place";
       var sub = type.indexOf("/") !== -1 ? type.split("/")[1] : "";
@@ -180,10 +181,12 @@
       delete next.checkIn;
       delete next.checkInTime;
       delete next.checkOut;
+      delete next.checkOutTime;
       setOrDelete(next, "date", date);
       setOrDelete(next, "time", time);
     }
     setOrDelete(next, "note", clean(form.note));
+    if (next.type === "flight") delete next.arriveEarlyOk;
     clearPendingIfDated(next);
     return { item: next, addressChanged: addressChanged, error: "" };
   }
@@ -196,15 +199,29 @@
     return dayDiff(a, b);
   }
 
-  /** 机票到达比出发早超过 2 天才算不对（向东飞越日期变更线早到 1 天是正常的）。 */
-  var FLIGHT_EARLY_LIMIT_DAYS = 2;
+  /** 机票落地日期早于起飞日期要标待确认。用户点「对的」后记 arriveEarlyOk，不再反复标。 */
+  var FLIGHT_EARLY_LIMIT_DAYS = 0;
 
-  /** 这条的日期是否“说得通”：酒店退房不早于入住；机票到达不比出发早超过 2 天。 */
+  /** 这条的日期是否“说得通”：酒店退房不早于入住；机票落地不早于起飞（除非用户已确认）。 */
   function rangeProblem(item) {
     if (!item) return "";
     if (item.type === "hotel" && isIso(item.checkIn) && isIso(item.checkOut) && item.checkOut < item.checkIn) return "hotel-reversed";
-    if (item.type === "flight" && isIso(item.departDate) && isIso(item.arriveDate) && daysBetween(item.departDate, item.arriveDate) < -FLIGHT_EARLY_LIMIT_DAYS) return "flight-reversed";
+    if (item.type === "flight" && isIso(item.departDate) && isIso(item.arriveDate) && item.arriveDate < item.departDate) {
+      if (item.arriveEarlyOk) return "";
+      return "flight-reversed";
+    }
     return "";
+  }
+
+  /** 「对的」：保留原来的起飞/落地日期，从待确认里拿掉。 */
+  function acceptEarlyArrival(item) {
+    if (!item || item.type !== "flight") return item;
+    var next = Object.assign({}, item);
+    if (next.pendingFrom) next.departDate = next.pendingFrom;
+    if (next.pendingTo) next.arriveDate = next.pendingTo;
+    next.arriveEarlyOk = true;
+    PENDING_KEYS.forEach(function (k) { delete next[k]; });
+    return next;
   }
 
   var PENDING_KEYS = ["pendingDate", "dateRaw", "dateGuess", "pendingReason", "pendingKind", "pendingFrom", "pendingTo"];
@@ -298,7 +315,8 @@
     isPendingDate: isPendingDate,
     clearPendingIfDated: clearPendingIfDated,
     rangeProblem: rangeProblem,
-    FLIGHT_EARLY_LIMIT_DAYS: FLIGHT_EARLY_LIMIT_DAYS
+    FLIGHT_EARLY_LIMIT_DAYS: FLIGHT_EARLY_LIMIT_DAYS,
+    acceptEarlyArrival: acceptEarlyArrival
   };
   root.ItemEdit = api;
   if (typeof module !== "undefined" && module.exports) module.exports = api;

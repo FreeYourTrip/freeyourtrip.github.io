@@ -29,7 +29,7 @@ check("help: 3 tiers as cards; only tier 1 on first open; privacy line; 常用 g
   [
     '{ key: "add", title: "添加", text: "点「＋ 添加」，选加机票、酒店还是地点，搜到后点一下就加好了" }',
     '{ key: "ai", title: "截图交给 AI", text: "机票、酒店截图丢给任意 AI，自动整理成行程" }',
-    '{ key: "map", title: "带我去", text: "点开地点卡片，点「带我去」直接打开导航" }'
+    '{ key: "map", title: "带我去", text: "卡片右边的『带我去』，从你现在的位置出发；两站中间的『路线』，从上一站去下一站", line: "长按卡片，拖动换顺序" }'
   ].forEach((l) => assert.ok(tl.indexOf(l) !== -1, l));
   assert.ok(fs.readFileSync(__dirname + "/index.html", "utf8").indexOf('id="add-fab" aria-haspopup="dialog" aria-controls="add-sheet">＋ 添加<') !== -1, "the help names the real button label");
   ["看行程", "改和删", "地图", "分享我的行程", "放到桌面", "改行程名"].forEach((t) => assert.ok(tl.indexOf('title: "' + t + '"') !== -1, t));
@@ -99,19 +99,19 @@ check("icon picker: 4×2, 52px round, two-character labels, one colour map", fun
   assert.ok(/\.icon-dot \{\s*width: 52px;\s*height: 52px;\s*border-radius: 50%;/.test(css));
 });
 
-check("nav lives inside the expanded card only: no row between cards, hint once, none on flights, rules kept", function () {
+check("v5.4 nav: one 带我去 round button on the card; 看位置 stays in the expanded body; pills between stops", function () {
   const tl = fs.readFileSync(__dirname + "/timeline.js", "utf8");
   const css = fs.readFileSync(__dirname + "/styles.css", "utf8");
-  assert.ok(tl.indexOf("conn-slot-pair") === -1 && tl.indexOf("function firstPill") === -1 && tl.indexOf("navSlotHtml") === -1, "no full-width row between cards");
-  const cs = tl.slice(tl.indexOf("function connectorSlot"), tl.indexOf("function connectorInto"));
-  assert.ok(/if \(conn\.kind === "transfer"\) return transferHtml\(conn\.label\);\s*return "";/.test(cs), "only layover bars stay between cards");
-  const cn = tl.slice(tl.indexOf("function cardNavHtml"), tl.indexOf("function cardHtml"));
-  assert.ok(/if \(!item \|\| item\.type === "flight"\) return "";/.test(cn), "flight cards: no nav");
-  assert.ok(/origin = prevIsFlight \? null : conn\.from \|\| null;/.test(cn), "previous flight is never the origin");
-  assert.ok(/navPairHtml\(navPlan\(origin, cardTarget\(item\)\)/.test(cn), "same rules (待补地址 / >300 km / Google-高德 / transit hint) via navPlan + navPairHtml");
-  assert.ok(/extra\.push\(cardNavHtml\(item, conn\)\);/.test(tl) && /'<div class="card-extra">' \+\s*extra\.join\(""\)/.test(tl), "rendered inside .card-extra (shown after ⌄)");
-  assert.ok(/cardHtml\(item, i === 0 \? null : connectorInto\(connectors, item\.id\)\)/.test(tl), "first stop of the day starts from my location");
-  assert.ok(/\.card\.is-open \.card-extra \{ display: block; \}/.test(css) && /\.card-nav, \.detail-nav \{ margin: 8px 0 4px; \}/.test(css), "hidden until expanded; 8px gap");
+  assert.ok(tl.indexOf("function cardGoBtnHtml") !== -1 && tl.indexOf("function cardLookHtml") !== -1);
+  assert.ok(/extra\.push\(cardLookHtml\(item\)\)/.test(tl), "expanded body keeps 看位置 / 补上地址");
+  assert.ok(tl.indexOf("function cardNavHtml") === -1 && !/extra\.push\(cardNavHtml\(/.test(tl), "no second 带我去 in the expanded body");
+  assert.ok(/class="card-go-btn"/.test(tl) && /function locArrowSvg/.test(tl), "round current-location button");
+  assert.ok(!/\.card\.is-open \.card-go-btn \{ display: none/.test(css), "button stays visible when expanded");
+  assert.ok(!/legPillHtml\(Legs\.firstOfDayPill/.test(tl), "no pill before the first stop");
+  assert.ok(/legPillHtml\(Legs\.navPillSpec/.test(tl), "pills between stops");
+  const cs = tl.slice(tl.indexOf("function connectorSlot"), tl.indexOf("function legPillHtml"));
+  assert.ok(/if \(conn\.kind === "transfer"\) return transferHtml\(conn\.label\);/.test(cs), "layover bars remain");
+  assert.ok(/\.card\.is-open \.card-extra \{ display: block; \}/.test(css), "extra still expands");
 });
 
 check("no coords + no known location → 「Google 地图」+「高德」 with the hint; location known → one app auto-picked, no hint", function () {

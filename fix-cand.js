@@ -281,7 +281,7 @@
     return { name: name || "未命名地点", sub: sub };
   }
 
-  /* ---------- v5.3（IT老板）：从「添加」加的酒店，入住 = 选中的那天，没选就是行程第一天（行程空就今天），退房 = 入住 + 1 天 ---------- */
+  /* ---------- v5.4（IT老板）：入住 = 用户自己点过的那天，没点过就用行程第一天；行程里一个日期都没有则两格都空。绝不填今天。退房 = 入住 + 1 天 ---------- */
   function ymdOk(s) {
     return /^\d{4}-\d{2}-\d{2}$/.test(String(s || ""));
   }
@@ -289,15 +289,36 @@
     var p = String(s).split("-");
     return new Date(Date.UTC(+p[0], +p[1] - 1, +p[2] + 1)).toISOString().slice(0, 10);
   }
+  function hotelNights(checkIn, checkOut) {
+    if (!ymdOk(checkIn) || !ymdOk(checkOut)) return null;
+    var a = String(checkIn).split("-");
+    var b = String(checkOut).split("-");
+    var msA = Date.UTC(+a[0], +a[1] - 1, +a[2]);
+    var msB = Date.UTC(+b[0], +b[1] - 1, +b[2]);
+    var n = Math.round((msB - msA) / 86400000);
+    return n > 0 ? n : null;
+  }
+  /** selected 只在用户明确点过某一天时传入；today 参数忽略，保留签名以免旧调用报错。 */
   function hotelDates(selected, tripDays, today) {
     var first = (tripDays || []).filter(ymdOk).sort()[0];
-    var inDay = ymdOk(selected) ? selected : first || (ymdOk(today) ? today : "");
+    var inDay = ymdOk(selected) ? selected : first || "";
     if (!inDay) return null;
     return { checkIn: inDay, checkOut: nextYmd(inDay) };
+  }
+  function hotelDateState(checkIn, checkOut) {
+    if (!ymdOk(checkIn) || !ymdOk(checkOut)) {
+      return { ok: false, reason: "blank", hint: "先选入住和退房日期", nights: null };
+    }
+    if (checkOut <= checkIn) {
+      return { ok: false, reason: "invalid", hint: "退房要晚于入住", nights: null };
+    }
+    return { ok: true, reason: "", hint: "", nights: hotelNights(checkIn, checkOut) };
   }
 
   var api = {
     hotelDates: hotelDates,
+    hotelNights: hotelNights,
+    hotelDateState: hotelDateState,
     COPY: COPY,
     MAX: MAX,
     simplifyName: simplifyName,

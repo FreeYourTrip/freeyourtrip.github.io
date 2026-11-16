@@ -352,7 +352,7 @@
     return "amap";
   }
 
-  /** 带我去 / 从我的位置出发：可只有终点；无坐标时用名称或地址文本。 */
+  /** 带我去：可只有终点（从当前位置出发）；无坐标时用名称或地址文本。 */
   function buildPlaceNavLinks(dest, modeId) {
     return buildFlexibleNavLinks(null, dest, modeId);
   }

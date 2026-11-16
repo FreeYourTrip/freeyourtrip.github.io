@@ -244,6 +244,7 @@
             <input type="text" id="edit-note" autocomplete="off" placeholder="可以不填">
           </div>
           <button type="button" class="primary-btn" id="manual-save">保存</button>
+          <button type="button" class="secondary-btn edit-only" id="edit-add-return" hidden>再加一张返程</button>
           <button type="button" class="secondary-btn edit-only" id="edit-cancel" hidden>取消</button>
           <div class="add-status" id="manual-status" role="status"></div>
         </div>
@@ -342,6 +343,36 @@
         <button type="button" class="confirm-cancel" id="confirm-cancel">取消</button>
         <button type="button" class="confirm-ok" id="confirm-ok">删除</button>
       </div>
+    </div>
+  </div>
+
+  <div class="sheet hotel-date-sheet" id="hotel-date-sheet" hidden>
+    <div class="sheet-backdrop" data-close="hotel-date-sheet"></div>
+    <div class="hotel-date-panel" role="dialog" aria-labelledby="hotel-date-title">
+      <h2 class="hotel-date-title" id="hotel-date-title">什么时候住？</h2>
+      <div class="hotel-date-row">
+        <div class="hotel-date-box" id="hotel-in-box">
+          <label for="hotel-check-in">入住</label>
+          <input type="date" id="hotel-check-in" autocomplete="off">
+        </div>
+        <div class="hotel-date-nights" id="hotel-date-nights">共 — 晚</div>
+        <div class="hotel-date-box" id="hotel-out-box">
+          <label for="hotel-check-out">退房</label>
+          <input type="date" id="hotel-check-out" autocomplete="off">
+        </div>
+      </div>
+      <div class="hotel-date-time-row">
+        <div class="hotel-date-time-wrap">
+          <div class="hotel-date-box hotel-date-time-box" id="hotel-out-time-box">
+            <label for="hotel-check-out-time">退房时间</label>
+            <input type="text" id="hotel-check-out-time" inputmode="decimal" placeholder="几点退房？" maxlength="5" autocomplete="off" spellcheck="false" aria-label="退房时间">
+          </div>
+          <p class="hotel-date-time-auto" id="hotel-date-time-auto" hidden>按航班自动算</p>
+        </div>
+      </div>
+      <p class="hotel-date-summary" id="hotel-date-summary"></p>
+      <p class="hotel-date-hint" id="hotel-date-hint"></p>
+      <button type="button" class="hotel-date-go" id="hotel-date-go">加进行程</button>
     </div>
   </div>
 

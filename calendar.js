@@ -78,14 +78,24 @@
   }
 
   /** 每天的圆点：{ "2026-12-04": [item, item...] }，按 flight、hotel、place 顺序各取一个，最多 3 个。 */
+  function itemDotDays(item) {
+    var days = [];
+    var d = displayDate(item);
+    if (parse(d)) days.push(d);
+    if (item && item.type === "hotel" && parse(item.checkIn) && parse(item.checkOut) && item.checkIn < item.checkOut) {
+      if (days.indexOf(item.checkOut) === -1) days.push(item.checkOut);
+    }
+    return days;
+  }
+
   function dotsByDay(items) {
     var map = {};
     (items || []).forEach(function (it) {
-      var d = displayDate(it);
-      if (!parse(d)) return;
-      if (!map[d]) map[d] = {};
-      var k = dotKind(it);
-      if (!map[d][k]) map[d][k] = it;
+      itemDotDays(it).forEach(function (d) {
+        if (!map[d]) map[d] = {};
+        var k = dotKind(it);
+        if (!map[d][k]) map[d][k] = it;
+      });
     });
     var out = {};
     Object.keys(map).forEach(function (d) {
@@ -99,8 +109,7 @@
   function daysWithItems(items) {
     var seen = {};
     (items || []).forEach(function (it) {
-      var d = displayDate(it);
-      if (parse(d)) seen[d] = true;
+      itemDotDays(it).forEach(function (d) { seen[d] = true; });
     });
     return Object.keys(seen).sort();
   }

@@ -118,22 +118,26 @@ check("reversed hotel (checkout before check-in) -> 待确认, row kept, raw tex
   assert.deepStrictEqual(C.stripDays([h], "2026-11-16"), [], "calendar ignores it");
 });
 
-check("flight Tokyo→LA arriving 1 day earlier (date line) is NOT flagged; -2 not flagged; -3 flagged", function () {
+check("flight with landing date earlier than departure is always 待确认 (v5.4, including date-line -1 day)", function () {
   const r = ImportUtil.parseImport([
     "机票 | XX201 | HND - LAX | 2026-12-10 17:00 ~ 2026-12-09 10:30 |",
     "机票 | XX202 | HND - LAX | 2026-12-10 17:00 ~ 2026-12-08 10:30 |",
-    "机票 | XX203 | HND - LAX | 2026-12-10 17:00 ~ 2026-12-07 10:30 |"
+    "机票 | XX203 | HND - LAX | 2026-12-10 17:00 ~ 2026-12-07 10:30 |",
+    "机票 | XX204 | LHR - CDG | 2026-12-10 17:00 ~ 2026-12-10 19:00 |"
   ].join("\n"));
   assert.deepStrictEqual(r.errors, []);
-  const [a, b, c] = r.items;
-  assert.strictEqual(a.pendingDate, undefined);
-  assert.strictEqual(a.departDate, "2026-12-10");
-  assert.strictEqual(a.arriveDate, "2026-12-09");
-  assert.strictEqual(b.pendingDate, undefined);
-  assert.strictEqual(c.pendingDate, true);
+  const [a, b, c, d] = r.items;
+  assert.strictEqual(a.pendingDate, true, "-1 day flagged");
+  assert.strictEqual(a.pendingKind, "flight-reversed");
+  assert.strictEqual(a.pendingFrom, "2026-12-10");
+  assert.strictEqual(a.pendingTo, "2026-12-09");
+  assert.strictEqual(a.departDate, "", "dates cleared until confirmed");
+  assert.strictEqual(b.pendingKind, "flight-reversed");
   assert.strictEqual(c.pendingKind, "flight-reversed");
   assert.strictEqual(c.dateRaw, "2026-12-10 17:00 ~ 2026-12-07 10:30");
   assert.strictEqual(c.departTime, "17:00", "times kept for the edit form");
+  assert.ok(!d.pendingDate, "same-day arrival is fine");
+  assert.strictEqual(d.arriveDate, "2026-12-10");
 });
 
 check("editing a reversed item: still reversed keeps the flag; fixed clears it", function () {
@@ -150,15 +154,23 @@ check("editing a reversed item: still reversed keeps the flag; fixed clears it",
   assert.strictEqual(fixed.checkIn, "2026-12-07");
   assert.strictEqual(fixed.checkOut, "2026-12-09");
   const fl = ImportUtil.parseImport("机票 | XX203 | HND - LAX | 2026-12-10 17:00 ~ 2026-12-07 10:30 |").items[0];
-  const okFl = ItemEdit.applyForm(fl, Object.assign(ItemEdit.formFields(fl), { endDate: "2026-12-09" })).item;
-  assert.strictEqual(okFl.pendingDate, undefined, "-1 day after edit is fine");
-  assert.strictEqual(okFl.arriveDate, "2026-12-09");
+  const stillEarly = ItemEdit.applyForm(fl, Object.assign(ItemEdit.formFields(fl), { endDate: "2026-12-09" })).item;
+  assert.strictEqual(stillEarly.pendingDate, true, "v5.4: still-early after edit stays 待确认");
+  const okFl = ItemEdit.applyForm(fl, Object.assign(ItemEdit.formFields(fl), { endDate: "2026-12-10" })).item;
+  assert.strictEqual(okFl.pendingDate, undefined, "same-day arrival clears 待确认");
+  assert.strictEqual(okFl.arriveDate, "2026-12-10");
+  const accepted = ItemEdit.acceptEarlyArrival(fl);
+  assert.ok(!accepted.pendingDate && accepted.arriveEarlyOk);
+  assert.strictEqual(accepted.departDate, "2026-12-10");
+  assert.strictEqual(accepted.arriveDate, "2026-12-07");
+  assert.strictEqual(ItemEdit.rangeProblem(accepted), "", "对的 keeps the early arrival");
 });
 
 check("card wording for reversed items is plain language", function () {
   const tl = fs.readFileSync(__dirname + "/timeline.js", "utf8");
   assert.ok(tl.indexOf('"退房比入住还早：" + mmdd(item.pendingFrom) + " ~ " + mmdd(item.pendingTo) + "，点我改一下"') !== -1);
-  assert.ok(tl.indexOf('"到达比出发早太多，点我改一下"') !== -1);
+  assert.ok(tl.indexOf("落地比起飞早，日期对吗？") !== -1);
+  assert.ok(tl.indexOf(">对的<") !== -1 && tl.indexOf(">改日期<") !== -1);
   assert.ok(tl.indexOf('"这个时间看不懂：" + item.dateRaw + "，点我改一下"') !== -1);
 });
 

@@ -440,8 +440,8 @@
         example: false
       };
       if (flightPending) markPending(item, rawDateText, fields.datetime, when.reason);
-      else if (dayGap(item.departDate, item.arriveDate) < -FLIGHT_EARLY_LIMIT_DAYS) {
-        /* 到达比出发早超过 2 天：肯定写反或写错了（向东飞越日期变更线早到 1 天是正常的，不标） */
+      else if (item.departDate && item.arriveDate && item.arriveDate < item.departDate) {
+        /* v5.4：落地日期早于起飞日期，不默默收下，标待确认让用户点「对的」或「改日期」 */
         markReversed(item, rawDateText, "flight-reversed", "departDate", "arriveDate");
       }
     } else if (typeInfo.kind === "hotel") {

@@ -233,7 +233,7 @@ check("v5.2 nav UI copy and styles", function () {
   const tl = fs.readFileSync(__dirname + "/timeline.js", "utf8");
   assert.ok(tl.indexOf('go: "带我去"') !== -1 && tl.indexOf('look: "看位置"') !== -1 && tl.indexOf('noAddr: "待补地址"') !== -1);
   assert.ok(tl.indexOf('far: "这两站之间要坐飞机或火车"') !== -1 && tl.indexOf('transitTip: "公交算不出来就换成驾车试试"') !== -1);
-  assert.ok(/var NAV_FAR_KM = 300;/.test(tl) && /origin = prevIsFlight \? null : conn\.from \|\| null;/.test(tl), "previous flight is never the origin");
+  assert.ok(/var NAV_FAR_KM = 300;/.test(tl) && /buildFlexibleNavLinks\(null, dest/.test(tl), "v5.4: card 带我去 always starts from the current location");
   assert.ok(tl.indexOf("在地图上看位置") === -1, "wording is 看位置");
   const css = fs.readFileSync(__dirname + "/styles.css", "utf8");
   assert.ok(/\.nav-go \{ flex: 6 1 0; background: #0F9D8A; color: #fff; \}/.test(css) && /\.nav-look \{ flex: 4 1 0; background: #fff; color: #16332F; border: 1px solid #D9E2E0; \}/.test(css));

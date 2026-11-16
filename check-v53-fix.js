@@ -260,7 +260,7 @@ check("import (IT老板 b): day city text + viewbox (bounded=1 → 0), item.city
 
 check("「直接添加」 items (IT老板 c) get the background candidate search too", function () {
   const fin = tl.slice(tl.indexOf("function finishDirectAdd"), tl.indexOf("var fixingId = null"));
-  assert.ok(/var real = addPlaceAndToast\(item, DIRECT_COPY\.added\);\s*\/\*[^*]*\*\/\s*queueCandidates\(real \|\| item\);/.test(fin));
+  assert.ok(/addPlaceAndToast\(it, DIRECT_COPY\.added\);\s*queueCandidates\(real \|\| it\);/.test(fin), "v5.4: still queues candidates after the date panel");
   assert.ok(/return real;\s*\}\s*function nameOrBlank/.test(tl), "addPlaceAndToast hands back the stored item");
   assert.ok(/if \(expanded\[eid\] && eit && eit\.type !== "flight" && itemUnlocated\(eit\)\) queueCandidates\(eit\);/.test(tl), "expanding a 待补 card searches too");
 });
@@ -285,7 +285,7 @@ check("location never persisted: candidates and map-pick state live in memory; n
   const days = tl.slice(tl.indexOf("function dayArgsFor"), tl.indexOf("function locPinSvg"));
   assert.ok(/TripName\.dayArea\(items, day, opts\)/.test(days), "area comes from trip items only");
   const sw = read("sw.js");
-  assert.ok(sw.indexOf('"./fix-cand.js"') !== -1 && sw.indexOf('"xingcheng-map-shell-v16"') !== -1);
+  assert.ok(sw.indexOf('"./fix-cand.js"') !== -1 && sw.indexOf('"xingcheng-map-shell-v17"') !== -1);
   assert.ok(/<script src="\.\/fix-cand\.js"><\/script>\s*/.test(html) && html.indexOf("fix-cand.js") < html.indexOf("<script src=\"./timeline.js\""));
 });
 
@@ -308,7 +308,7 @@ check("final copy (copywriter, IT老板 approved): help tier 2, AI prompt, AI st
 });
 
 check("UI: while a card lists candidates, the grey 带我去 / 看位置 row and 「补上地址 ›」 are hidden; normal nav once fixed", function () {
-  assert.ok(/if \(!\(needsAddr && candShowing\(item\)\)\) extra\.push\(cardNavHtml\(item, conn\)\);/.test(tl));
+  assert.ok(/if \(!\(needsAddr && candShowing\(item\)\)\) extra\.push\(cardLookHtml\(item\)\);/.test(tl), "v5.4: 看位置 / 补上地址 hidden while candidates show");
   const fn = tl.slice(tl.indexOf("function candShowing"), tl.indexOf("function candBoxHtml"));
   assert.ok(/return !!\(list && list\.length\);/.test(fn), "only when there is at least one candidate (also after 都不是)");
   F.clearCache();
@@ -361,21 +361,21 @@ check("加酒店 page: title 加酒店, ‹ back to the menu, no AI button / 手
   const bind = tl.slice(tl.indexOf("function bindAddMenu"), tl.indexOf("function bindPasteSearch"));
   assert.ok(/closeSheet\("add-sheet"\);\s*openAddMenu\(\);/.test(bind), "‹ returns to 添加什么？");
   assert.ok(/openMapPick\(null, null, \{ label: "酒店", name: q \|\| C\.mapHotelName \}\)/.test(bind), "map link opens map-pick for a new hotel");
-  const save = tl.slice(tl.indexOf("function saveMapPick"), tl.indexOf("function saveMapPick") + 700);
-  assert.ok(/itemFromType\(spec\.name, "", spec\.label, null, selectedDateOrEmpty\(\)\);\s*fresh\.address = "";\s*applyHotelDates\(fresh\);\s*fresh = FC\(\)\.applyMapPick/.test(save), "saved as a hotel, lat/lng only, with dates");
+  const save = tl.slice(tl.indexOf("function saveMapPick"), tl.indexOf("function saveMapPick") + 900);
+  assert.ok(/itemFromType\(spec\.name, "", spec\.label, null, selectedDateOrEmpty\(\)\);\s*fresh\.address = "";\s*fresh = FC\(\)\.applyMapPick/.test(save), "saved as a hotel, lat/lng only");
+  assert.ok(/afterHotelReady\(fresh,/.test(save), "v5.4: map-pick hotel goes through the date panel before adding");
 });
 
-check("Hotel dates from the add flow: check-in = selected day, else trip's first day (else today); check-out = check-in + 1, never empty; day city uses it", function () {
+check("Hotel dates from the add flow (v5.4): selected day, else trip first day, else blank — never today; day city uses check-in", function () {
   const d1 = F.hotelDates("2026-12-04", ["2026-12-02", "2026-12-05"], "2026-11-16");
   assert.deepStrictEqual(d1, { checkIn: "2026-12-04", checkOut: "2026-12-05" });
   assert.deepStrictEqual(F.hotelDates("", ["2026-12-05", "2026-12-02"], "2026-11-16"), { checkIn: "2026-12-02", checkOut: "2026-12-03" });
-  assert.deepStrictEqual(F.hotelDates("all", [], "2026-11-16"), { checkIn: "2026-11-16", checkOut: "2026-11-17" });
+  assert.strictEqual(F.hotelDates("all", [], "2026-11-16"), null, "no trip dates and no explicit day: blank, never today");
   assert.deepStrictEqual(F.hotelDates("2026-12-31", [], ""), { checkIn: "2026-12-31", checkOut: "2027-01-01" }, "month / year roll-over");
   assert.deepStrictEqual(F.hotelDates("2028-02-28", [], ""), { checkIn: "2028-02-28", checkOut: "2028-02-29" }, "leap day");
-  const ap = tl.slice(tl.indexOf("function applyHotelDates"), tl.indexOf("function setHotelMode"));
-  assert.ok(/item\.type !== "hotel"/.test(ap) && /FC\(\)\.hotelDates\(selectedDateOrEmpty\(\), tripDays\(currentTrip\(\)\.items \|\| \[\]\), todayIso\(\)\)/.test(ap));
-  assert.ok(/applyHotelDates\(item\);\s*addPlaceAndToast\(item\);/.test(tl), "search pick");
-  assert.ok(/if \(icon\) item\.icon = icon;\s*applyHotelDates\(item\);/.test(tl), "直接添加");
+  assert.ok(/afterHotelReady\(item, function \(it\) \{ addPlaceAndToast\(it\); \}\)/.test(tl), "search pick goes through the date panel");
+  assert.ok(/function finishDirectAdd[\s\S]*afterHotelReady\(item,/.test(tl), "直接添加 goes through the date panel");
+  assert.ok(tl.indexOf("todayIso()") === -1 || !/function applyHotelDates[\s\S]{0,400}todayIso\(\)/.test(tl), "applyHotelDates does not fall back to today");
   /* day city / timeline: the new hotel covers the check-in night only and gives that day its city */
   const TN = require("./trip-name.js");
   const hotel = { id: "h", type: "hotel", nameZh: "示例酒店", city: "示例市", lat: 1, lng: 2, checkIn: d1.checkIn, checkOut: d1.checkOut };
@@ -418,7 +418,7 @@ check("AI wizard still reachable from 加机票 and the whole-trip link; backup 
   var tl = fs.readFileSync(__dirname + "/timeline.js", "utf8");
   var i = tl.indexOf('id: "hotel-" + Date.now()');
   assert.ok(i !== -1);
-  var seg = tl.slice(i, tl.indexOf("Geocode.resolveItem(hotel", i));
-  assert.ok(seg.indexOf("applyHotelDates(hotel)") !== -1, "manual hotel applies dates");
+  var seg = tl.slice(i, i + 900);
+  assert.ok(seg.indexOf("afterHotelReady(hotel") !== -1, "manual hotel goes through the date panel");
   console.log("ok manual hotel dates");
 })();

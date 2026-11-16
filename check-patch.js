@@ -76,8 +76,8 @@ check("settings markup: 分享我的行程 / 推荐这个工具 with subtitles; 
   assert.ok(v51.indexOf("推荐给朋友") === -1 && v51.indexOf("「分享行程」") === -1, "v5.1 texts use the final names");
   assert.ok(tl.indexOf('title: "分享我的行程", text: "发给同行的人，订单号和座位会自动隐藏"') !== -1, "help sheet uses final names");
   assert.ok(html.indexOf('src="./recommend.js"') !== -1);
-  assert.ok(sw.indexOf('"./recommend.js"') !== -1 && sw.indexOf('"xingcheng-map-shell-v16"') !== -1);
-  assert.ok(["v5.1", "v5.2", "v5.3"].indexOf(v.APP_VERSION) !== -1);
+  assert.ok(sw.indexOf('"./recommend.js"') !== -1 && sw.indexOf('"xingcheng-map-shell-v17"') !== -1);
+  assert.ok(["v5.1", "v5.2", "v5.3", "v5.4"].indexOf(v.APP_VERSION) !== -1);
 });
 
 check("narrow top bar CSS: ≤360px brand 16px nowrap, icon-only buttons, 44px; help button keeps aria-label", function () {

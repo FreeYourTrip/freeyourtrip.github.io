@@ -17,8 +17,18 @@
   var expanded = {};
   var pendingPick = null;
   var selectedDay = "all";
+  var dayPickedByUser = false; /* v5.4：只有用户自己点过某一天才算，自动选中的「今天」不算 */
   var currentView = "list";
   var listEventsBound = false;
+  var DRAG_TIP_KEY = "wishlist-map-drag-tip-v1";
+  var LONG_PRESS_MS = 400;
+  var LONG_PRESS_MOVE_PX = 10; /* 0.4 秒内移动超过这个距离，当作滚动，取消拖动 */
+  var dragTipItemId = "";
+  var hotelDatePending = null;
+  var hotelOutTimeUserEdited = false;
+  var hotelOutTimeSetting = false;
+  var flightPairs = {};
+  var returnFlightDraft = null;
 
   function $(id) {
     return document.getElementById(id);
@@ -321,7 +331,14 @@
       var offset = formatDayOffset(civilDayOffset(item.departDate, item.arriveDate));
       return (item.departTime || "") + " – " + (item.arriveTime || "") + offset;
     }
-    if (item.type === "hotel") return item.checkInTime || "入住";
+    if (item.type === "hotel") {
+      if (item.viewRole === "checkout") {
+        var nights = window.FixCand && FixCand.hotelNights ? FixCand.hotelNights(item.checkIn, item.checkOut) : null;
+        var when = item.displayTime || item.checkOutTime || "几点退房？";
+        return nights ? (when + " · 共 " + nights + " 晚") : when;
+      }
+      return item.checkInTime || "";
+    }
     return item.time || "";
   }
 
@@ -361,7 +378,12 @@
   function tripDays(items) {
     var seen = {};
     var days = [];
-    (window.Legs ? Legs.sortedItems(items) : items || []).forEach(function (it) {
+    var list = items || [];
+    if (window.Legs) {
+      if (Legs.expandViewItems) list = Legs.expandViewItems(list);
+      list = Legs.sortedItems(list);
+    }
+    list.forEach(function (it) {
       var key = (window.Legs && Legs.itemDisplayDate(it)) || "";
       if (!key || seen[key]) return;
       seen[key] = true;
@@ -503,8 +525,9 @@
     else sc.scrollLeft = left;
   }
 
-  function selectDay(iso) {
+  function selectDay(iso, fromUser) {
     selectedDay = iso || "all";
+    if (fromUser) dayPickedByUser = !!(iso && iso !== "all");
     renderAll();
     scrollStripTo(selectedDay === "all" ? null : selectedDay, true);
     if (currentView === "list") {
@@ -565,7 +588,7 @@
         }
         if (ev.target.closest && ev.target.closest("#cal-today")) {
           var today = todayIso();
-          selectDay(today);
+          selectDay(today, true);
           return;
         }
         var seg = ev.target.closest && ev.target.closest("[data-seg-label]");
@@ -574,7 +597,7 @@
           return;
         }
         var cell = ev.target.closest && ev.target.closest("[data-day]");
-        if (cell) selectDay(cell.getAttribute("data-day"));
+        if (cell) selectDay(cell.getAttribute("data-day"), true);
       });
       box.addEventListener("keydown", function (ev) {
         if (ev.key !== "Enter" && ev.key !== " ") return;
@@ -593,7 +616,7 @@
         var picked = C.pickFromGrid(b.getAttribute("data-pick-day"), C.stripDays(currentTrip().items || [], todayIso()));
         if (!picked) return;
         closeSheet("month-sheet");
-        selectDay(picked);
+        selectDay(picked, true);
       });
     }
     if ($("month-prev")) $("month-prev").addEventListener("click", function () {
@@ -780,7 +803,7 @@
     if (item.pendingKind === "hotel-reversed") {
       return "退房比入住还早：" + mmdd(item.pendingFrom) + " ~ " + mmdd(item.pendingTo) + "，点我改一下";
     }
-    if (item.pendingKind === "flight-reversed") return "到达比出发早太多，点我改一下";
+    if (item.pendingKind === "flight-reversed") return "落地比起飞早，日期对吗？";
     return item.dateRaw ? "这个时间看不懂：" + item.dateRaw + "，点我改一下" : "没写日期，点我改一下";
   }
 
@@ -789,20 +812,47 @@
   }
 
   /**
-   * v5.2（UI）：导航按钮只放在卡片展开后的内容里，航班卡不放。
-   * 起点 = 当天的上一站（连线 conn.from）；当天第一项、或上一站是航班时，从我现在的位置出发。
-   * 规则不变：待补地址灰掉；超过 300 公里不给「带我去」；没坐标按当前位置选高德 / Google；公交提示。
+   * v5.4：每张卡片只留一个「带我去」——右上角圆形按钮，从你现在的位置出发（不读、不存定位，把起点交给地图 App）。
+   * 展开后的内容里只保留「看位置」和「补上地址 ›」，不再放第二个「带我去」。
+   * 两站之间的路线交给中间的胶囊。
    */
-  function cardNavHtml(item, conn) {
+  function locArrowSvg() {
+    return '<svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true"><path d="M4.2 11.2l15.3-6.7-6.7 15.3-2-7z"/></svg>';
+  }
+  function flightLockSvg() {
+    return '<span class="flight-lock" title="有固定时间，不能拖" aria-label="有固定时间，不能拖"><svg viewBox="0 0 14 14" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6.2" width="8" height="6.2" rx="1.2"/><path d="M5 6.2V4.6a2 2 0 0 1 4 0v1.6"/></svg></span>';
+  }
+  function cardGoHref(item) {
+    var dest = cardTarget(item);
+    var G = window.GeoUtil;
+    if (!G || !dest || !G.pointUsable(dest)) return "";
+    var links = G.buildFlexibleNavLinks(null, dest, "公共交通", hereInMemory());
+    return links.href || links.google || "";
+  }
+  function cardGoBtnHtml(item) {
     if (!item || item.type === "flight") return "";
-    var origin = null;
-    if (conn && conn.kind !== "transfer") {
-      var prev = findItem(conn.fromItemId);
-      var prevIsFlight = !!(prev && prev.type === "flight");
-      origin = prevIsFlight ? null : conn.from || null;
+    var href = cardGoHref(item);
+    if (!href) return "";
+    return (
+      '<a class="card-go-btn" href="' + escapeHtml(href) + '" target="_blank" rel="noopener" title="带我去" aria-label="带我去">' +
+      locArrowSvg() + "<span>带我去</span></a>"
+    );
+  }
+  /** 展开后只放「看位置」或「补上地址 ›」，不要「带我去」。 */
+  function cardLookHtml(item) {
+    if (!item || item.type === "flight") return "";
+    var plan = navPlan(null, cardTarget(item));
+    if (plan.state === "noaddr") {
+      if (item.id) {
+        return '<button type="button" class="nav-fix-link" data-fix="' + escapeHtml(item.id) + '">' + NAV_COPY.fixLink + "</button>";
+      }
+      return '<p class="nav-line">' + escapeHtml(NAV_COPY.noAddr) + "</p>";
     }
-    var aria = (origin ? "从上一站 带我去 " : "从我的位置 带我去 ") + itemTitle(item);
-    return '<div class="card-nav">' + navPairHtml(navPlan(origin, cardTarget(item)), aria, item.id) + "</div>";
+    if (!plan.placeHref) return "";
+    return (
+      '<div class="card-nav"><a class="nav-look" href="' + escapeHtml(plan.placeHref) +
+      '" target="_blank" rel="noopener">' + pinSvg() + NAV_COPY.look + "</a></div>"
+    );
   }
 
   function cardHtml(item, conn) {
@@ -823,17 +873,49 @@
       extra.push("<p>入住 " + escapeHtml(item.checkIn) + "，退房 " + escapeHtml(item.checkOut) + "</p>");
     }
     if (item.type === "flight") extra.push("<p>" + escapeHtml(formatFlightLocal(item)) + "</p>");
+    if (item.type === "flight" && flightPairs[item.id] && flightPairs[item.id].otherDate) {
+      var pairInfo = flightPairs[item.id];
+      extra.push("<p>" + (pairInfo.role === "out" ? "回程 " : "去程 ") + escapeHtml(formatMd(pairInfo.otherDate)) + "</p>");
+    }
     if (itemUnlocated(item) && !needsAddr) {
       extra.push(
         '<button type="button" class="pick-location" data-pick="' + escapeHtml(item.id) + '">选一下位置</button>'
       );
     }
-    /* v5.3（UI）：卡片在列候选（「是这里吗？」或点了「都不是」）时，不放灰掉的「带我去 / 看位置」和「补上地址 ›」；补好后恢复正常导航 */
-    if (!(needsAddr && candShowing(item))) extra.push(cardNavHtml(item, conn));
+    /* v5.4：展开后只放「看位置 / 补上地址」，「带我去」在第二行右侧 */
+    if (!(needsAddr && candShowing(item))) extra.push(cardLookHtml(item));
+    var isCheckout = !!(window.Legs && Legs.isCheckoutView && Legs.isCheckoutView(item));
+    var tagHtml = "";
+    if (window.Legs && Legs.hasValidHotelStay && Legs.hasValidHotelStay(item)) {
+      tagHtml = '<span class="stay-tag">' + (isCheckout ? "退房" : "入住") + "</span>";
+    } else if (item.type === "flight" && flightPairs[item.id]) {
+      tagHtml = '<span class="leg-tag">' + escapeHtml(flightPairs[item.id].label) + "</span>";
+    }
+    var timeLabel = itemTimeLabel(item);
+    var metaMain = tagHtml +
+      (timeLabel ? '<span class="card-time' + (isCheckout ? " card-checkout-time" : "") + '">' + escapeHtml(timeLabel) + "</span>" : "") +
+      (item.type === "flight" || isCheckout ? flightLockSvg() : "");
+    var goBtn = cardGoBtnHtml(item);
+    var metaHtml = "";
+    if (!pendingLine && (metaMain || goBtn)) {
+      metaHtml = '<div class="card-meta-row"><div class="card-meta-main">' + metaMain + "</div>" + goBtn + "</div>";
+    }
+    if (item.pendingKind === "flight-reversed") {
+      pendingLine =
+        '<div class="pending-ask"><p class="pending-ask-q">落地比起飞早，日期对吗？</p>' +
+        '<div class="pending-ask-btns">' +
+        '<button type="button" class="pending-ask-ok" data-flight-ok="' + escapeHtml(item.id) + '">对的</button>' +
+        '<button type="button" class="pending-ask-edit" data-flight-edit="' + escapeHtml(item.id) + '">改日期</button>' +
+        "</div></div>";
+    }
+    var tipHtml = item.id && item.id === dragTipItemId
+      ? '<button type="button" class="drag-tip" data-drag-tip="1">长按卡片，拖动换顺序</button>'
+      : "";
     return (
       '<article class="card' +
       open +
       (pendingLine ? " is-pending" : "") +
+      (tipHtml ? " has-drag-tip" : "") +
       '" data-item="' +
       escapeHtml(item.id) +
       '" style="--type:' +
@@ -849,11 +931,18 @@
       '">' +
       ico(meta.icon) +
       "</div>" +
-      "<div>" +
-      '<h3 class="card-name">' +
+      "<div class=\"card-copy\">" +
+      '<div class="card-name-line"><h3 class="card-name">' +
       escapeHtml(itemTitle(item)) +
       "</h3>" +
-      (pendingLine ? "" : itemTimeLabel(item) ? '<p class="card-time">' + escapeHtml(itemTimeLabel(item)) + "</p>" : "") +
+      '<button type="button" class="expand-btn" data-expand="' +
+      escapeHtml(item.id) +
+      '" aria-expanded="' +
+      (expanded[item.id] ? "true" : "false") +
+      '" aria-label="展开详情">' +
+      ico("chevron") +
+      "</button></div>" +
+      metaHtml +
       pendingLine +
       (needsAddr
         ? '<button type="button" class="fix-addr" data-fix="' + escapeHtml(item.id) + '" aria-label="' + escapeHtml(DIRECT_COPY.fixBtn + "：" + itemTitle(item)) + '"><span class="fix-dot" aria-hidden="true"></span>' + escapeHtml(DIRECT_COPY.fixBtn) + "</button>"
@@ -861,14 +950,8 @@
         ? '<span class="fixed-pill" role="status"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 8.5l3 3 6-7"/></svg>' + escapeHtml(FC_COPY.fixed || "已补上") + "</span>"
         : "") +
       "</div>" +
-      '<button type="button" class="expand-btn" data-expand="' +
-      escapeHtml(item.id) +
-      '" aria-expanded="' +
-      (expanded[item.id] ? "true" : "false") +
-      '" aria-label="展开详情">' +
-      ico("chevron") +
-      "</button>" +
       "</div>" +
+      tipHtml +
       '<div class="card-extra">' +
       extra.join("") +
       "</div>" +
@@ -892,11 +975,35 @@
     return null;
   }
 
-  /* v5.2（UI）：两张卡片之间不再放整行「带我去 / 看位置」，只保留航班转机条；导航在卡片展开后（cardNavHtml） */
+  /* v5.4：相邻两站之间画直线距离胶囊；航班之间仍用转机条。 */
   function connectorSlot(conn) {
     if (!conn) return "";
     if (conn.kind === "transfer") return transferHtml(conn.label);
     return "";
+  }
+
+  function legPillHtml(spec) {
+    if (!spec || !spec.show) return "";
+    if (spec.kind === "fix") {
+      return (
+        '<div class="conn-slot has-leg-pill">' +
+        '<button type="button" class="leg-pill" data-fix="' + escapeHtml(spec.fixId) + '">' + escapeHtml(spec.label || "补位置 ›") + "</button>" +
+        "</div>"
+      );
+    }
+    var origin = spec.from || null;
+    var dest = spec.to;
+    var href = "#";
+    if (window.GeoUtil && dest) {
+      var links = GeoUtil.buildFlexibleNavLinks(origin, dest, "公共交通", hereInMemory());
+      href = links.href || links.google || "#";
+    }
+    return (
+      '<div class="conn-slot has-leg-pill">' +
+      '<a class="leg-pill" href="' + escapeHtml(href) + '" target="_blank" rel="noopener">' +
+      escapeHtml(spec.label) +
+      "</a></div>"
+    );
   }
 
   /** 进入这一项的连线（上一站 → 这一项），给卡片里的导航当起点 */
@@ -919,7 +1026,9 @@
       return;
     }
     var pending = items.filter(isPendingItem);
-    var dated = items.filter(function (it) { return !isPendingItem(it); });
+    var datedRaw = items.filter(function (it) { return !isPendingItem(it); });
+    flightPairs = (window.Legs && Legs.pairRoundTrips) ? Legs.pairRoundTrips(datedRaw) : {};
+    var dated = (window.Legs && Legs.expandViewItems) ? Legs.expandViewItems(datedRaw) : datedRaw;
     var pendingBanner = pending.length && selectedDay !== "all"
       ? '<button type="button" class="pending-banner" data-pending-show="1">' + ico("calendar", "ico-sm") +
         "<span>有 " + pending.length + " 条日期待确认</span><span class=\"pending-banner-go\" aria-hidden=\"true\">›</span></button>"
@@ -930,12 +1039,22 @@
         '<div class="empty-state empty-day">' + escapeHtml(formatMd(selectedDay)) + ' 没有安排' +
         '<button type="button" class="text-link-btn" data-day-all="1">看全部日子</button></div>';
       var allBtn = root.querySelector("[data-day-all]");
-      if (allBtn) allBtn.addEventListener("click", function () { selectDay("all"); });
+      if (allBtn) allBtn.addEventListener("click", function () { selectDay("all", true); });
       bindListEvents(root);
       return;
     }
-    var connectors = Legs.buildConnectors(dated);
+    var connectors = Legs.buildConnectors(datedRaw);
     var all = Legs.sortedItems(dated);
+    dragTipItemId = "";
+    if (!dragTipSeen()) {
+      var ti;
+      for (ti = 0; ti < all.length; ti++) {
+        if (all[ti] && all[ti].type !== "flight" && !(window.Legs && Legs.isCheckoutView && Legs.isCheckoutView(all[ti]))) {
+          dragTipItemId = all[ti].id;
+          break;
+        }
+      }
+    }
     var html = pendingBanner;
     if (pending.length && selectedDay === "all") {
       html += '<section class="day-block pending-block" id="day-pending" aria-label="待确认日期">';
@@ -953,7 +1072,11 @@
         html += cardHtml(item, i === 0 ? null : connectorInto(connectors, item.id));
         var next = g.items[i + 1];
         if (next) {
-          html += connectorSlot(findConnector(connectors, item.id, next.id));
+          if (item.type === "flight" && next.type === "flight") {
+            html += connectorSlot(findConnector(connectors, item.id, next.id));
+          } else if (window.Legs && Legs.navPillSpec) {
+            html += legPillHtml(Legs.navPillSpec(item, next));
+          }
         } else if (selectedDay === "all") {
           var pos = -1;
           var k;
@@ -961,10 +1084,12 @@
             if (all[k].id === item.id) pos = k;
           }
           if (pos >= 0 && pos < all.length - 1) {
-            html += connectorSlot(findConnector(connectors, item.id, all[pos + 1].id));
+            var cross = findConnector(connectors, item.id, all[pos + 1].id);
+            if (cross && cross.kind === "transfer") html += connectorSlot(cross);
           }
         }
       });
+      if (window.Legs && Legs.trailingHotelPill) html += legPillHtml(Legs.trailingHotelPill(g.items, datedRaw, g.date));
       html += "</div></section>";
     });
     root.innerHTML = html;
@@ -984,10 +1109,12 @@
   }
 
   function findItem(id) {
+    if (returnFlightDraft && (returnFlightDraft.id === id || (!id && returnFlightDraft))) return returnFlightDraft;
+    var want = window.Legs && Legs.sourceId ? Legs.sourceId(id) : String(id || "").replace(/::checkout$/, "");
     var items = (currentTrip().items || []);
     var i;
     for (i = 0; i < items.length; i++) {
-      if (items[i].id === id) return items[i];
+      if (items[i].id === id || items[i].id === want) return items[i];
     }
     return null;
   }
@@ -996,6 +1123,34 @@
     if (listEventsBound) return;
     listEventsBound = true;
     root.addEventListener("click", function (ev) {
+      if (dragSuppressClick) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        dragSuppressClick = false;
+        return;
+      }
+      var tip = ev.target.closest && ev.target.closest("[data-drag-tip]");
+      if (tip) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        dismissDragTip();
+        renderList();
+        return;
+      }
+      var flightOk = ev.target.closest && ev.target.closest("[data-flight-ok]");
+      if (flightOk) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        acceptFlightDates(flightOk.getAttribute("data-flight-ok"));
+        return;
+      }
+      var flightEdit = ev.target.closest && ev.target.closest("[data-flight-edit]");
+      if (flightEdit) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        enterEditMode(flightEdit.getAttribute("data-flight-edit"));
+        return;
+      }
       var expand = ev.target.closest && ev.target.closest("[data-expand]");
       if (expand) {
         ev.preventDefault();
@@ -1063,7 +1218,7 @@
       }
       var pb = ev.target.closest && ev.target.closest("[data-pending-show]");
       if (pb) {
-        selectDay("all");
+        selectDay("all", true);
         var blk = $("day-pending");
         if (blk && blk.scrollIntoView) blk.scrollIntoView({ block: "start" });
         return;
@@ -1074,6 +1229,260 @@
         else openDetail(card.getAttribute("data-item"));
       }
     });
+    bindCardDrag(root);
+  }
+
+  function dragTipSeen() {
+    try { return localStorage.getItem(DRAG_TIP_KEY) === "1"; } catch (err) { return false; }
+  }
+  function dismissDragTip() {
+    try { localStorage.setItem(DRAG_TIP_KEY, "1"); } catch (err) {}
+    dragTipItemId = "";
+  }
+  function acceptFlightDates(id) {
+    var item = findItem(id);
+    if (!item || !window.ItemEdit || !ItemEdit.acceptEarlyArrival) return;
+    var next = ItemEdit.acceptEarlyArrival(item);
+    var trip = currentTrip();
+    trip.items = ItemEdit.updateItem(trip.items || [], id, next);
+    saveAllTrips();
+    renderAll();
+  }
+
+  var dragSuppressClick = false;
+  var dragTimer = null;
+  var dragState = null;
+  var orderUndoSnapshot = null;
+
+  function vibrateBrief() {
+    try { if (navigator.vibrate) navigator.vibrate(15); } catch (err) {}
+  }
+
+  function clearDragTimer() {
+    if (dragTimer) {
+      clearTimeout(dragTimer);
+      dragTimer = null;
+    }
+  }
+
+  function interactiveFrom(el) {
+    return el && el.closest && el.closest("a, button, input, textarea, select, .leg-pill, .drag-tip, .nav-fix-link");
+  }
+
+  function bindCardDrag(root) {
+    if (root._dragBound) return;
+    root._dragBound = true;
+    var moveGuard = function (ev) {
+      if (dragState && dragState.dragging) ev.preventDefault();
+    };
+    root.addEventListener("touchmove", moveGuard, { passive: false });
+
+    root.addEventListener("pointerdown", function (ev) {
+      if (ev.button != null && ev.button !== 0) return;
+      if (interactiveFrom(ev.target)) return;
+      var card = ev.target.closest && ev.target.closest(".card");
+      if (!card || !root.contains(card)) return;
+      var id = card.getAttribute("data-item");
+      var item = findItem(id);
+      if (!item) return;
+      var cardIsCheckout = /::checkout$/.test(String(id || "")) || (window.Legs && Legs.isCheckoutView && Legs.isCheckoutView(item));
+      var rail = card.closest(".day-rail");
+      if (!rail) return;
+      var block = card.closest(".day-block");
+      if (block && block.classList.contains("pending-block")) return;
+      var startX = ev.clientX;
+      var startY = ev.clientY;
+      var pointerId = ev.pointerId;
+      clearDragTimer();
+      var cancelled = false;
+      var onMoveEarly = function (mv) {
+        if (cancelled || (dragState && dragState.dragging)) return;
+        var dx = mv.clientX - startX;
+        var dy = mv.clientY - startY;
+        if (dx * dx + dy * dy > LONG_PRESS_MOVE_PX * LONG_PRESS_MOVE_PX) {
+          cancelled = true;
+          clearDragTimer();
+          cleanupEarly();
+        }
+      };
+      var onUpEarly = function () { cancelled = true; clearDragTimer(); cleanupEarly(); };
+      var cleanupEarly = function () {
+        root.removeEventListener("pointermove", onMoveEarly);
+        root.removeEventListener("pointerup", onUpEarly);
+        root.removeEventListener("pointercancel", onUpEarly);
+      };
+      root.addEventListener("pointermove", onMoveEarly);
+      root.addEventListener("pointerup", onUpEarly);
+      root.addEventListener("pointercancel", onUpEarly);
+      dragTimer = setTimeout(function () {
+        dragTimer = null;
+        cleanupEarly();
+        if (cancelled) return;
+        if (item.type === "flight" || cardIsCheckout) {
+          dragSuppressClick = true;
+          card.classList.remove("is-shake");
+          void card.offsetWidth;
+          card.classList.add("is-shake");
+          setTimeout(function () { card.classList.remove("is-shake"); }, 400);
+          showToast("有固定时间，不能拖", null, 2500);
+          return;
+        }
+        startCardDrag(card, item, rail, startX, startY, pointerId);
+      }, LONG_PRESS_MS);
+    });
+  }
+
+  function startCardDrag(card, item, rail, startX, startY, pointerId) {
+    dismissDragTip();
+    vibrateBrief();
+    var cards = Array.prototype.slice.call(rail.querySelectorAll(".card"));
+    var ids = cards.map(function (c) { return c.getAttribute("data-item"); });
+    var day = (window.Legs && Legs.itemDisplayDate(item)) || "";
+    var rect = card.getBoundingClientRect();
+    var clone = card.cloneNode(true);
+    clone.classList.add("is-drag-clone", "is-lifting");
+    clone.style.width = rect.width + "px";
+    clone.style.left = rect.left + "px";
+    clone.style.top = rect.top + "px";
+    document.body.appendChild(clone);
+    card.classList.add("is-drag-source");
+    var line = document.createElement("div");
+    line.className = "drop-line";
+    line.setAttribute("aria-hidden", "true");
+    var insertAt = ids.indexOf(item.id);
+    dragState = {
+      dragging: true,
+      id: item.id,
+      day: day,
+      ids: ids,
+      cards: cards,
+      rail: rail,
+      clone: clone,
+      source: card,
+      line: line,
+      insertAt: insertAt,
+      offsetX: startX - rect.left,
+      offsetY: startY - rect.top,
+      pointerId: pointerId
+    };
+    try { card.setPointerCapture && card.setPointerCapture(pointerId); } catch (err) {}
+    rail.classList.add("is-dragging");
+    placeDropLine(insertAt);
+    window.addEventListener("pointermove", onDragMove, true);
+    window.addEventListener("pointerup", onDragEnd, true);
+    window.addEventListener("pointercancel", onDragEnd, true);
+  }
+
+  function placeDropLine(index) {
+    var st = dragState;
+    if (!st) return;
+    var line = st.line;
+    if (line.parentNode) line.parentNode.removeChild(line);
+    var others = st.cards.filter(function (c) { return c.getAttribute("data-item") !== st.id; });
+    if (index < 0) index = others.length;
+    if (index >= others.length) {
+      var last = others[others.length - 1] || st.source;
+      last.parentNode.insertBefore(line, last.nextSibling);
+    } else {
+      others[index].parentNode.insertBefore(line, others[index]);
+    }
+    st.insertAt = index;
+  }
+
+  function onDragMove(ev) {
+    var st = dragState;
+    if (!st || !st.dragging) return;
+    ev.preventDefault();
+    st.clone.style.left = ev.clientX - st.offsetX + "px";
+    st.clone.style.top = ev.clientY - st.offsetY + "px";
+    var others = st.cards.filter(function (c) { return c.getAttribute("data-item") !== st.id; });
+    var idx = others.length;
+    var i, r;
+    for (i = 0; i < others.length; i++) {
+      r = others[i].getBoundingClientRect();
+      if (ev.clientY < r.top + r.height / 2) {
+        idx = i;
+        break;
+      }
+    }
+    if (idx !== st.insertAt) placeDropLine(idx);
+  }
+
+  function endDragVisuals() {
+    var st = dragState;
+    if (!st) return;
+    window.removeEventListener("pointermove", onDragMove, true);
+    window.removeEventListener("pointerup", onDragEnd, true);
+    window.removeEventListener("pointercancel", onDragEnd, true);
+    if (st.clone && st.clone.parentNode) st.clone.parentNode.removeChild(st.clone);
+    if (st.line && st.line.parentNode) st.line.parentNode.removeChild(st.line);
+    if (st.source) st.source.classList.remove("is-drag-source", "is-lifting");
+    if (st.rail) st.rail.classList.remove("is-dragging");
+  }
+
+  function onDragEnd(ev) {
+    var st = dragState;
+    if (!st || !st.dragging) return;
+    ev.preventDefault();
+    ev.stopPropagation();
+    dragSuppressClick = true;
+    setTimeout(function () { dragSuppressClick = false; }, 400);
+    var fromIds = st.ids.slice();
+    var insertAt = st.insertAt;
+    var moving = st.id;
+    var day = st.day;
+    endDragVisuals();
+    dragState = null;
+    var newIds = fromIds.filter(function (id) { return id !== moving; });
+    if (insertAt < 0) insertAt = newIds.length;
+    if (insertAt > newIds.length) insertAt = newIds.length;
+    newIds.splice(insertAt, 0, moving);
+    var same = newIds.length === fromIds.length && newIds.every(function (id, i) { return id === fromIds[i]; });
+    if (same) return;
+    applyReorder(day, newIds, moving);
+  }
+
+  function snapshotItems() {
+    try { return JSON.parse(JSON.stringify((currentTrip().items || []))); } catch (err) { return (currentTrip().items || []).slice(); }
+  }
+
+  function applyReorder(day, newIds, movedId) {
+    var trip = currentTrip();
+    orderUndoSnapshot = snapshotItems();
+    if (window.Legs && Legs.applyDayOrder) Legs.applyDayOrder(trip.items || [], day, newIds);
+    saveAllTrips();
+    renderList();
+    var ordered = (window.Legs ? Legs.sortedItems(trip.items) : trip.items || []).filter(function (it) {
+      return ((window.Legs && Legs.itemDisplayDate(it)) || "") === day;
+    });
+    var suggested = window.Legs && Legs.suggestTimeForMove ? Legs.suggestTimeForMove(ordered, movedId) : null;
+    function showOrderToast() {
+      showToast("已换顺序", function () {
+        closeConfirm();
+        var t = currentTrip();
+        if (orderUndoSnapshot) t.items = orderUndoSnapshot;
+        orderUndoSnapshot = null;
+        saveAllTrips();
+        renderAll();
+      }, 5000);
+    }
+    if (suggested) {
+      var moved = findItem(movedId);
+      pendingOrderToast = showOrderToast;
+      openConfirm({
+        title: "要把时间改成 " + suggested + " 吗？",
+        okText: "改",
+        cancelText: "不改",
+        ask: true,
+        onOk: function () {
+          if (moved && window.Legs && Legs.applySuggestedTime) Legs.applySuggestedTime(moved, suggested);
+          saveAllTrips();
+          renderAll();
+        }
+      });
+    } else {
+      showOrderToast();
+    }
   }
 
   function visibleItems() {
@@ -1206,7 +1615,7 @@
         /* 第 1 层：广告文案宣传大师定稿 */
         { key: "add", title: "添加", text: "点「＋ 添加」，选加机票、酒店还是地点，搜到后点一下就加好了" },
         { key: "ai", title: "截图交给 AI", text: "机票、酒店截图丢给任意 AI，自动整理成行程" },
-        { key: "map", title: "带我去", text: "点开地点卡片，点「带我去」直接打开导航" }
+        { key: "map", title: "带我去", text: "卡片右边的『带我去』，从你现在的位置出发；两站中间的『路线』，从上一站去下一站", line: "长按卡片，拖动换顺序" }
       ]
     },
     /* 第 2、3 层：广告文案宣传大师定稿（v5.2）。每条都对过代码：分享会去掉确认号 / 座位；按钮名「完整备份」「导入」「清空本机数据」；地图按钮在顶部、定位按钮在地图右下角；没有账号。 */
@@ -1253,7 +1662,8 @@
       return (
         '<div class="help-card" data-card="' + c.key + '">' + helpIllu(c.key) +
         '<div class="help-card-n">' + (i + 1) + " / " + T.starter.cards.length + "</div>" +
-        "<h4>" + escapeHtml(c.title) + "</h4><p>" + escapeHtml(c.text) + "</p></div>"
+        "<h4>" + escapeHtml(c.title) + "</h4><p>" + escapeHtml(c.text) + "</p>" +
+        (c.line ? "<p>" + escapeHtml(c.line) + "</p>" : "") + "</div>"
       );
     }).join("");
     var dots = T.starter.cards.map(function (c, i) {
@@ -1446,16 +1856,138 @@
   var hotelMode = false; /* 「加酒店」页：标题「加酒店」、‹ 返回、没有 AI 大按钮和手动填写、能在地图上选 */
   var HOTEL_BED_SVG = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 18V7"/><path d="M3 14h18v4"/><path d="M21 14v-3a3 3 0 0 0-3-3h-7v6"/><circle cx="7" cy="11" r="2"/></svg>';
 
-  /** v5.3：从「添加」加的酒店都有入住和退房（退房 = 入住 + 1 天），规则在 fix-cand.js hotelDates */
+  /** v5.4：建议日期不再用今天。真正写入要等面板上点「加进行程」。 */
+  function hotelPrefillSelected() {
+    return dayPickedByUser ? selectedDateOrEmpty() : "";
+  }
   function applyHotelDates(item) {
     if (!item || item.type !== "hotel") return item;
-    var d = FC().hotelDates(selectedDateOrEmpty(), tripDays(currentTrip().items || []), todayIso());
+    var d = FC().hotelDates(hotelPrefillSelected(), tripDays(currentTrip().items || []), "");
     if (d) {
       item.checkIn = d.checkIn;
       item.checkOut = d.checkOut;
       delete item.date;
     }
     return item;
+  }
+  function normalizeHmInput(raw) {
+    var s = String(raw || "").trim();
+    if (!s) return "";
+    if (/[ap]\.?m\.?/i.test(s)) return "";
+    var m = /^(\d{1,2}):(\d{2})$/.exec(s);
+    if (!m) {
+      var digits = s.replace(/\D/g, "");
+      if (digits.length === 3 || digits.length === 4) {
+        if (digits.length === 3) digits = "0" + digits;
+        m = ["", digits.slice(0, 2), digits.slice(2)];
+      }
+    }
+    if (!m) return "";
+    var h = Number(m[1]), min = Number(m[2]);
+    if (h > 23 || min > 59) return "";
+    return (h < 10 ? "0" : "") + h + ":" + (min < 10 ? "0" : "") + min;
+  }
+  function syncHotelDateUi() {
+    var inn = ($("hotel-check-in") && $("hotel-check-in").value) || "";
+    var out = ($("hotel-check-out") && $("hotel-check-out").value) || "";
+    var st = FC().hotelDateState(inn, out);
+    if ($("hotel-out-box")) $("hotel-out-box").classList.toggle("is-invalid", st.reason === "invalid");
+    if ($("hotel-date-hint")) $("hotel-date-hint").textContent = st.hint || "";
+    if ($("hotel-date-nights")) $("hotel-date-nights").textContent = st.nights ? ("共 " + st.nights + " 晚") : "共 — 晚";
+    if ($("hotel-check-out-time") && !hotelOutTimeUserEdited && window.Legs && Legs.checkoutTimeInfo) {
+      var pending = hotelDatePending && hotelDatePending.item;
+      var info = Legs.checkoutTimeInfo({
+        checkOut: out,
+        checkOutTime: hotelOutTimeUserEdited ? $("hotel-check-out-time").value : (pending && pending.checkOutTime) || ""
+      }, (currentTrip().items || []));
+      if (!pending || !pending.checkOutTime) {
+        hotelOutTimeSetting = true;
+        $("hotel-check-out-time").value = info.time || "";
+        hotelOutTimeSetting = false;
+        if ($("hotel-date-time-auto")) $("hotel-date-time-auto").hidden = !info.autoFromFlight;
+      } else if ($("hotel-date-time-auto")) {
+        $("hotel-date-time-auto").hidden = true;
+      }
+    } else if ($("hotel-date-time-auto")) {
+      $("hotel-date-time-auto").hidden = true;
+    }
+    if ($("hotel-date-summary")) {
+      $("hotel-date-summary").textContent = (inn && out) ? (formatMd(inn) + "入住，" + formatMd(out) + "退房") : "";
+    }
+    var go = $("hotel-date-go");
+    if (go) {
+      go.disabled = !st.ok;
+      go.classList.toggle("is-off", !st.ok);
+    }
+  }
+  function closeHotelDateSheet() {
+    hotelDatePending = null;
+    hotelOutTimeUserEdited = false;
+    closeSheet("hotel-date-sheet");
+  }
+  function openHotelDateSheet(item, addFn) {
+    hotelDatePending = { item: item, addFn: addFn };
+    hotelOutTimeUserEdited = !!(item && item.checkOutTime);
+    var d = FC().hotelDates(hotelPrefillSelected(), tripDays(currentTrip().items || []), "");
+    if ($("hotel-check-in")) $("hotel-check-in").value = (d && d.checkIn) || "";
+    if ($("hotel-check-out")) $("hotel-check-out").value = (d && d.checkOut) || "";
+    if ($("hotel-check-out-time")) $("hotel-check-out-time").value = (item && item.checkOutTime) || "";
+    syncHotelDateUi();
+    openSheet("hotel-date-sheet");
+  }
+  function confirmHotelDates() {
+    if (!hotelDatePending) return;
+    var inn = ($("hotel-check-in") && $("hotel-check-in").value) || "";
+    var out = ($("hotel-check-out") && $("hotel-check-out").value) || "";
+    var st = FC().hotelDateState(inn, out);
+    if (!st.ok) {
+      if ($("hotel-date-hint")) $("hotel-date-hint").textContent = st.hint || "先选入住和退房日期";
+      return;
+    }
+    var item = hotelDatePending.item;
+    var addFn = hotelDatePending.addFn;
+    item.checkIn = inn;
+    item.checkOut = out;
+    var outTime = normalizeHmInput(($("hotel-check-out-time") && $("hotel-check-out-time").value) || "");
+    if (hotelOutTimeUserEdited && outTime) item.checkOutTime = outTime;
+    else delete item.checkOutTime;
+    delete item.date;
+    hotelDatePending = null;
+    hotelOutTimeUserEdited = false;
+    closeSheet("hotel-date-sheet");
+    addFn(item);
+  }
+  function afterHotelReady(item, addFn) {
+    if (item && item.type === "hotel") openHotelDateSheet(item, addFn);
+    else addFn(item);
+  }
+  function bindHotelDateSheet() {
+    ["hotel-check-in", "hotel-check-out"].forEach(function (id) {
+      if ($(id)) {
+        $(id).addEventListener("input", syncHotelDateUi);
+        $(id).addEventListener("change", syncHotelDateUi);
+      }
+    });
+    if ($("hotel-check-out-time")) {
+      $("hotel-check-out-time").addEventListener("input", function () {
+        if (hotelOutTimeSetting) return;
+        hotelOutTimeUserEdited = true;
+        if ($("hotel-date-time-auto")) $("hotel-date-time-auto").hidden = true;
+      });
+      $("hotel-check-out-time").addEventListener("change", function () {
+        if (hotelOutTimeSetting) return;
+        hotelOutTimeUserEdited = true;
+        if ($("hotel-date-time-auto")) $("hotel-date-time-auto").hidden = true;
+        this.value = normalizeHmInput(this.value);
+      });
+      $("hotel-check-out-time").addEventListener("blur", function () {
+        if (hotelOutTimeSetting) return;
+        var next = normalizeHmInput(this.value);
+        if (this.value && !next) this.value = "";
+        else if (next) this.value = next;
+      });
+    }
+    if ($("hotel-date-go")) $("hotel-date-go").addEventListener("click", confirmHotelDates);
   }
 
   function setHotelMode(on) {
@@ -1612,19 +2144,20 @@
         example: false
       };
       if (pickedIcon) hotel.icon = pickedIcon;
-      applyHotelDates(hotel);
-      showManualStatus('<p class="ok">正在查找位置…</p>');
-      Geocode.resolveItem(hotel, dayArgsFor(hotel))
-        .then(function (res) {
-          finishImport([hotel], [res], []);
-        })
-        .catch(function () {
-          finishImport(
-            [hotel],
-            [{ item: hotel, status: "none", message: Geocode.FRIENDLY_NOT_FOUND, candidates: [], chosen: null }],
-            []
-          );
-        });
+      afterHotelReady(hotel, function (h) {
+        showManualStatus('<p class="ok">正在查找位置…</p>');
+        Geocode.resolveItem(h, dayArgsFor(h))
+          .then(function (res) {
+            finishImport([h], [res], []);
+          })
+          .catch(function () {
+            finishImport(
+              [h],
+              [{ item: h, status: "none", message: Geocode.FRIENDLY_NOT_FOUND, candidates: [], chosen: null }],
+              []
+            );
+          });
+      });
       return;
     }
     var subtype = "";
@@ -1716,29 +2249,56 @@
     $("confirm-sub").textContent = opts.sub || "";
     $("confirm-sub").hidden = !opts.sub;
     $("confirm-ok").textContent = opts.okText || "删除";
+    if ($("confirm-cancel")) $("confirm-cancel").textContent = opts.cancelText || "取消";
+    var sheet = $("confirm-sheet");
+    if (sheet) sheet.classList.toggle("is-ask", !!opts.ask);
     confirmAction = opts.onOk;
     openSheet("confirm-sheet");
     try { $("confirm-cancel").focus(); } catch (err) {}
   }
 
+  var pendingOrderToast = null;
   function closeConfirm() {
     confirmAction = null;
+    var later = pendingOrderToast;
+    pendingOrderToast = null;
+    var sheet = $("confirm-sheet");
+    if (sheet) sheet.classList.remove("is-ask");
+    if ($("confirm-cancel")) $("confirm-cancel").textContent = "取消";
+    if ($("confirm-ok")) $("confirm-ok").textContent = "删除";
     closeSheet("confirm-sheet");
+    if (typeof later === "function") setTimeout(later, 0);
   }
 
   function fixSelectedDay(items) {
-    if (selectedDay !== "all" && tripDays(items).indexOf(selectedDay) === -1) selectedDay = "all";
+    if (selectedDay !== "all" && tripDays(items).indexOf(selectedDay) === -1) {
+      selectedDay = "all";
+      dayPickedByUser = false;
+    }
   }
 
   function askDeleteItem(id) {
     var item = findItem(id);
     if (!item) return;
+    var realId = window.Legs && Legs.sourceId ? Legs.sourceId(item.id || id) : id;
+    if (item.type === "hotel" && window.Legs && Legs.hasValidHotelStay && Legs.hasValidHotelStay(item)) {
+      openConfirm({
+        title: "入住和退房两张都删掉吗？",
+        sub: "删除后 5 秒内可以撤销。",
+        okText: "都删",
+        cancelText: "取消",
+        onOk: function () {
+          deleteItemNow(realId);
+        }
+      });
+      return;
+    }
     openConfirm({
       title: "确定删除这一项吗？",
       sub: "删除后 5 秒内可以撤销。",
       okText: "删除",
       onOk: function () {
-        deleteItemNow(id);
+        deleteItemNow(realId);
       }
     });
   }
@@ -1851,6 +2411,25 @@
     renderIconPicker();
   }
 
+  function openReturnFlightForm(src) {
+    if (!src || src.type !== "flight") return;
+    var draft = (window.Legs && Legs.buildReturnFlight) ? Legs.buildReturnFlight(src) : {
+      type: "flight",
+      flightNo: "",
+      fromAirport: src.toAirport || "",
+      toAirport: src.fromAirport || "",
+      departDate: "",
+      departTime: "",
+      arriveDate: "",
+      arriveTime: ""
+    };
+    draft.id = "flight-" + Date.now();
+    returnFlightDraft = draft;
+    exitEditMode();
+    returnFlightDraft = draft;
+    enterEditMode(draft.id);
+  }
+
   function enterEditMode(id) {
     var item = findItem(id);
     if (!item) return;
@@ -1892,7 +2471,10 @@
     if ($("edit-time-label")) $("edit-time-label").textContent = isFlight ? "起飞时间" : isHotel ? "入住时间" : "时间";
     if ($("edit-end-row")) $("edit-end-row").hidden = !(isFlight || isHotel);
     if ($("edit-end-date-label")) $("edit-end-date-label").textContent = isFlight ? "到达日期" : "退房日期";
-    if ($("edit-end-time-box")) $("edit-end-time-box").hidden = !isFlight;
+    if ($("edit-end-time-box")) $("edit-end-time-box").hidden = !(isFlight || isHotel);
+    var endTimeLabel = document.querySelector('label[for="edit-end-time"]');
+    if (endTimeLabel) endTimeLabel.textContent = isHotel ? "退房时间" : "到达时间";
+    if ($("edit-add-return")) $("edit-add-return").hidden = !isFlight;
   }
 
   function exitEditMode() {
@@ -1922,6 +2504,7 @@
   function saveEdit() {
     var id = editingId;
     var item = findItem(id);
+    var isReturnDraft = !!(returnFlightDraft && item && item.id === returnFlightDraft.id);
     if (!item) {
       exitEditMode();
       closeSheet("add-sheet");
@@ -1948,7 +2531,13 @@
       else delete res.item.icon;
     }
     var trip = currentTrip();
-    trip.items = ItemEdit.updateItem(trip.items || [], id, res.item);
+    if (isReturnDraft) {
+      if (!res.item.id) res.item.id = returnFlightDraft.id || ("flight-" + Date.now());
+      trip.items = (trip.items || []).concat([res.item]);
+      returnFlightDraft = null;
+    } else {
+      trip.items = ItemEdit.updateItem(trip.items || [], id, res.item);
+    }
     fixSelectedDay(trip.items);
     saveAllTrips();
     exitEditMode();
@@ -2001,6 +2590,11 @@
       $("edit-cancel").addEventListener("click", function () {
         exitEditMode();
         closeSheet("add-sheet");
+      });
+    }
+    if ($("edit-add-return")) {
+      $("edit-add-return").addEventListener("click", function () {
+        if (editingId) openReturnFlightForm(findItem(editingId));
       });
     }
     if ($("manual-type")) {
@@ -2587,8 +3181,7 @@
     );
     /* v5.2：存下地图服务给的城市（只有这一个新字段） */
     if (c.city && String(c.city).trim()) item.city = String(c.city).trim();
-    applyHotelDates(item);
-    addPlaceAndToast(item);
+    afterHotelReady(item, function (it) { addPlaceAndToast(it); });
   }
 
   /* ---------- v5.2 搜不到也能加：「＋ 直接添加「xxx」」→ 选图标 → 加进行程（没地址、没坐标，卡片显示「待补地址」） ---------- */
@@ -2650,7 +3243,6 @@
     var item = itemFromType(name, "", addPreset || "地点", null, date);
     item.address = "";
     if (icon) item.icon = icon;
-    applyHotelDates(item);
     return item;
   }
 
@@ -2658,9 +3250,10 @@
     if (!directName) return;
     var item = directItem(directName, directIcon, selectedDateOrEmpty());
     hideDirectAdd();
-    var real = addPlaceAndToast(item, DIRECT_COPY.added);
-    /* v5.3（IT老板）：「直接添加」的条目也在后台找候选 */
-    queueCandidates(real || item);
+    afterHotelReady(item, function (it) {
+      var real = addPlaceAndToast(it, DIRECT_COPY.added);
+      queueCandidates(real || it);
+    });
   }
 
   /* ---------- v5.2 补地址：卡片上点「待补地址」→ 搜索（名字已填好，自动补上当天城市）→ 选一个，更新同一条 ---------- */
@@ -2986,10 +3579,9 @@
       var p = pickMarker.getLatLng();
       var fresh = itemFromType(spec.name, "", spec.label, null, selectedDateOrEmpty());
       fresh.address = "";
-      applyHotelDates(fresh);
       fresh = FC().applyMapPick(fresh, { lat: p.lat, lng: p.lng }, mapTiles);
       closeMapPick();
-      addPlaceAndToast(fresh);
+      afterHotelReady(fresh, function (it) { addPlaceAndToast(it); });
       return;
     }
     if (!pickId || !pickMarker) return;
@@ -3544,7 +4136,10 @@
     var added = uniqueItemIds(trip.items, incoming);
     trip.items = trip.items.concat(added);
     saveAllTrips();
-    if (!(opts && opts.keepDay)) selectedDay = defaultSelectedDay(trip.items);
+    if (!(opts && opts.keepDay)) {
+      selectedDay = defaultSelectedDay(trip.items);
+      dayPickedByUser = false;
+    }
     renderAll();
     return added;
   }
@@ -3858,6 +4453,7 @@
       activeTripId = trips[0].id;
     }
     selectedDay = defaultSelectedDay((currentTrip().items || []));
+    dayPickedByUser = false;
     saveAllTrips();
     renderAll();
   }
@@ -3892,7 +4488,12 @@
     },
     toast: function (msg) {
       showToast(msg, null, 5000);
-    }
+    },
+    openHotelDateSheet: function (item, addFn) {
+      openHotelDateSheet(item || { type: "hotel", nameZh: "示例酒店" }, addFn || function () {});
+    },
+    setDayPickedByUser: function (on) { dayPickedByUser = !!on; },
+    selectedDay: function () { return selectedDay; }
   };
 
   function applyDemo(which) {
@@ -3902,11 +4503,13 @@
       activeTripId = trips[0].id;
       examplesLoaded = false;
       selectedDay = "all";
+      dayPickedByUser = false;
     } else {
       trips = [which === "japan" || which === "japan-month" ? demoJapanTrip() : demoTrip()];
       activeTripId = trips[0].id;
       examplesLoaded = true;
       selectedDay = defaultSelectedDay(trips[0].items);
+      dayPickedByUser = false;
     }
   }
 
@@ -4023,6 +4626,7 @@
       if (closer) {
         var which = closer.getAttribute("data-close");
         if (which === "confirm-sheet") closeConfirm();
+        else if (which === "hotel-date-sheet") closeHotelDateSheet();
         else closeSheet(which);
         if (which === "add-sheet" && editingId) exitEditMode();
       }
@@ -4031,6 +4635,10 @@
       if (ev.key === "Escape") {
         if ($("confirm-sheet") && !$("confirm-sheet").hidden) {
           closeConfirm();
+          return;
+        }
+        if ($("hotel-date-sheet") && !$("hotel-date-sheet").hidden) {
+          closeHotelDateSheet();
           return;
         }
         closeSheet("detail-sheet");
@@ -4048,6 +4656,7 @@
     bindEditDelete();
     bindFixUi();
     bindPasteSearch();
+    bindHotelDateSheet();
     if ($("changelog-open")) $("changelog-open").addEventListener("click", openChangelog);
     if ($("announce-ok")) $("announce-ok").addEventListener("click", dismissAnnouncement);
     if ($("inapp-close")) $("inapp-close").addEventListener("click", function () {
@@ -4089,6 +4698,7 @@
         examplesLoaded = false;
       }
       selectedDay = defaultSelectedDay((currentTrip().items || []));
+      dayPickedByUser = false;
     }
     var wantTrip = params.get("trip");
     if (wantTrip && trips.some(function (t) { return t.id === wantTrip; })) activeTripId = wantTrip;

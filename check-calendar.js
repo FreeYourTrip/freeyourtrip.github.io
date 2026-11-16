@@ -63,7 +63,8 @@ check("default day: next day with items when today is empty", function () {
 });
 
 check("default day: last day with items when the whole trip is past", function () {
-  assert.strictEqual(C.defaultDay(trip(), "2027-01-10"), "2026-12-06");
+  /* v5.4: checkout day also has a hotel card */
+  assert.strictEqual(C.defaultDay(trip(), "2027-01-10"), "2026-12-07");
 });
 
 check("default day: no items -> all", function () {
@@ -145,14 +146,14 @@ check("UI wiring: strip, month sheet, 今天, 全部, help text, sw precache", f
   const v = require("./version.js");
   assert.ok(html.indexOf('src="./calendar.js"') !== -1 && html.indexOf('src="./calendar.js"') < html.indexOf('src="./timeline.js"'));
   assert.ok(html.indexOf('id="month-sheet"') !== -1 && html.indexOf('id="month-prev"') !== -1 && html.indexOf('id="month-next"') !== -1);
-  assert.ok(sw.indexOf('"./calendar.js"') !== -1 && sw.indexOf('"xingcheng-map-shell-v16"') !== -1);
+  assert.ok(sw.indexOf('"./calendar.js"') !== -1 && sw.indexOf('"xingcheng-map-shell-v17"') !== -1);
   assert.ok(tl.indexOf('id="cal-today"') !== -1 && tl.indexOf('data-day="all"') !== -1 && tl.indexOf('id="cal-month"') !== -1);
   assert.ok(tl.indexOf("prefers-reduced-motion") !== -1);
   assert.ok(tl.indexOf("顶部日期条左右滑") !== -1 && tl.indexOf("第1天、第2天") === -1);
   assert.ok(v.CHANGELOG.filter((e) => e.version === "v5")[0].lines.some((b) => b.indexOf("日期条") !== -1) && v.ANNOUNCEMENT.bullets.length <= 5);
   const v5 = v.CHANGELOG.filter((e) => e.version === "v5")[0];
   assert.ok(v5 && v5.lines.some((l) => l.indexOf("日期条") !== -1));
-  assert.ok(["v5.1", "v5.2", "v5.3"].indexOf(v.APP_VERSION) !== -1);
+  assert.ok(["v5.1", "v5.2", "v5.3", "v5.4"].indexOf(v.APP_VERSION) !== -1);
 });
 
 check("fitCity truncates only the name, keeps the range, no stray space before ·", function () {
