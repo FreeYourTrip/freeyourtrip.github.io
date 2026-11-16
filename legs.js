@@ -67,13 +67,13 @@
   function itemSortKey(item) {
     if (isCheckoutView(item)) {
       var ct = item.displayTime || item.checkOutTime || "";
-      return (item.checkOut || "") + "T" + (ct || "00:00");
+      return (item.checkOut || "") + "T" + (ct || "99:99");
     }
     if (isTransit(item)) {
-      return (item.departDate || "") + "T" + (item.departTime || "00:00");
+      return (item.departDate || "") + "T" + (item.departTime || "99:99");
     }
-    if (item.type === "hotel") return (item.checkIn || "") + "T" + (item.checkInTime || "15:00");
-    if (item.date) return item.date + "T" + (item.time || "12:00");
+    if (item.type === "hotel") return (item.checkIn || "") + "T" + (item.checkInTime || "99:99");
+    if (item.date) return item.date + "T" + (item.time || "99:99");
     return "9999-99-99T99:99";
   }
 
@@ -132,7 +132,7 @@
 
   function formatDayHeader(isoDate) {
     var p = parseCivil(isoDate);
-    if (!p) return isoDate || "日期待定";
+    if (!p) return isoDate || "还没定哪天";
     var wd = WEEKDAYS[new Date(Date.UTC(p.y, p.m - 1, p.d)).getUTCDay()];
     return p.m + "月" + p.d + "日 " + wd;
   }
@@ -258,7 +258,27 @@
     return !!(pa && pa.otherId === b.id && pb && pb.otherId === a.id);
   }
 
-  /** 自动认转机：只限航班接航班，同机场且 0 ≤ 间隔 < 24 小时，且不是往返配对。缺机场代码就不自动认。 */
+  function airportCity(code) {
+    var db = typeof AirportDB !== "undefined" ? AirportDB : (root.AirportDB || null);
+    var rec = db && db.lookupAirport ? db.lookupAirport(code) : null;
+    if (!rec) return "";
+    return String(rec.cityZh || rec.city || "").trim().toLowerCase();
+  }
+
+  /** 同一座城市、不同机场（如 LHR→LGW）：也算转机，条子上加「要换机场」。 */
+  function isSameCityAirportChange(a, b, pairs, mins) {
+    if (!a || !b || a.type !== "flight" || b.type !== "flight") return false;
+    if (arePartners(pairs, a, b)) return false;
+    if (mins == null || mins < 0 || mins >= 24 * 60) return false;
+    var fromA = airportCode(a, "toAirport");
+    var toB = airportCode(b, "fromAirport");
+    if (!fromA || !toB || fromA === toB) return false;
+    var ca = airportCity(fromA);
+    var cb = airportCity(toB);
+    return !!(ca && cb && ca === cb);
+  }
+
+  /** 自动认转机：只限航班接航班，同机场（或同城换机场）且 0 ≤ 间隔 < 24 小时，且不是往返配对。缺机场代码就不自动认。 */
   function isAutoLayover(a, b, pairs, mins) {
     if (!a || !b || a.type !== "flight" || b.type !== "flight") return false;
     if (arePartners(pairs, a, b)) return false;
@@ -266,7 +286,8 @@
     var fromA = airportCode(a, "toAirport");
     var toB = airportCode(b, "fromAirport");
     if (!fromA || !toB) return false;
-    return fromA === toB;
+    if (fromA === toB) return true;
+    return isSameCityAirportChange(a, b, pairs, mins);
   }
 
   function isManualLayover(a, b) {
@@ -298,11 +319,13 @@
     return sameStation(a, b);
   }
 
-  function transferBar(kindLabel, a, b, sameDay, mins) {
+  function transferBar(kindLabel, a, b, sameDay, mins, extra) {
+    extra = extra || {};
     return {
       kind: "transfer",
       clickable: false,
       label: kindLabel,
+      changeAirport: !!extra.changeAirport,
       fromItemId: a.id,
       toItemId: b.id,
       minutes: mins,
@@ -323,7 +346,8 @@
       var sameDay = (itemDisplayDate(a) || "") === (itemDisplayDate(b) || "");
       var mins = layoverMinutes(a, b);
       if (isManualLayover(a, b) || isAutoLayover(a, b, pairs, mins)) {
-        out.push(transferBar(durationLabel("转机", mins), a, b, sameDay, mins));
+        var changeAp = isSameCityAirportChange(a, b, pairs, mins);
+        out.push(transferBar(durationLabel("转机", mins), a, b, sameDay, mins, { changeAirport: changeAp }));
       } else if (isChangeover(a, b, mins)) {
         out.push(transferBar(changeLabel(a, b), a, b, sameDay, mins));
       } else if (sameDay) {
@@ -384,7 +408,7 @@
     list.forEach(function (item, idx) {
       var key = itemDisplayDate(item) || "未标明日期";
       if (!map[key]) {
-        map[key] = { date: key, header: key === "未标明日期" ? "日期待定" : formatDayHeader(key), items: [] };
+        map[key] = { date: key, header: key === "未标明日期" ? "还没定哪天" : formatDayHeader(key), items: [] };
         groups.push(map[key]);
       }
       map[key].items.push(item);
@@ -393,6 +417,110 @@
       g.firstTarget = g.items[0] ? firstOfDayTarget(g.items[0]) : null;
       return g;
     });
+  }
+
+
+  /** 这一项有没有钟点（没有就把卡片归进「没定时间」，地图针脚也不编号） */
+  function itemHasTime(item) {
+    return !!itemClock(item);
+  }
+
+  function itemHasCoords(item) {
+    if (!item) return false;
+    if (typeof item.lat === "number" && typeof item.lng === "number") return true;
+    if (typeof item.fromLat === "number" && typeof item.fromLng === "number") return true;
+    return false;
+  }
+
+  /**
+   * 某一视图里该出现哪些卡片：列表、计数、地图都只用这一份。
+   * day 为 "all" 或 YYYY-MM-DD。
+   */
+  function viewItems(rawItems, day, opts) {
+    opts = opts || {};
+    var expand = opts.expand !== false && typeof expandViewItems === "function";
+    var raw = rawItems || [];
+    var pending = [];
+    var dated = [];
+    raw.forEach(function (it) {
+      if (!it) return;
+      if (it.pendingDate) pending.push(it);
+      else dated.push(it);
+    });
+    var cards = expand ? expandViewItems(dated) : dated.slice();
+    var undated = [];
+    var byDay = {};
+    var dayOrder = [];
+    cards.forEach(function (it) {
+      var d = itemDisplayDate(it) || "";
+      if (!d) {
+        undated.push(it);
+        return;
+      }
+      if (!byDay[d]) {
+        byDay[d] = { date: d, timed: [], untimed: [] };
+        dayOrder.push(d);
+      }
+      if (itemHasTime(it)) byDay[d].timed.push(it);
+      else byDay[d].untimed.push(it);
+    });
+    dayOrder.sort();
+    if (day && day !== "all") {
+      pending = []; /* 单日不把待补日期混进这一天的计数，待补走横幅 */
+      var g = byDay[day] || { date: day, timed: [], untimed: [] };
+      undated = [];
+      dayOrder = g.timed.length || g.untimed.length ? [day] : [];
+      byDay = {};
+      if (dayOrder.length) byDay[day] = g;
+    }
+    var visible = [];
+    if (!(day && day !== "all")) visible = visible.concat(pending);
+    dayOrder.forEach(function (d) {
+      visible = visible.concat(byDay[d].timed, byDay[d].untimed);
+    });
+    if (!(day && day !== "all")) visible = visible.concat(undated);
+    var located = [];
+    var unlocated = [];
+    visible.forEach(function (it) {
+      if (itemHasCoords(it)) located.push(it);
+      else unlocated.push(it);
+    });
+    /* 地图针脚：先有时间的（带编号），再没定时间的（不编号） */
+    var pins = [];
+    var n = 0;
+    function pushPin(it, numbered) {
+      if (!itemHasCoords(it)) return;
+      var marker = endpointFor(it, isTransit(it) ? "dest" : "origin");
+      if (!marker || typeof marker.lat !== "number") return;
+      n += numbered ? 1 : 0;
+      pins.push({ item: it, marker: marker, n: numbered ? n : 0, timed: numbered });
+    }
+    if (day && day !== "all") {
+      var one = byDay[day];
+      if (one) {
+        one.timed.forEach(function (it) { pushPin(it, true); });
+        one.untimed.forEach(function (it) { pushPin(it, false); });
+      }
+    } else {
+      dayOrder.forEach(function (d) {
+        byDay[d].timed.forEach(function (it) { pushPin(it, true); });
+      });
+      dayOrder.forEach(function (d) {
+        byDay[d].untimed.forEach(function (it) { pushPin(it, false); });
+      });
+      undated.forEach(function (it) { pushPin(it, false); });
+    }
+    return {
+      pending: pending,
+      days: dayOrder.map(function (d) { return byDay[d]; }),
+      undated: undated,
+      visible: visible,
+      count: visible.length,
+      located: located,
+      unlocated: unlocated,
+      pins: pins,
+      dayCount: dayOrder.length
+    };
   }
 
   function numberedList(items) {
@@ -457,37 +585,31 @@
     return haversineKm(a, b);
   }
 
+  var HOW_TO_GO = "↓ 怎么去";
+
+  function pointNavigable(pt) {
+    if (!pt) return false;
+    if (hasCoords(pt)) return true;
+    return !!(String(pt.name || "").trim() || String(pt.address || "").trim() || String(pt.airport || "").trim());
+  }
+
   /**
-   * 两站之间的胶囊。中间隔着航班（任一端是航班）或直线超过 300 公里：不显示。
-   * 缺坐标：显示「补位置 ›」，fixId 指向先缺坐标的那一站。
+   * 同一天前后两段之间的『↓ 怎么去』：从上一站到达处导航到下一站出发处。
+   * 机票 / 火车 / 大巴 / 船也显示。跨天不由这里画（调用方只传入同一天的相邻两项）。
+   * 任一端没有名称、地址或坐标时不显示，也不再改成「补位置 ›」。
    */
   function navPillSpec(fromItem, toItem) {
     if (!fromItem || !toItem) return { show: false };
-    /* v6：火车 / 船 / 大巴跟机票一样，两头不放胶囊 */
-    if (isTransit(fromItem) || isTransit(toItem)) {
-      return { show: false, reason: "flight", fromItemId: fromItem.id, toItemId: toItem.id };
-    }
     var from = endpointFor(fromItem, "origin");
     var to = endpointFor(toItem, "dest");
-    if (!hasCoords(from) || !hasCoords(to)) {
-      var fixId = !hasCoords(from) ? fromItem.id : toItem.id;
-      return {
-        show: true,
-        kind: "fix",
-        label: "补位置 ›",
-        fixId: fixId,
-        fromItemId: fromItem.id,
-        toItemId: toItem.id
-      };
+    if (!pointNavigable(from) || !pointNavigable(to)) {
+      return { show: false, reason: "nDest", fromItemId: fromItem && fromItem.id, toItemId: toItem && toItem.id };
     }
-    var km = haversineKm(from, to);
-    if (km > PILL_FAR_KM) {
-      return { show: false, reason: "far", km: km, fromItemId: fromItem.id, toItemId: toItem.id, from: from, to: to };
-    }
+    var km = hasCoords(from) && hasCoords(to) ? haversineKm(from, to) : null;
     return {
       show: true,
       kind: "nav",
-      label: formatStraightPill(km),
+      label: HOW_TO_GO,
       km: km,
       from: from,
       to: to,
@@ -519,12 +641,10 @@
     if (sourceId(last) === sourceId(hotel)) return { show: false, reason: "already-last" };
     var spec = navPillSpec(last, hotel);
     if (!spec.show) return spec;
-    if (spec.kind === "nav") {
-      spec.kind = "hotel";
-      spec.label = formatReturnHotelPill(spec.km);
-    } else if (spec.kind === "fix") {
-      spec.label = "回酒店 · 补位置 ›";
-    }
+    if (spec.kind !== "nav") return { show: false, reason: "no-label", fromItemId: last && last.id, toItemId: hotel && hotel.id };
+    spec.kind = "hotel";
+    spec.label = formatReturnHotelPill(spec.km);
+    if (!spec.label) return { show: false, reason: "no-label", fromItemId: last.id, toItemId: hotel.id };
     return spec;
   }
 
@@ -878,6 +998,9 @@
     firstOfDayTarget: firstOfDayTarget,
     groupByDay: groupByDay,
     numberedList: numberedList,
+    itemHasTime: itemHasTime,
+    itemHasCoords: itemHasCoords,
+    viewItems: viewItems,
     hasCoords: hasCoords,
     PILL_FAR_KM: PILL_FAR_KM,
     haversineKm: haversineKm,
@@ -885,6 +1008,7 @@
     hotelCoversNight: hotelCoversNight,
     nightHotel: nightHotel,
     straightKm: straightKm,
+    HOW_TO_GO: HOW_TO_GO,
     navPillSpec: navPillSpec,
     firstOfDayPill: firstOfDayPill,
     formatReturnHotelPill: formatReturnHotelPill,

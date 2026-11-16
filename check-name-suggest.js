@@ -80,20 +80,20 @@ check("pill markup + CSS (v6: data-role=switch opens 「我的行程」), 14px c
   const css = fs.readFileSync(__dirname + "/styles.css", "utf8");
   assert.ok(/<div class="trip-pill" id="trip-pill" data-role="switch">/.test(html));
   assert.ok(/<svg class="trip-pill-ico"[^>]*width="14" height="14"[^>]*stroke="#8A9099"[^>]*><path d="M4 6l4 4 4-4"\/><\/svg>/.test(html), "self-drawn 14px chevron");
-  assert.ok(/\$\("trip-name-btn"\)\.addEventListener\("click", openTrips\);/.test(fs.readFileSync(__dirname + "/timeline.js", "utf8")), "tap the name → 「我的行程」");
+  assert.ok(/\$\("trip-name-btn"\)\.addEventListener\("click", function[\s\S]{0,120}openTrips\(\);/.test(fs.readFileSync(__dirname + "/timeline.js", "utf8")), "tap the name → 「我的行程」");
   assert.ok(html.indexOf('id="trip-name-done">完成<') !== -1);
   /* 默认名：胶囊自己写「点这里起名」+ 铅笔，没有单独的提示 span */
   const tlp = fs.readFileSync(__dirname + "/timeline.js", "utf8");
   assert.ok(html.indexOf("trip-name-hint") === -1 && tlp.indexOf("trip-name-hint") === -1 && css.indexOf("trip-name-hint") === -1, "separate hint removed");
   assert.strictEqual(require("./trip-name.js").COPY.hint, "点这里起名");
-  assert.ok(/nameText\.textContent = isDefault && window\.TripName \? TripName\.COPY\.hint : name;/.test(tlp));
+  assert.ok(/isDefault && window\.TripName \? TripName\.COPY\.hint/.test(tlp) && tlp.indexOf("function trimTripName") !== -1);
   assert.ok(/\.trip-pill\.is-default \.trip-name-text \{ color: #6B7A85;/.test(css));
   const pill = css.slice(css.indexOf("/* ---------- v5.2 行程名胶囊"));
   ["height: 28px;", "padding: 0 10px;", "border-radius: 14px;", "background: #F3ECE0;", "color: #16332F;", "font-size: 13px;", "font-weight: 600;", "gap: 4px;", "text-decoration: none;"].forEach((t) => assert.ok(pill.indexOf(t) !== -1, t));
   assert.ok(/\.topbar \.trip-name::before \{[^}]*top: -8px;[^}]*bottom: -8px;/.test(pill), "44px tap area");
   assert.ok(/\.topbar \.trip-name:active \{ background: #E8DCC8; \}/.test(pill));
   assert.ok(/\.trip-name-text \{[^}]*max-width: 7em;[^}]*text-overflow: ellipsis;/.test(pill));
-  assert.ok(/@media \(max-width: 360px\) \{\s*\.trip-name-text \{ max-width: 6em; \}/.test(pill));
+  assert.ok(/@media \(max-width: 360px\) \{[\s\S]*?\.trip-name-text \{ max-width: 6em; \}/.test(css));
   assert.ok(/border-bottom: 2px solid #0F9D8A;/.test(pill) && /\.trip-name-done \{[^}]*color: #0F9D8A;[^}]*font-size: 13px;/.test(pill));
   assert.ok(/\.name-pop \{[^}]*border-radius: 12px;[^}]*box-shadow: 0 4px 16px rgba\(22, 51, 47, 0\.14\);/.test(pill));
 });

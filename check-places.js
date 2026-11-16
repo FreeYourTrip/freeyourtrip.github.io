@@ -190,6 +190,36 @@ check("visits: hotel stay = 1 visit with nights; 没去成 cancels; dedupe; dele
   assert.deepStrictEqual(p.visits.map((x) => x.tripId), ["t1"]);
 });
 
+check("v6.1: removeItemVisits matches tripId + date + place; other visits stay", function () {
+  const louvre = place("p-louvre", "卢浮宫", { type: "place" });
+  const hotel = place("p-hotel", "Moxy", { type: "hotel" });
+  P.addVisit(louvre, { date: "2026-12-05", tripId: "paris" });
+  P.addVisit(louvre, { date: "2026-12-06", tripId: "paris" });
+  P.addVisit(louvre, { date: "2027-05-01", tripId: "other" });
+  P.addVisit(hotel, { date: "2026-12-04", tripId: "paris", nights: 2 });
+  const item = { type: "place", nameZh: "卢浮宫", placeId: "p-louvre", date: "2026-12-05" };
+  assert.ok(P.itemHasVisit([louvre, hotel], item, "paris"));
+  assert.ok(!P.itemHasVisit([louvre, hotel], item, "missing"));
+  assert.strictEqual(P.tripVisitCount([louvre, hotel], "paris"), 3);
+  assert.strictEqual(P.removeItemVisits([louvre, hotel], "paris", item), 1);
+  assert.deepStrictEqual(louvre.visits.map((v) => v.date + "@" + v.tripId), ["2026-12-06@paris", "2027-05-01@other"]);
+  assert.strictEqual(hotel.visits.length, 1, "hotel visit on the same trip is left alone");
+  const hotelItem = { type: "hotel", nameZh: "Moxy", placeId: "p-hotel", checkIn: "2026-12-04", checkOut: "2026-12-06" };
+  assert.ok(P.itemHasVisit([louvre, hotel], hotelItem, "paris"));
+  assert.strictEqual(P.removeItemVisits([louvre, hotel], "paris", hotelItem), 1);
+  assert.strictEqual(hotel.visits.length, 0);
+  assert.strictEqual(P.itemHasVisit([louvre, hotel], hotelItem, "paris"), false);
+  const cancelled = place("p-x", "咖啡店");
+  const rec = P.addVisit(cancelled, { date: "2026-12-05", tripId: "paris" });
+  P.cancelVisit(cancelled, rec.id);
+  const cafe = { type: "place", nameZh: "咖啡店", placeId: "p-x", date: "2026-12-05" };
+  assert.ok(!P.itemHasVisit([cancelled], cafe, "paris"), "cancelled visit does not count");
+  const byName = place("p-name", "艾菲尔铁塔");
+  P.addVisit(byName, { date: "2026-12-05", tripId: "paris" });
+  const noId = { type: "place", nameZh: "艾菲尔铁塔", date: "2026-12-05" };
+  assert.ok(P.itemHasVisit([byName], noId, "paris"), "falls back to name when placeId is missing");
+});
+
 check("wish: 想去 with saved date, can be cleared", function () {
   const p = place("a", "x");
   P.setWish(p, "2026-11-16");

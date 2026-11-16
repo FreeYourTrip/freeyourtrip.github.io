@@ -253,19 +253,20 @@
   function pointQuery(p) {
     if (!p) return "";
     var addr = String(p.address || "").trim();
-    var name = String(p.name || "").trim();
+    var name = String(p.nameZh || p.nameEn || p.name || "").trim();
     if (isUnitLikeName(name)) name = "";
-    /* 名字 + 地址，让 Google 自己去找这家店（连锁店不会跑去别的分店）。不用「名字 + 城市」。 */
+    /* v6.1：带我去一律交「名字 + 地址」给地图应用；没有文字时才退回坐标。 */
     if (addr && name && addr.toLowerCase().indexOf(name.toLowerCase()) === -1) return name + ", " + addr;
     if (addr) return addr;
-    /* 没有地址：用坐标 */
+    if (name) return name;
     if (hasPointCoords(p)) return formatCoord(p.lat) + "," + formatCoord(p.lng);
-    return name || String(p.airport || "").trim();
+    return String(p.airport || "").trim();
   }
 
-  /** 有没有能导航的信息（地址或坐标；机场代码也算） */
+  /** 有没有能导航的信息（名字、地址、坐标或机场代码） */
   function pointUsable(p) {
-    return !!(p && (String(p.address || "").trim() || hasPointCoords(p) || String(p.airport || "").trim()));
+    if (!p) return false;
+    return !!(String(p.address || "").trim() || String(p.nameZh || p.nameEn || p.name || "").trim() || hasPointCoords(p) || String(p.airport || "").trim());
   }
 
   function googleDirUrl(origin, dest, modeId) {
@@ -281,10 +282,17 @@
   /** v5.2「看位置」：只打开这个地方，不是路线。中国大陆用高德标点 / 搜索，其余用 Google 搜索。 */
   function buildPlaceLink(p, here) {
     if (!p) return { href: "#", app: "google" };
-    if (!hasPointCoords(p) && here && hasPointCoords(here) && inMainlandChina(here.lat, here.lng)) {
-      return { app: "amap", href: "https://uri.amap.com/search?keyword=" + encodeURIComponent(pointQuery(p)) + "&callnative=1" };
+    var q = pointQuery(p);
+    var app = "google";
+    if (hasPointCoords(p) && inMainlandChina(p.lat, p.lng)) app = "amap";
+    else if (!hasPointCoords(p) && here && hasPointCoords(here) && inMainlandChina(here.lat, here.lng)) app = "amap";
+    /* 有名字或地址就交文字；没有文字才退回坐标标点 */
+    if (q && app === "amap") {
+      return { app: "amap", href: "https://uri.amap.com/search?keyword=" + encodeURIComponent(q) + "&callnative=1" };
     }
-    /* 和导航一样：只有坐标在中国大陆才用高德 */
+    if (q) {
+      return { app: "google", href: "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(q) };
+    }
     if (hasPointCoords(p) && inMainlandChina(p.lat, p.lng)) {
       var g = amapCoord(p.lat, p.lng);
       return {
@@ -293,15 +301,23 @@
           "&name=" + encodeURIComponent(pointLabel(p)) + "&callnative=1"
       };
     }
-    return { app: "google", href: "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(pointQuery(p)) };
+    if (hasPointCoords(p)) {
+      return { app: "google", href: "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(formatCoord(p.lat) + "," + formatCoord(p.lng)) };
+    }
+    return { href: "#", app: "google" };
   }
 
   function amapNavUrl(origin, dest, modeId) {
     var info = modeInfo(modeId);
+    var q = pointQuery(dest) || pointLabel(dest);
+    /* v6.1：有名字或地址就交文字给高德，不用我们存的点 */
+    if (q && !/^-?\d+(\.\d+)?,\s*-?\d+(\.\d+)?$/.test(q)) {
+      return "https://uri.amap.com/search?keyword=" + encodeURIComponent(q) + "&callnative=1";
+    }
     if (!hasPointCoords(dest)) {
       return (
         "https://uri.amap.com/search?keyword=" +
-        encodeURIComponent(pointQuery(dest) || pointLabel(dest)) +
+        encodeURIComponent(q) +
         "&callnative=1"
       );
     }

@@ -1,13 +1,16 @@
 /**
- * 「有新版本」横条 + service worker 注册。
+ * 「有新版本」居中弹窗 + service worker 注册。
  * 规则：从不强制更新。新版下载好后只提示；点「立即更新」才切换并刷新一次；
  * 点「稍后」只在本次打开期间隐藏（sessionStorage），下次打开如果新版还在等待，会再提示。
+ * 若检测到页面里新旧文件混在一起，自动刷新一次（sessionStorage 防循环）。
  * 离线时照常用缓存的旧版打开（见 sw.js 的 fetch 处理）。
  */
 (function (root) {
   "use strict";
 
   var LATER_KEY = "wishlist-map-update-later-v1";
+  var MIX_KEY = "wishlist-map-mix-reload-v1";
+  var SHELL_CACHE = "xingcheng-map-shell-v19";
 
   function laterThisSession(storage) {
     try {
@@ -24,7 +27,7 @@
   }
 
   /**
-   * 是否显示横条。
+   * 是否显示更新弹窗。
    * hasWaiting：有已下载、等待中的新版；hasController：当前页面已经由旧版 SW 控制（首次打开没有，不提示）。
    */
   function shouldShow(state, storage) {
@@ -34,7 +37,39 @@
     return !laterThisSession(storage);
   }
 
-  var api = { LATER_KEY: LATER_KEY, shouldShow: shouldShow, markLater: markLater, laterThisSession: laterThisSession };
+  /** 三个壳层标记里只要有两个且不一致，就是新旧文件混用。 */
+  function isMixed(htmlId, jsId, swId) {
+    var ids = [htmlId, jsId, swId].filter(function (x) { return !!x; });
+    if (ids.length < 2) return false;
+    var first = ids[0];
+    return ids.some(function (x) { return x !== first; });
+  }
+
+  function shouldReloadMixed(mixed, storage) {
+    if (!mixed) return false;
+    try {
+      if (storage && storage.getItem(MIX_KEY) === "1") return false;
+    } catch (err) {}
+    return true;
+  }
+
+  function markMixedReload(storage) {
+    try {
+      if (storage) storage.setItem(MIX_KEY, "1");
+    } catch (err) {}
+  }
+
+  var api = {
+    LATER_KEY: LATER_KEY,
+    MIX_KEY: MIX_KEY,
+    SHELL_CACHE: SHELL_CACHE,
+    shouldShow: shouldShow,
+    markLater: markLater,
+    laterThisSession: laterThisSession,
+    isMixed: isMixed,
+    shouldReloadMixed: shouldReloadMixed,
+    markMixedReload: markMixedReload
+  };
   root.UpdateBanner = api;
   if (typeof module !== "undefined" && module.exports) module.exports = api;
 
@@ -56,12 +91,10 @@
   }
 
   function paint() {
-    var el = banner();
-    if (!el || el.getAttribute("data-painted") === "1") return;
-    el.setAttribute("data-painted", "1");
-    var icon = window.Icons && Icons.html ? Icons.html("refresh", "update-ico") : "";
-    var lead = el.querySelector(".update-lead");
-    if (lead) lead.innerHTML = icon + "<span>有新版本</span>";
+    var title = document.getElementById("update-title");
+    var body = document.getElementById("update-body");
+    if (title) title.textContent = "有新版本";
+    if (body) body.textContent = "刷新一次就能用上，行程不会丢";
   }
 
   function show(state) {
@@ -108,6 +141,24 @@
     }
   }
 
+  function readHtmlShell() {
+    var m = document.querySelector('meta[name="shell-cache"]');
+    return (m && m.getAttribute("content")) || "";
+  }
+
+  function reloadIfMixed() {
+    var htmlId = readHtmlShell();
+    var jsId = (root.AppVersion && AppVersion.SHELL_CACHE) || "";
+    var mixed = isMixed(htmlId, jsId, SHELL_CACHE);
+    var store = session();
+    if (!shouldReloadMixed(mixed, store)) return false;
+    markMixedReload(store);
+    if (reloading) return true;
+    reloading = true;
+    window.location.reload();
+    return true;
+  }
+
   function register() {
     if (!("serviceWorker" in navigator)) return;
     if (!(location.protocol === "http:" || location.protocol === "https:")) return;
@@ -141,6 +192,7 @@
   }
 
   function init() {
+    if (reloadIfMixed()) return;
     bindButtons();
     var demo = new URLSearchParams(window.location.search).get("demo");
     if (demo === "update") show({ forceDemo: true });

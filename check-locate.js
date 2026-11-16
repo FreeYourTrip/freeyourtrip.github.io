@@ -90,12 +90,12 @@ check("wiring: button markup, aria-label, only on tap, never on load, script + p
   const tl = fs.readFileSync(__dirname + "/timeline.js", "utf8");
   assert.ok(/<button type="button" class="locate-btn" id="locate-btn" aria-label="定位到我"/.test(html));
   assert.ok(html.indexOf('src="./locate.js"') !== -1 && sw.indexOf('"./locate.js"') !== -1);
-  assert.ok(sw.indexOf('"xingcheng-map-shell-v18"') !== -1);
+  assert.ok(sw.indexOf('"xingcheng-map-shell-v19"') !== -1);
   assert.strictEqual((src.match(/getCurrentPosition\(/g) || []).length, 1, "exactly one call site");
   assert.ok(/b\.addEventListener\("click", onTap\)/.test(src), "requested only from the click handler");
   const bindFn = src.slice(src.indexOf("function bind()"));
   assert.ok(bindFn.indexOf("requestPosition") === -1, "bind() does not request on load");
-  assert.ok(tl.indexOf("点顶部的地图图标，所有地点一眼看全。右下角的按钮能定位到你自己") !== -1, "help line (v5.2 copywriter)");
+  assert.ok(tl.indexOf("点底部的『地图』，所有地点一眼看全，点『列表』回来。右下角的按钮能定位到你自己") !== -1, "help line points at the 列表｜地图 toggle");
   assert.ok(tl.indexOf("getMap: function") !== -1 && tl.indexOf("mapTileKind: function") !== -1);
 });
 

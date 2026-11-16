@@ -6,6 +6,16 @@
 (function (root) {
   "use strict";
 
+  var IMPORT_NONE = "没读到行程，把 AI 的回复整段粘贴进来再试一次";
+  var IMPORT_UNRECOGNIZED = "没认出来，把 AI 的回复整段复制过来再试一次";
+
+  function friendlyLineError(n, raw, kind) {
+    var date = /日期/.test(String(raw || ""));
+    var prefix = kind === "item" ? ("第 " + n + " 条：") : ("第 " + n + " 行：");
+    return prefix + (date ? "日期不对" : "没认出来");
+  }
+
+
   var HEADER = ["类型", "名称", "地址", "日期时间", "备注"];
   /* v6：火车 / 船 / 大巴（写法见 transport.js 的 TYPE_WORDS） */
   var Transport = root.Transport || (typeof require === "function" ? require("./transport.js") : null);
@@ -59,7 +69,7 @@
     return /^[\s|｜:：\-—]+$/.test(line) && /-/.test(line);
   }
 
-  var ROW_TYPE_RE = /^(机票|航班|飞机|酒店|住宿|民宿|地点|餐厅|景点|街道|火车票|车票|火车|高铁|动车|列车|船票|船|轮渡|渡轮|邮轮|大巴票|汽车票|大巴|巴士|长途汽车|flight|hotel|place|train|ferry|boat|bus|coach)/i;
+  var ROW_TYPE_RE = /^(机票|航班|飞机|酒店|住宿|民宿|地点|收藏|餐厅|景点|街道|火车票|车票|火车|高铁|动车|列车|船票|船|轮渡|渡轮|邮轮|大巴票|汽车票|大巴|巴士|长途汽车|flight|hotel|place|train|ferry|boat|bus|coach|wishlist|favorite)/i;
 
   function splitPipeLine(line) {
     return tidyPipeLine(line).replace(/\uFF5C/g, "|").split("|").map(trim);
@@ -83,10 +93,11 @@
       base = trim(s.slice(0, slash));
       subtype = trim(s.slice(slash + 1));
     }
-    var kind = TYPE_ALIASES[base.toLowerCase()] || TYPE_ALIASES[base] || (Transport ? Transport.groundKindFromWord(base) : "");
+    var favorite = base === "收藏" || base.toLowerCase() === "wishlist" || base.toLowerCase() === "favorite";
+    var kind = favorite ? "place" : (TYPE_ALIASES[base.toLowerCase()] || TYPE_ALIASES[base] || (Transport ? Transport.groundKindFromWord(base) : ""));
     if (!kind) return { error: "无法识别的类型「" + s + "」，应为 机票、火车、船、大巴、酒店 或 地点（地点可带「地点/餐厅」等子类）" };
     if (kind !== "place") subtype = subtype || "";
-    return { kind: kind, subtype: subtype, raw: s };
+    return { kind: kind, subtype: subtype, raw: s, favorite: favorite };
   }
 
   function parseIataPair(addr) {
@@ -260,6 +271,15 @@
       if (!year) return _;
       return pre + year + "-" + pad(m) + "-" + pad(d) + " ";
     });
+    /* v6.1：只写月日的「12-03」（按月-日，不猜成日-月） */
+    s = s.replace(/(^|[^\d-])(\d{1,2})-(\d{1,2})(?!\d)/g, function (_, pre, m, d) {
+      var month = Number(m);
+      var day = Number(d);
+      if (month < 1 || month > 12 || day < 1 || day > 31) return _;
+      var year = yearForMd(month, day, "", yearHint);
+      if (!year) return _;
+      return pre + year + "-" + pad(month) + "-" + pad(day) + " ";
+    });
     // 时间：带冒号的（可带 AM/PM 或 上午/下午）
     s = s.replace(/(上午|下午|早上|晚上)?\s*(\d{1,2}):(\d{2})(?!\d)\s*([AaPp]\.?[Mm]\.?)?/g, function (all, ap1, h, mi, ap2) {
       var t = fixTime(h, mi, ap2 || ap1);
@@ -352,6 +372,24 @@
     note = note.replace(/^[\s；;，,、|]+|[\s；;，,、|]+$/g, "");
     note = note.replace(/[ \t]+/g, " ");
     return { seat: seat, confirmationNo: confirmationNo, note: note };
+  }
+
+  /**
+   * 地址末尾可选的「@纬度,经度」（AI 按提示附带的点）。
+   * 只从纯文字地址末尾取；地图链接仍走 parseCoordsFromAddress。
+   * 返回 { address, hint }，hint 为 {lat,lng} 或 null。旧格式没有 @ 也能导入。
+   */
+  function splitTrailingCoords(addr) {
+    var s = trim(addr);
+    if (!s) return { address: "", hint: null };
+    if (/^https?:\/\//i.test(s) || /google\.com\/maps|openstreetmap\.|amap\.com|uri\.amap/i.test(s)) {
+      return { address: s, hint: null };
+    }
+    var m = s.match(/^(.*?)\s*@\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*$/);
+    if (!m) return { address: s, hint: null };
+    var pair = numPair(m[2], m[3]);
+    if (!pair) return { address: s, hint: null };
+    return { address: trim(m[1]), hint: { lat: pair.lat, lng: pair.lng } };
   }
 
   /**
@@ -585,7 +623,14 @@
     if (fields.confirmation) extra.confirmationNo = trim(fields.confirmation);
     if (fields.seat) extra.seat = trim(fields.seat);
     if (ground) return groundItemFromFields(typeInfo.kind, name, fields, extra, rawDateText, usedIds);
-    var coords = parseCoordsFromAddress(fields.map_url || fields.address);
+    var splitAddr = splitTrailingCoords(fields.address);
+    var addressText = splitAddr.address;
+    var hint = splitAddr.hint;
+    var coords = parseCoordsFromAddress(fields.map_url || addressText);
+    /* 文字地址末尾的 @点只当作提示，不直接当已经确认的位置 */
+    if (hint && coords && Math.abs(coords.lat - hint.lat) < 1e-8 && Math.abs(coords.lng - hint.lng) < 1e-8 && !fields.map_url) {
+      coords = null;
+    }
     var item;
 
     if (typeInfo.kind === "flight") {
@@ -636,7 +681,7 @@
         type: "hotel",
         nameZh: hn.nameZh,
         nameEn: hn.nameEn,
-        address: trim(fields.address),
+        address: addressText,
         checkIn: stay.startDate,
         checkOut: stay.endDate,
         checkInTime: stay.startTime || "",
@@ -664,13 +709,23 @@
         subtype: typeInfo.subtype || "",
         nameZh: pn.nameZh,
         nameEn: pn.nameEn,
-        address: trim(fields.address),
+        address: addressText,
         date: whenP.date,
         time: whenP.time,
         note: trim(fields.note),
         example: false
       };
       if (placePending) markPending(item, rawDateText, fields.datetime, placePending);
+      /* 收藏/分类：解析器认得；收藏页未上线时当成「地点/分类」收进当前行程（日期空就空）。上线后标记 favorite，不进日程表。 */
+      if (typeInfo.favorite) {
+        var favOn = !!(root.Favorites && root.Favorites.pageShipped);
+        if (favOn) {
+          item.favorite = true;
+          item.date = "";
+          item.time = "";
+          delete item.pendingDate;
+        }
+      }
       /* v6：「地点/甜品」（旧名）、「地点/咖啡甜点酒吧」→ 咖啡甜点酒吧图标，子类统一写新名字 */
       var IconsRef = iconsRef();
       if (IconsRef && IconsRef.categoryFromWord && IconsRef.categoryFromWord(item.subtype) === "dessert") {
@@ -683,6 +738,10 @@
     if (coords) {
       item.lat = coords.lat;
       item.lng = coords.lng;
+    }
+    if (hint) {
+      item.hintLat = hint.lat;
+      item.hintLng = hint.lng;
     }
     return { item: item };
   }
@@ -709,7 +768,7 @@
         if (!/[|｜]/.test(raw) || !ROW_TYPE_RE.test(cols[0])) {
           skippedProse.push("第 " + lineNo + " 行不像行程条目，已跳过。");
         } else {
-          errors.push("第 " + lineNo + " 行：列数不是 5 列（分割后得到 " + cols.length + " 列）。应为「类型 | 名称 | 地址 | 日期时间 | 备注」，空单元格也请保留竖线。");
+          errors.push(friendlyLineError(lineNo, "cols"));
         }
         continue;
       }
@@ -718,7 +777,7 @@
         usedIds
       );
       if (result.error) {
-        errors.push("第 " + lineNo + " 行：" + result.error);
+        errors.push(friendlyLineError(lineNo, result.error));
       } else {
         items.push(stripImportedLegRole(result.item));
       }
@@ -854,13 +913,13 @@
     } catch (err) {
       return {
         items: [],
-        errors: ["JSON 无法解析：" + (err && err.message ? err.message : String(err))],
+        errors: [IMPORT_UNRECOGNIZED],
         format: "json"
       };
     }
     var extracted = extractJsonRecords(data);
     if (extracted.error) {
-      return { items: [], errors: [extracted.error], format: "json", tripName: "" };
+      return { items: [], errors: [IMPORT_UNRECOGNIZED], format: "json", tripName: "" };
     }
     var usedIds = {};
     var items = [];
@@ -869,7 +928,7 @@
       var label = "第 " + (idx + 1) + " 条";
       var mapped = recordToFields(rec, label);
       if (mapped.error) {
-        errors.push(mapped.error);
+        errors.push(friendlyLineError(idx + 1, mapped.error, "item"));
         return;
       }
       if (mapped.internal) {
@@ -879,7 +938,7 @@
         return;
       }
       var result = itemFromFields(mapped.fields, usedIds);
-      if (result.error) errors.push(label + "：" + result.error);
+      if (result.error) errors.push(friendlyLineError(idx + 1, result.error, "item"));
       else items.push(stripImportedLegRole(result.item));
     });
     return { items: items, errors: errors, format: "json", tripName: extracted.tripName || "" };
@@ -887,7 +946,7 @@
 
   function parseJsonData(data, usedIds) {
     var extracted = extractJsonRecords(data);
-    if (extracted.error) return { items: [], errors: [extracted.error], tripName: "" };
+    if (extracted.error) return { items: [], errors: [IMPORT_UNRECOGNIZED], tripName: "" };
     usedIds = usedIds || {};
     var items = [];
     var errors = [];
@@ -895,7 +954,7 @@
       var label = "第 " + (idx + 1) + " 条";
       var mapped = recordToFields(rec, label);
       if (mapped.error) {
-        errors.push(mapped.error);
+        errors.push(friendlyLineError(idx + 1, mapped.error, "item"));
         return;
       }
       if (mapped.internal) {
@@ -905,7 +964,7 @@
         return;
       }
       var result = itemFromFields(mapped.fields, usedIds);
-      if (result.error) errors.push(label + "：" + result.error);
+      if (result.error) errors.push(friendlyLineError(idx + 1, result.error, "item"));
       else items.push(stripImportedLegRole(result.item));
     });
     return { items: items, errors: errors, tripName: extracted.tripName || "" };
@@ -928,7 +987,7 @@
 
   function parseImportInner(raw) {
     if (!trim(raw)) {
-      return { items: [], errors: ["没有可导入的内容。请粘贴管道格式或 JSON。"], notes: [], format: "" };
+      return { items: [], errors: [IMPORT_NONE], notes: [], format: "" };
     }
     if (looksLikeJson(raw)) return parseJson(raw);
 
@@ -1011,7 +1070,10 @@
     nearestYear: nearestYear,
     splitPipeLine: splitPipeLine,
     parseCoordsFromAddress: parseCoordsFromAddress,
+    splitTrailingCoords: splitTrailingCoords,
     parseSeatAndConfirm: parseSeatAndConfirm,
+    IMPORT_NONE: IMPORT_NONE,
+    IMPORT_UNRECOGNIZED: IMPORT_UNRECOGNIZED,
     parseImport: parseImport,
     parsePipe: parsePipe,
     parseJson: parseJson,

@@ -1,5 +1,5 @@
 /* 行程地图：缓存应用外壳。全部使用相对路径，可部署在 GitHub Pages 子目录（如 /repo-name/）。 */
-var CACHE = "xingcheng-map-shell-v18";
+var CACHE = "xingcheng-map-shell-v19";
 var SHELL = [
   "./",
   "./index.html",
@@ -20,6 +20,8 @@ var SHELL = [
   "./version.js",
   "./icons.js",
   "./geocode.js",
+  "./lookup.js",
+  "./tiles.js",
   "./import.js",
   "./guess-type.js",
   "./install-env.js",
@@ -54,7 +56,13 @@ var SHELL = [
 self.addEventListener("install", function (event) {
   event.waitUntil(
     caches.open(CACHE).then(function (cache) {
-      return cache.addAll(SHELL);
+      /* 强制绕过 HTTP 缓存，避免 GitHub Pages max-age 把旧文件写进新缓存 */
+      return Promise.all(SHELL.map(function (url) {
+        return fetch(new Request(url, { cache: "reload" })).then(function (res) {
+          if (!res || !res.ok) throw new Error("precache failed: " + url);
+          return cache.put(url, res);
+        });
+      }));
     })
   );
   /* 不自动 skipWaiting：新版装好后等用户点「立即更新」，或所有页面关掉后下次打开再生效。 */
@@ -83,7 +91,7 @@ self.addEventListener("fetch", function (event) {
   if (url.origin !== self.location.origin) return;
   event.respondWith(
     caches.match(req).then(function (cached) {
-      var fresh = fetch(req).then(function (res) {
+      var fresh = fetch(new Request(req, { cache: "no-cache" })).then(function (res) {
         if (res && res.status === 200) {
           var copy = res.clone();
           caches.open(CACHE).then(function (cache) { cache.put(req, copy); });

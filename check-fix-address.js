@@ -111,11 +111,11 @@ check("UI: 「＋ 直接添加「xxx」」 + small line, icon step, toast, card 
   assert.ok(html.indexOf('<span class="sf-sub">没有地图位置，也能放进行程</span>') !== -1);
   assert.ok(html.indexOf("找不到？直接用这个名字添加") === -1 && tl.indexOf("找不到？直接用这个名字添加") === -1, "old label gone");
   assert.ok(/id="direct-icon-picker"/.test(html) && /renderIconPicker\("direct-icon-picker", directIcon\)/.test(tl), "icon-pick step");
-  assert.ok(tl.indexOf('added: "已添加。点卡片上的『待补地址』，就能出现在地图上"') !== -1);
+  assert.ok(tl.indexOf('added: "已添加。点卡片上的『位置待确认』，就能出现在地图上"') !== -1);
   assert.ok(/addPlaceAndToast\((item|it), DIRECT_COPY\.added\)/.test(tl), "direct-add still toasts and can go through the hotel date panel");
   const di = tl.slice(tl.indexOf("function directItem"), tl.indexOf("function finishDirectAdd"));
   assert.ok(/item\.address = "";/.test(di) && /itemFromType\(name, "", addPreset \|\| "地点", null, date\)/.test(di), "no address, no coords (v5.3: 加酒店 keeps the hotel type)");
-  assert.ok(tl.indexOf('fixBtn: "待补地址"') !== -1 && /class="fix-addr" data-fix="/.test(tl));
+  assert.ok(tl.indexOf('fixBtn: "位置待确认"') !== -1 && tl.indexOf("位置待确认 ›") !== -1);
   assert.ok(/\.fix-addr::before \{ content: ""; position: absolute; left: -4px; right: -4px; top: -10px; bottom: -10px; \}/.test(css) && /min-height: 24px;/.test(css), "24px + 2×10px = 44px tap target");
   assert.ok(/\.fix-dot \{[^}]*background: #B8BEC6;/.test(css), "grey dot");
   const of = tl.slice(tl.indexOf("function openFixAddress"), tl.indexOf("function exitFixMode"));

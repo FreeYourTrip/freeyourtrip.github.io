@@ -101,7 +101,7 @@ check("JSON: {type: train/boat/bus, number, from, to, depart, arrive}", function
 
 check("bad transport rows give a clear Chinese error; missing date → 日期待确认 like flights", function () {
   const bad = I.parseImport("火车 | G1 | 北京南 | 2026-12-01 09:00 ~ 13:28 | ");
-  assert.ok(/火车的地址应为「出发站 - 到达站」/.test(bad.errors.join(" ")), bad.errors.join(" "));
+  assert.ok(/第 1 行：没认出来/.test(bad.errors.join(" ")), bad.errors.join(" "));
   const nodate = I.parseImport("船 | P1 | Dover - Calais |  | ");
   assert.strictEqual(nodate.items.length, 1);
   assert.ok(nodate.items[0].pendingDate, "date pending, same as flights");
@@ -116,7 +116,7 @@ check("AI prompt example imports cleanly (flight, hotel, train, place, undated p
   assert.strictEqual(r.items[0].flightNo, "BA123");
   assert.strictEqual(r.items[0].number, undefined, "flights keep flightNo, no new field");
   const u = I.parseImport("飞船 | X | A - B | 2026-12-01 | ");
-  assert.ok(/机票、火车、船、大巴、酒店 或 地点/.test(u.errors.join(" ")));
+  assert.ok(/第 1 行：没认出来/.test(u.errors.join(" ")), u.errors.join(" "));
 });
 
 check("timeline order + connectors: train sorts by departure; flight → train is 怎么去 (not 转机/换乘), train → place nav from the arrival station", function () {
@@ -180,8 +180,9 @@ check("never 待补: transport without station coords is not 「待补地址」 
   assert.strictEqual(F.needsFix({ type: "place", nameZh: "x" }), true, "places still are");
   const tl = read("timeline.js");
   assert.ok(/if \(isGround\(item\)\) return false;/.test(tl.slice(tl.indexOf("function itemUnlocated"), tl.indexOf("function typeStyle"))));
-  /* v5.4 起导航是卡片右边的「带我去」+ 展开后的「看位置」，交通都不放 */
-  assert.ok(/function cardGoBtnHtml\(item\) \{[^}]*if \(!item \|\| isTransit\(item\)\) return "";/.test(tl), "no 带我去 on transport");
+  /* v6.1：交通卡片也放『带我去』（出发机场/车站）；展开后仍不放「看位置」 */
+  assert.ok(/function cardGoBtnHtml\(item\) \{[^}]*if \(!item\) return "";/.test(tl), "带我去 on transport too");
+  assert.ok(!/function cardGoBtnHtml\(item\) \{[^}]*if \(!item \|\| isTransit\(item\)\) return "";/.test(tl), "no longer skips transit");
   assert.ok(/function cardLookHtml\(item\) \{\s*if \(!item \|\| isTransit\(item\)\) return "";/.test(tl), "no 看位置 on transport");
   assert.ok(/\(isGround\(item\) \? "" : '<div class="detail-nav">'/.test(tl), "no nav on the detail sheet either");
 });

@@ -35,7 +35,7 @@ const rule = (sel) => {
 check("cards: no text selection / callout on long-press (inputs still selectable); contextmenu + selectstart blocked on cards only", function () {
   assert.ok(css.indexOf(".card { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }") !== -1);
   assert.ok(/\.card input, \.card textarea, \.card select, \.card \[contenteditable\] \{ -webkit-user-select: text; user-select: text;/.test(css));
-  assert.ok(/if \(t\.closest\("input, textarea, select, \[contenteditable\]"\)\) return;\s*if \(t\.closest\("\.card"\)\) ev\.preventDefault\(\);/.test(tl));
+  assert.ok(/if \(t\.closest\("input, textarea, select, \[contenteditable\](?:, \.card-address)?"\)\) return;\s*if \(t\.closest\("\.card"\)\) ev\.preventDefault\(\);/.test(tl));
   assert.ok(/root\.addEventListener\("contextmenu", noNative\);\s*root\.addEventListener\("selectstart", noNative\);/.test(tl));
 });
 
@@ -47,14 +47,14 @@ check("long-press drag survives pointercancel: switches to touchmove / touchend 
   assert.ok(/var moveGuard = function \(ev\) \{\s*if \(dragState && dragState\.dragging\) ev\.preventDefault\(\);/.test(tl), "scroll is only blocked while dragging");
 });
 
-check("checkout line 2 「12:00 · 共 2 晚」: 带我去 keeps its room; at 360 「共 X 晚」 moves to a third line, 12px #9AA6B2", function () {
-  assert.ok(/function checkoutTimeHtml\(label\)/.test(tl) && /'<span class="co-dot">· <\/span><span class="co-nights">'/.test(tl));
-  const r = rule(".card-meta-main .card-checkout-time");
-  ["flex: 0 1 auto;", "min-width: 0;", "flex-wrap: wrap;", "height: 20px;", "overflow: hidden;"].forEach((d) => assert.ok(r.indexOf(d) !== -1, d));
-  assert.ok(/\.card-meta-main \{ flex: 1; min-width: 0; overflow: hidden; \}/.test(css), "IT老板: text area flex:1 + min-width:0");
+check("checkout line 2 「12:00 · 共 2 晚」: time never wraps; trailing 「· 共 N 晚」 is a card-sub hidden when clipped", function () {
+  assert.ok(/function checkoutTimeHtml\(label\)/.test(tl) && /class="card-sub co-sub"/.test(tl));
+  assert.ok(/function fitCardMetaSubs\(/.test(tl) && /card-sub/.test(css));
+  assert.ok(/\.card-meta-main \.card-time,[\s\S]*?flex-shrink: 0;[\s\S]*?white-space: nowrap;/.test(css), "time: nowrap + no shrink");
+  assert.ok(/\.card-meta-main \.card-sub \{[\s\S]*?overflow: hidden;[\s\S]*?white-space: nowrap;/.test(css), "sub-label clips as a unit");
+  assert.ok(/\.card-meta-main \.card-sub\.is-clipped \{ display: none; \}/.test(css), "clipped sub-label is hidden entirely");
   assert.ok(/\.card-meta-row \.card-go-btn \{\s*margin-left: auto;\s*flex: none;/.test(css), "button never shrinks");
-  assert.ok(/@media \(max-width: 360px\) \{[\s\S]*?\.card-checkout-time \.co-nights \{[\s\S]*?font-size: 12px;[\s\S]*?color: #9AA6B2;/.test(css), "360: third line 12px #9AA6B2");
-  assert.ok(/@media \(max-width: 360px\) \{[\s\S]*?\.card-checkout-time \.co-dot \{ display: none; \}/.test(css), "360: hide the mid-dot");
+  assert.ok(!/co-nights \{[\s\S]*?flex: 0 0 100%;[\s\S]*?#9AA6B2/.test(css), "360 no longer wraps nights onto a third line");
 });
 
 check("全部 agenda bands: 40 px, #F1ECE4, 14 px 600 #6B7A8F, left 24 px, sticky under the date strip; empty day 48 px blank; drag-over #E8F5F2 + 1.5 px dashed #0F9D8A", function () {
@@ -94,8 +94,8 @@ check("moveToDay (pure): place gets the day / loses it; hotel / flight / train /
   });
 });
 
-check("drop on another day: date changes, toast 「已移到 11月17日」 / 「已放进『还没定哪天』」 + 撤销 5 s, no 「放哪天？」", function () {
-  assert.ok(/var MOVE_COPY = \{ moved: "已移到 ", undated: "已放进『还没定哪天』" \};/.test(tl));
+check("drop on another day: date changes, toast 「已移到 11月17日」 / 「已放进「还没定哪天」」 + 撤销 5 s, no 「放哪天？」", function () {
+  assert.ok(/var MOVE_COPY = \{ moved: "已移到 ", undated: "已放进「还没定哪天」" \};/.test(tl));
   const m = tl.slice(tl.indexOf("function moveItemToDay"), tl.indexOf("function snapshotItems"));
   assert.ok(/showToast\(day \? MOVE_COPY\.moved \+ formatMd\(day\) : MOVE_COPY\.undated, function \(\) \{[\s\S]*?t\.items = snapshot;[\s\S]*?\}, 5000\);/.test(m));
   assert.ok(m.indexOf("openConfirm") === -1 && !/"[^"\n]*放哪天[^"\n]*"/.test(tl), "never asks");
@@ -203,8 +203,8 @@ check("清空本机数据 at the very bottom of 使用说明 (not in 设置 next
 
 check("ticket times (flight / train / boat / bus) get 「当地时间」 small text; places and hotels don't", function () {
   assert.ok(/var TZ_NOTE = "当地时间";/.test(tl));
-  assert.ok(/\(timeLabel && isFixedTime\(item\) \? '<span class="tz-note">' \+ TZ_NOTE \+ "<\/span>" : ""\)/.test(tl));
-  assert.ok(/\.card-meta-main \.tz-note \{ flex: none; font-size: 11px; color: #8A9099;/.test(css));
+  assert.ok(/\(timeLabel && isFixedTime\(item\) \? '<span class="card-sub tz-note">' \+ TZ_NOTE \+ "<\/span>" : ""\)/.test(tl));
+  assert.ok(/\.card-meta-main \.tz-note \{ font-size: 11px; color: #8A9099;/.test(css));
 });
 
 check("import dates: YYYY-MM-DD as is; a/b with a number > 12 parsed; both ≤ 12 → 待补 「是12月4日还是4月12日？」 with two readings; never guessed", function () {

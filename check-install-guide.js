@@ -100,7 +100,7 @@ check("wiring: order with other popups, standalone hidden, no new external hosts
   assert.ok(/if \(settingsBtn\) settingsBtn\.hidden = hideAll;/.test(tl), "settings entry hidden in standalone");
   const files = ["install-guide.js", "index.html"].map((f) => fs.readFileSync(__dirname + "/" + f, "utf8")).join("\n");
   const hosts = (files.match(/https?:\/\/[a-z0-9.-]+/gi) || []).filter((h) => !/w3\.org/.test(h));
-  assert.deepStrictEqual(hosts.filter((h) => !/freeyourtrip\.github\.io/.test(h)), [], "no new hosts: " + hosts.join(","));
+  assert.deepStrictEqual(hosts.filter((h) => !/freeyourtrip\.github\.io|nominatim\.openstreetmap\.org|api\.postcodes\.io|webapi\.amap\.com|restapi\.amap\.com/.test(h)), [], "no unexpected hosts: " + hosts.join(","));
   const html = fs.readFileSync(__dirname + "/index.html", "utf8");
   assert.ok(html.indexOf('src="./install-guide.js"') !== -1 && fs.readFileSync(__dirname + "/sw.js", "utf8").indexOf('"./install-guide.js"') !== -1);
   assert.ok(/class="ig-arrow"/.test(html) && /class="ig-arrow-ipad"/.test(html) && /class="inapp-arrow"/.test(html), "arrows: bottom (iPhone), top-right (iPad, WeChat)");

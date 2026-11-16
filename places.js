@@ -407,6 +407,56 @@
     return n;
   }
 
+  function tripVisitCount(places, tripId) {
+    var n = 0;
+    (places || []).forEach(function (p) {
+      (p.visits || []).forEach(function (v) {
+        if (!v.cancelled && str(v.tripId) === str(tripId)) n += 1;
+      });
+    });
+    return n;
+  }
+
+  /** 条目对得上这个地点：优先 placeId，没有就比名字。 */
+  function placeMatchesItem(place, item) {
+    if (!place || !item) return false;
+    if (item.placeId) return place.id === item.placeId;
+    var a = normName(place.nameZh || place.name || "");
+    var b = normName(item.nameZh || item.name || "");
+    return !!(a && b && a === b);
+  }
+
+  /** 同一行程、同一天（酒店用入住日）的到访记录，算这一条的足迹。 */
+  function visitMatchesItem(visit, item, tripId) {
+    if (!visit || !item) return false;
+    if (str(visit.tripId) !== str(tripId)) return false;
+    var expected = visitFromItem(item, tripId);
+    var d = expected && expected.date ? expected.date : "";
+    if (d) return str(visit.date) === d;
+    return true;
+  }
+
+  function itemHasVisit(places, item, tripId) {
+    return (places || []).some(function (p) {
+      if (!placeMatchesItem(p, item)) return false;
+      return (p.visits || []).some(function (v) {
+        return !v.cancelled && visitMatchesItem(v, item, tripId);
+      });
+    });
+  }
+
+  /** 删条目时勾了「同时删掉这里的足迹」：按行程 + 日期 + 地点去掉这一条的到访。返回删了几条。 */
+  function removeItemVisits(places, tripId, item) {
+    var n = 0;
+    (places || []).forEach(function (p) {
+      if (!placeMatchesItem(p, item)) return;
+      var before = (p.visits || []).length;
+      p.visits = (p.visits || []).filter(function (v) { return !visitMatchesItem(v, item, tripId); });
+      n += before - p.visits.length;
+    });
+    return n;
+  }
+
   /** 分享用：只要这些行程用到的地点，去掉收藏和去过 */
   function forShare(places, trips) {
     var used = {};
@@ -491,6 +541,9 @@
     cancelVisit: cancelVisit,
     visitCount: visitCount,
     removeTripVisits: removeTripVisits,
+    tripVisitCount: tripVisitCount,
+    itemHasVisit: itemHasVisit,
+    removeItemVisits: removeItemVisits,
     forShare: forShare,
     mergeInto: mergeInto,
     newId: newId

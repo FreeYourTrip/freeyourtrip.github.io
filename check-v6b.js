@@ -155,12 +155,13 @@ check("checkout before a train, boat or bus: 1 h (flight 3 h, cap 12:00, before 
   assert.deepStrictEqual(Legs.suggestedCheckoutTime([], d), { time: "12:00", autoFromFlight: false });
 });
 
-check("no route pill next to train / boat / bus (like flights); sw v18", function () {
+check("train / boat / bus also get 怎么去 between same-day legs; sw v19", function () {
   const st = { id: "s", type: "train", number: "G1", fromNameZh: "A", nameZh: "B", fromLat: 51.5, fromLng: -0.1, lat: 51.51, lng: -0.11, departDate: "2026-12-07", departTime: "10:00" };
   const pl = { id: "p", type: "place", nameZh: "X", lat: 51.512, lng: -0.112, date: "2026-12-07" };
-  assert.strictEqual(Legs.navPillSpec(st, pl).show, false);
-  assert.strictEqual(Legs.navPillSpec(pl, Object.assign({}, st, { type: "bus" })).show, false);
-  assert.ok(read("sw.js").indexOf('var CACHE = "xingcheng-map-shell-v18";') !== -1);
+  assert.strictEqual(Legs.navPillSpec(st, pl).show, true);
+  assert.strictEqual(Legs.navPillSpec(st, pl).label, "↓ 怎么去");
+  assert.strictEqual(Legs.navPillSpec(pl, Object.assign({}, st, { type: "bus" })).show, true);
+  assert.ok(read("sw.js").indexOf('var CACHE = "xingcheng-map-shell-v19";') !== -1);
 });
 
 console.log("\n" + passes + " passed, " + failures + " failed");

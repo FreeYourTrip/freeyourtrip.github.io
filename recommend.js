@@ -62,7 +62,7 @@
           toast(COPIED);
           return "copied";
         }
-        toast("复制没成功，请手动复制：" + URL);
+        toast("没复制上，长按网址自己复制：" + URL);
         return "failed";
       });
     }

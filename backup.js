@@ -262,7 +262,7 @@
           try {
             data = JSON.parse(String(reader.result || ""));
           } catch (err) {
-            alert("无法解析该文件，请确认是导出的 JSON 备份或分享文件。");
+            alert("这个文件打不开，要用这里导出的备份或分享文件");
             return;
           }
           var how = window.confirm(
@@ -279,7 +279,7 @@
               applyBackup(data, mode, { onConflict: onConflict || {} });
               alert(mode === "replace" ? "已用文件替换当前数据。" : "已将文件合并到当前数据。");
             } catch (err) {
-              alert(err && err.message ? err.message : String(err));
+              alert("这个文件打不开，要用这里导出的备份或分享文件");
             }
           };
           /* v6：合并时本机已有同一趟 → 先问 覆盖 / 另存一份 / 取消（取消 = 什么都不导入） */

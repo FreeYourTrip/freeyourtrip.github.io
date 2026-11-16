@@ -47,7 +47,7 @@ a { color: var(--brand); }
   min-height: 100%;
   display: flex;
   flex-direction: column;
-  padding-bottom: calc(88px + env(safe-area-inset-bottom, 0px));
+  padding-bottom: calc(144px + env(safe-area-inset-bottom, 0px));
 }
 
 .topbar {
@@ -151,10 +151,7 @@ a { color: var(--brand); }
   width: 22px;
   height: 22px;
 }
-.top-actions.is-compact #view-toggle-btn {
-  width: 40px;
-  padding: 0;
-}
+
 
 .icon-btn:focus-visible,
 .primary-btn:focus-visible,
@@ -225,6 +222,8 @@ a { color: var(--brand); }
 }
 
 .panel { padding: 4px 16px 20px; }
+#list-view.panel { padding-bottom: 120px; }
+
 
 .panel-map {
   padding: 0;
@@ -481,6 +480,29 @@ a { color: var(--brand); }
   justify-content: center;
   gap: 8px;
 }
+
+/* v6.1 item 10：底部白色胶囊「地图」/「列表」，居中，在『添加』上方 16px；列表和地图都显示 */
+.view-fab {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(82px + env(safe-area-inset-bottom, 0px));
+  z-index: 31;
+  height: 40px;
+  padding: 0 20px;
+  border: 0;
+  border-radius: 20px;
+  background: #fff;
+  color: #1F2A37;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 40px;
+  white-space: nowrap;
+  box-shadow: 0 2px 8px rgba(22, 51, 47, 0.16);
+  cursor: pointer;
+}
+.view-fab:focus-visible { outline: 3px solid #0F9D8A; outline-offset: 2px; }
+body.ig-open .view-fab { visibility: hidden; }
 
 .sheet {
   position: fixed;
@@ -1214,7 +1236,7 @@ a { color: var(--brand); }
 /* 统一的底部提示条（v5 规格） */
 /* 提示条放在「＋ 添加」上方 12px：底栏 10px 内边距 + 56px 按钮 + 12px 间距 = 78px，再加安全区 */
 .toast {
-  bottom: calc(78px + env(safe-area-inset-bottom, 0px));
+  bottom: calc(134px + env(safe-area-inset-bottom, 0px));
   background: #1F2329;
   border-radius: 12px;
   color: #fff;
@@ -1222,54 +1244,71 @@ a { color: var(--brand); }
 #toast-undo { color: #0F9D8A; }
 #toast-undo[hidden] { display: none !important; }
 
-/* 「有新版本」横条：紧贴顶栏下方，从不强制更新 */
-.update-banner {
-  position: relative;
+/* 「有新版本」居中弹窗：白卡片 300 宽、圆角 20、40% 黑遮罩，从不强制更新 */
+.update-mask,
+#update-banner {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
   display: flex;
   align-items: center;
-  gap: 8px;
-  height: 44px;
-  padding: 0 12px 0 14px;
-  background: #EAF2FF;
-  color: #1F2329;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(0, 0, 0, 0.4);
 }
-.update-banner[hidden] { display: none !important; }
-.update-lead {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  gap: 8px;
+.update-mask[hidden],
+#update-banner[hidden] { display: none !important; }
+.update-card {
+  width: 300px;
+  box-sizing: border-box;
+  padding: 24px 20px 16px;
+  border-radius: 20px;
+  background: #fff;
+  text-align: center;
+  box-shadow: 0 12px 40px rgba(20, 35, 33, 0.25);
+}
+.update-title {
+  margin: 0 0 8px;
+  font-size: 17px;
+  font-weight: 700;
+  color: #1F2A37;
+  line-height: 1.4;
+}
+.update-body {
+  margin: 0 0 20px;
   font-size: 14px;
-  font-weight: 600;
-  white-space: nowrap;
-  overflow: hidden;
+  font-weight: 400;
+  color: #6B7A8F;
+  line-height: 1.4;
 }
-.update-lead .ico { color: #0F9D8A; }
-.update-lead .ico svg { width: 18px; height: 18px; }
+.update-now {
+  display: block;
+  width: 100%;
+  height: 44px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 12px;
+  background: #0F9D8A;
+  color: #fff;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.update-now:active { background: #0C8574; }
 .update-later {
-  flex-shrink: 0;
+  display: block;
+  width: 100%;
+  height: 44px;
+  margin: 4px 0 0;
+  padding: 0;
   border: 0;
   background: transparent;
   color: #8A9099;
   font-size: 14px;
-  height: 44px;
-  padding: 0 8px;
+  font-weight: 400;
   cursor: pointer;
 }
-.update-now {
-  flex-shrink: 0;
-  border: 0;
-  border-radius: 8px;
-  background: #0F9D8A;
-  color: #fff;
-  font-size: 14px;
-  font-weight: 700;
-  height: 32px;
-  padding: 0 12px;
-  cursor: pointer;
-}
-.update-now:active { background: #0C8574; }
 
 /* 版本号与更新记录（设置底部） */
 .version-block { margin-top: 4px; border-top: 1px solid var(--line); padding-top: 8px; }
@@ -1599,8 +1638,7 @@ a { color: var(--brand); }
   .top-help-btn .ico,
   .top-help-btn .ico svg { width: 22px; height: 22px; }
   .topbar .top-action,
-  .topbar .top-help-btn,
-  .top-actions.is-compact #view-toggle-btn { min-width: 44px; width: 44px; min-height: 44px; padding: 0; }
+  .topbar .top-help-btn { min-width: 44px; width: 44px; min-height: 44px; padding: 0; }
 }
 
 /* v5 补丁：住宿段文字只截断地名，日期范围保持完整；放不下 72px 的只显示横条（点它弹出完整名称）；日期条末尾留 16px */
@@ -1676,7 +1714,8 @@ a { color: var(--brand); }
   box-sizing: content-box;
   box-shadow: 0 1px 4px rgba(22, 51, 47, 0.3);
 }
-.leaflet-bottom.leaflet-right { margin-bottom: calc(66px + env(safe-area-inset-bottom, 0px)); }
+.leaflet-bottom { margin-bottom: calc(122px + env(safe-area-inset-bottom, 0px)); }
+.leaflet-bottom.leaflet-right { margin-bottom: calc(122px + env(safe-area-inset-bottom, 0px)); }
 
 /* v5.1 设置里「分享我的行程」「推荐这个工具」带一行灰色说明，点击区仍 ≥44px */
 .more-btn-sub { padding-top: 6px; padding-bottom: 6px; }
@@ -1714,7 +1753,7 @@ a { color: var(--brand); }
   .inapp-overlay { right: auto; width: var(--seg0-w); }
   #map-view .locate-btn { right: 16px; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); }
   .leaflet-bottom.leaflet-right { margin-bottom: 0; }
-  #view-toggle-btn { display: none; }
+  .view-fab { display: none; }
 }
 
 /* 宽屏（≥800px）内容列 720px 居中：定位按钮跟着地图右边缘，不要飘到地图外 */
@@ -1983,18 +2022,23 @@ body.ig-open .add-dock, body.ig-open .locate-btn { visibility: hidden; }
 }
 .ai-prog-seg.is-on { background: #0F9D8A; color: #fff; }
 .ai-steps { list-style: none; margin: 0; padding: 0; }
-.ai-step { padding: 10px 0 12px; border-top: 1px solid #E3EEEB; opacity: 0.55; }
+/* v6.1：三步始终完整显示，不灰掉、不打勾、不解锁 */
+.ai-step { padding: 10px 0 12px; border-top: 1px solid #E3EEEB; opacity: 1; }
 .ai-step:first-child { border-top: 0; }
-.ai-step.is-current, .ai-step.is-done { opacity: 1; }
 .ai-step-text { margin: 0 0 8px; font-size: 16px; font-weight: 700; line-height: 1.5; color: #1F2329; overflow-wrap: anywhere; }
-.ai-step.is-done .ai-step-text::after { content: " ✓"; color: #0F9D8A; }
 .ai-small { margin: 0 0 6px; font-size: 13px; line-height: 1.5; color: #5C636E; }
 .ai-privacy { color: #9A3412; font-weight: 700; }
 .ai-step .primary-btn { width: 100%; }
 .ai-fallback { margin-top: 10px; }
 .ai-fallback[hidden] { display: none; }
 .ai-fallback textarea { width: 100%; box-sizing: border-box; }
-.ai-step .copy-btn.is-copied { background: #0B6F62; }
+/* 复制之后「已复制」改成描边次按钮，页面上只留「粘贴并导入」实心主按钮 */
+.ai-step .copy-btn.is-copied {
+  background: #fff;
+  color: #0F9D8A;
+  border: 1.5px solid #0F9D8A;
+  box-shadow: none;
+}
 @media (prefers-reduced-motion: reduce) { .ai-prog-seg { transition: none; } }
 
 /* v5.2 撤销提示的 ✕（点按区域 44px） */
@@ -2111,8 +2155,7 @@ body.ig-open .add-dock, body.ig-open .locate-btn { visibility: hidden; }
 .name-pop-yes { min-height: 40px; padding: 0 16px; border: 0; border-radius: 10px; background: #0F9D8A; color: #fff; font-size: 14px; font-weight: 700; cursor: pointer; }
 .name-pop-self { min-height: 40px; padding: 0 10px; border: 0; background: transparent; color: #5C636E; font-size: 14px; cursor: pointer; }
 @media (max-width: 360px) {
-  .trip-name-text { max-width: 6em; }
-  .topbar .trip-dates { display: none; }
+  .trip-name-text { min-width: 0; }
 }
 
 /* ---------- v5.2 导航按钮：「带我去」+「看位置」并排，约 6:4，间距 8px，高 40px ---------- */
@@ -2658,11 +2701,14 @@ button.leg-pill { font-family: inherit; }
   white-space: nowrap;
 }
 .card-meta-main .card-time,
+.card-meta-main .card-time .co-when,
 .card-meta-main .stay-tag,
 .card-meta-main .leg-tag,
 .card-meta-main .flight-lock {
   margin: 0;
-  flex: none;
+  flex: 0 0 auto;
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 .card-meta-row .card-go-btn {
   margin-left: auto;
@@ -2839,16 +2885,45 @@ button.leg-pill { font-family: inherit; }
   cursor: pointer;
 }
 .confirm-sub { white-space: pre-line; }
+/* v6.1：删行程/条目共享的「同时删掉足迹」勾选框，夹在灰字和按钮之间 */
 .confirm-check {
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   gap: 8px;
-  margin-top: 14px;
-  font-size: 15px;
-  color: #1F2329;
+  margin: 16px 0;
+  font-size: 14px;
+  font-weight: 400;
+  color: #1F2A37;
+  line-height: 1.4;
+  text-align: left;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
 }
-.confirm-check input { width: 20px; height: 20px; margin: 0; }
+.confirm-check[hidden] { display: none !important; }
+.confirm-panel.has-check .confirm-actions { margin-top: 0; }
+.confirm-check input {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 20px;
+  height: 20px;
+  flex: 0 0 20px;
+  margin: 0;
+  box-sizing: border-box;
+  border: 1.5px solid #C9CED6;
+  border-radius: 6px;
+  background: #fff;
+  cursor: pointer;
+}
+.confirm-check input:checked {
+  background-color: #0F9D8A;
+  border-color: #0F9D8A;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'><path fill='none' stroke='%23fff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' d='M2.2 6.2l2.6 2.6L9.8 3.4'/></svg>");
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 12px 12px;
+}
 .confirm-ok.is-primary { background: var(--brand); }
 /* v6：第三个按钮（「另存一份」），三个按钮一行 */
 .confirm-actions.has-alt { grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
@@ -2861,38 +2936,28 @@ button.leg-pill { font-family: inherit; }
 .card { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
 .card input, .card textarea, .card select, .card [contenteditable] { -webkit-user-select: text; user-select: text; -webkit-touch-callout: default; }
 
-/* ---------- v6：退房卡第二行，给「带我去」留位置；宽屏放不下就先藏「· 共 X 晚」 ---------- */
-/* IT老板：第二行文字区 flex:1 + min-width:0；「带我去」钉在右边不缩。360 窄屏：「共 X 晚」改到第三行，12px #9AA6B2，不再丢掉 */
+/* ---------- v6.1：时间不换行、不收缩；当地时间 / 「· 共 N 晚」放不下就整段隐藏，绝不半截截断 ---------- */
 .card-meta-main { flex: 1; min-width: 0; overflow: hidden; }
 .card-meta-main .card-checkout-time {
-  flex: 0 1 auto;
+  display: inline-flex;
+  align-items: center;
+  flex: 1 1 auto;
   min-width: 0;
-  display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   column-gap: 4px;
-  height: 20px;
-  line-height: 20px;
   overflow: hidden;
 }
-.card-checkout-time .co-when, .card-checkout-time .co-nights, .card-checkout-time .co-dot { white-space: nowrap; }
-@media (max-width: 360px) {
-  .card-meta-row { align-items: flex-start; }
-  .card-meta-main { overflow: visible; }
-  .card-meta-main .card-checkout-time {
-    height: auto;
-    overflow: visible;
-    width: 100%;
-  }
-  .card-checkout-time .co-dot { display: none; }
-  .card-checkout-time .co-nights {
-    flex: 0 0 100%;
-    font-size: 12px;
-    font-weight: 400;
-    color: #9AA6B2;
-    line-height: 16px;
-    margin-top: 2px;
-  }
+.card-checkout-time .co-when,
+.card-checkout-time .co-nights,
+.card-checkout-time .co-dot { white-space: nowrap; }
+.card-meta-main .card-sub {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
 }
+.card-meta-main .card-sub.is-clipped { display: none; }
+.card-meta-main .tz-note { font-size: 11px; color: #8A9099; font-weight: 400; }
 
 /* ---------- v6：「全部」日程表样式 —— 每天一条日期带（UI 定稿 19:26） ---------- */
 .day-subhead {
@@ -2930,7 +2995,7 @@ button.leg-pill { font-family: inherit; }
 .icon-name { white-space: nowrap; }
 .icon-opt[data-icon="dessert"] .icon-name { font-size: 12px; letter-spacing: -0.2px; }
 /* v6：机票 / 火车 / 船时间旁的「当地时间」小字 */
-.card-meta-main .tz-note { flex: none; font-size: 11px; color: #8A9099; font-weight: 400; }
+
 /* v6：「清空本机数据」在使用说明最下面，跟上面内容隔开 */
 .help-danger { margin: 24px 0 8px; padding: 16px 16px 0; border-top: 1px solid #ECE6DC; }
 .help-danger .more-btn { width: 100%; }
@@ -2939,3 +3004,376 @@ button.leg-pill { font-family: inherit; }
 .help-sheet.help-first .help-danger { display: none; }
 /* v6：确认框要盖在使用说明（全屏）上面——清空本机数据现在从使用说明里点 */
 .sheet.confirm-sheet { z-index: 55; }
+
+
+/* ---------- v6.1：顶栏固定「最多6字 · 共 N 趟」+『＋ 新行程』（计数和按钮不截断） ---------- */
+.topbar { flex-wrap: nowrap; }
+.trip-line {
+  flex-direction: row;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: 6px;
+  overflow: hidden;
+  min-width: 0;
+  max-width: 100%;
+}
+.trip-name-row {
+  position: relative;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: 6px;
+  min-width: 0;
+  max-width: 100%;
+  flex: 1 1 auto;
+}
+.topbar .trip-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 0;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: none;
+  font-size: 12px;
+  font-weight: 600;
+  color: #4a5856;
+  text-decoration: none;
+  overflow: hidden;
+}
+.trip-name-text {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+  color: #4a5856;
+}
+.trip-count {
+  flex: 0 0 auto;
+  font-weight: 400;
+  color: #8A9099;
+  white-space: nowrap;
+}
+.trip-pill { display: inline-flex; align-items: center; min-width: 0; flex: 0 1 auto; max-width: 100%; }
+.trip-pill-ico { flex: 0 0 14px; }
+.trip-add-btn {
+  flex: 0 0 auto;
+  width: auto;
+  height: auto;
+  min-height: 28px;
+  padding: 0 2px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: #0F9D8A;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.2;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.trip-add-btn:active { background: transparent; color: #0C8574; }
+.trip-tip {
+  position: absolute;
+  left: 0;
+  top: calc(100% + 8px);
+  z-index: 30;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: #1F2A37;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.4;
+  white-space: nowrap;
+  box-shadow: 0 6px 16px rgba(31, 42, 55, 0.28);
+}
+.trip-tip::before {
+  content: "";
+  position: absolute;
+  left: 16px;
+  bottom: 100%;
+  border: 6px solid transparent;
+  border-bottom-color: #1F2A37;
+}
+@media (max-width: 360px) {
+  .topbar, .trip-name-row, .trip-line { flex-wrap: nowrap; }
+  .trip-count, .trip-add-btn { flex-shrink: 0; }
+  .trip-name-text { max-width: 6em; }
+}
+
+/* v6.1：折叠卡片店名 16px 最多两行；展开后第一行是完整地址，可长按复制 */
+.card-name { font-size: 16px; font-weight: 700; }
+.card-address {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.45;
+  color: #6B7A8F;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  -webkit-user-select: text;
+  user-select: text;
+  -webkit-touch-callout: default;
+  cursor: text;
+}
+.card-address .addr-ico {
+  flex: 0 0 14px;
+  width: 14px;
+  height: 14px;
+  margin-top: 2px;
+  color: #8A9099;
+}
+.card .card-address { -webkit-user-select: text; user-select: text; -webkit-touch-callout: default; }
+
+/* v6.1 item 20：同一天里没定时间的小标题 */
+.untimed-head {
+  margin: 8px 0 6px;
+  font-size: 12px;
+  font-weight: 400;
+  color: #9AA6B2;
+}
+
+/* v6.1：地图上「N 项还没位置 ›」，左下，避开定位按钮和 attribution */
+.map-miss {
+  position: absolute;
+  left: 12px;
+  bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  z-index: 4;
+  height: 32px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 16px;
+  background: #fff;
+  color: #C77700;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 32px;
+  box-shadow: 0 2px 8px rgba(22, 51, 47, 0.14);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.map-miss[hidden] { display: none !important; }
+/* #map-view keeps .panel-map { position:absolute; inset:0 } so the map has a height */
+
+/* 位置待确认条：仅完全没有位置时 */
+.loc-pending {
+  display: flex;
+  align-items: center;
+  margin: 8px 0 0;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: #FFF4E5;
+  color: #C77700;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+/* 统一输入框焦点 */
+input:focus, select:focus, textarea:focus,
+input:focus-visible, select:focus-visible, textarea:focus-visible {
+  outline: 1.5px solid #0F9D8A;
+  border-color: #0F9D8A;
+}
+
+/* 删除列 56px */
+.card-del { width: 56px; min-width: 56px; }
+
+/* 地图失败卡 */
+.map-fail-card {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: #F7F4EE;
+}
+.map-fail-card[hidden] { display: none !important; }
+.map-fail-inner { max-width: 280px; text-align: center; }
+.map-fail-title { margin: 0 0 8px; font-size: 17px; font-weight: 700; color: #1F2A37; }
+.map-fail-text { margin: 0 0 16px; font-size: 14px; color: #5C636E; line-height: 1.5; }
+
+.change-airport {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 0 8px;
+  height: 22px;
+  line-height: 22px;
+  border-radius: 11px;
+  background: #FFF4E5;
+  color: #C77700;
+  font-size: 12px;
+  font-weight: 700;
+  vertical-align: middle;
+}
+.card-name {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.map-osm-back {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 4;
+  height: 28px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 14px;
+  background: #fff;
+  color: #1F2A37;
+  font-size: 12px;
+  font-weight: 700;
+  box-shadow: 0 2px 8px rgba(22, 51, 47, 0.14);
+  cursor: pointer;
+}
+.map-osm-back[hidden] { display: none !important; }
+
+/* v6.1：位置待确认全页（地图 + 名称 + 地址 + 进度 +『就放这里』） */
+.import-confirm-sheet {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  background: #FAF6F0;
+  display: flex;
+  flex-direction: column;
+}
+.import-confirm-sheet[hidden] { display: none !important; }
+.import-confirm-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 16px;
+  font-size: 13px;
+  color: #6B7A8F;
+}
+.import-confirm-top b {
+  color: #1F2A37;
+  font-size: 15px;
+  font-weight: 700;
+}
+.import-confirm-map-wrap {
+  position: relative;
+  height: 280px;
+  margin: 0 16px;
+}
+/* Explicit 280px so Leaflet can measure the container on create, not only after %. */
+.import-confirm-map,
+.import-confirm-map.leaflet-container {
+  position: relative;
+  width: 100%;
+  height: 280px;
+  margin: 0;
+  border-radius: 16px;
+  overflow: hidden;
+  background: #E3EEE6;
+}
+/* Leaflet tiles keep their own size; do not stretch img (that rule was for the old static map). */
+#import-confirm-sheet .leaflet-bottom,
+#import-confirm-sheet .leaflet-bottom.leaflet-right {
+  margin-bottom: 0;
+}
+/* 0×0 anchor at the wrap centre = visual pin tip = Leaflet getCenter after invalidateSize. */
+.import-confirm-pin-anchor {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 0;
+  height: 0;
+  z-index: 650;
+  pointer-events: none;
+}
+/* 28px teardrop: tip is 14√2 below the box centre after rotate(-45deg). */
+.import-confirm-pin {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 28px;
+  height: 28px;
+  margin: 0;
+  background: #0F9D8A;
+  border-radius: 50% 50% 50% 0;
+  transform: translate(-50%, -50%) translateY(-19.79898987322px) rotate(-45deg);
+  box-shadow: 0 3px 8px rgba(0,0,0,.25);
+  pointer-events: none;
+}
+.import-confirm-pin::after {
+  content: "";
+  position: absolute;
+  left: 9px;
+  top: 9px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #fff;
+}
+.import-confirm-hint {
+  margin: 8px 16px 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: #6B7A8F;
+}
+.import-confirm-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 0 0 calc(16px + env(safe-area-inset-bottom, 0px));
+  min-height: 0;
+}
+.import-confirm-info { padding: 18px 20px 0; }
+.import-confirm-title {
+  margin: 0 0 10px;
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.3;
+  color: #1F2A37;
+}
+.import-confirm-name {
+  font-size: 16px;
+  font-weight: 700;
+  color: #1F2A37;
+}
+.import-confirm-addr {
+  margin-top: 4px;
+  font-size: 13px;
+  color: #6B7A8F;
+  line-height: 1.5;
+}
+.import-confirm-actions { margin-top: auto; padding: 16px 16px 0; }
+.import-confirm-panel .btn,
+.import-confirm-panel .btn.primary,
+#import-confirm-sheet .btn.primary,
+#loc-pending-here {
+  display: block;
+  width: 100%;
+  height: 48px;
+  margin: 0;
+  border: 0;
+  border-radius: 24px;
+  background: #0F9D8A;
+  color: #fff;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.import-confirm-panel .text-link-btn,
+#loc-pending-skip {
+  display: block;
+  margin: 12px auto 0;
+  border: 0;
+  background: none;
+  color: #8A9099;
+  font-size: 14px;
+  cursor: pointer;
+}

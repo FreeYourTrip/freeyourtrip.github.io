@@ -22,7 +22,7 @@
   var MIN_INTERVAL_MS = 1000;
   var REQUEST_TIMEOUT_MS = 8000;
   /* v5.2：没位置时「带我去」不一定能用，别再说「不影响导航」 */
-  var FRIENDLY_NOT_FOUND = "暂时找不到位置，可以先直接添加，之后再补地址";
+  var FRIENDLY_NOT_FOUND = "没搜到，换个名字试试，或点『找不到？换个方式加』";
   var lastRequestAt = 0;
   var chain = Promise.resolve();
   var amapLoader = null;
@@ -252,6 +252,37 @@
         if (!res.ok) {
           throw new Error("timeout-or-http");
         }
+        return res.json();
+      }).then(function (data) {
+        var results = mapResults(data);
+        cacheSet(cacheKey, results);
+        return results;
+      });
+    });
+  }
+
+  /**
+   * Nominatim 结构化查询：只发 street / city / postalcode，不带店名。
+   * 导入必须走这一条，禁止用 q=店名。
+   */
+  function nominatimStructured(parts, opts) {
+    parts = parts || {};
+    var street = String(parts.street || "").trim();
+    var city = String(parts.city || "").trim();
+    var postal = String(parts.postalcode || "").trim();
+    if (!street && !city && !postal) return Promise.resolve([]);
+    var cacheKey = "struct:" + street + "|" + city + "|" + postal;
+    var hit = cacheGet(cacheKey);
+    if (hit && Array.isArray(hit.results)) return Promise.resolve(hit.results);
+    return enqueue(function () {
+      var url = NOMINATIM + "?format=jsonv2&limit=5&addressdetails=1&namedetails=1&accept-language=" + encodeURIComponent("zh,en");
+      if (street) url += "&street=" + encodeURIComponent(street);
+      if (city) url += "&city=" + encodeURIComponent(city);
+      if (postal) url += "&postalcode=" + encodeURIComponent(postal);
+      return fetchWithTimeout(url, {
+        headers: { Accept: "application/json", "Accept-Language": "zh,en" }
+      }).then(function (res) {
+        if (!res.ok) throw new Error("timeout-or-http");
         return res.json();
       }).then(function (data) {
         var results = mapResults(data);
@@ -543,7 +574,7 @@
       Math.cos((a.lat * Math.PI) / 180) * Math.cos((b.lat * Math.PI) / 180) * Math.sin(dLng / 2) * Math.sin(dLng / 2);
     return 2 * R * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x));
   }
-  var FAR_KM = 30;
+  var FAR_KM = 50; /* v6.1：当天其他点 50 公里内才自动认 */
 
   function chosenFrom(r) {
     return { lat: r.lat, lng: r.lng, displayName: r.displayName, city: r.city || "", source: r.source || "nominatim" };
@@ -631,7 +662,7 @@
       ).then(function (parts) {
         parts.forEach(function (part) {
           if (!part || part.error) {
-            if (!out.message && part && part.error) out.message = String(part.error.message || part.error);
+            if (!out.message && part && part.error) out.message = FRIENDLY_NOT_FOUND;
             return;
           }
           var list = part.list || [];
@@ -697,6 +728,28 @@
     }
     var name = (item.nameZh || item.nameEn || "").trim();
     var addr = (item.address && String(item.address).trim()) || "";
+    /* v6.1 导入：统一走 Lookup（地点库 → 结构化地址 → 邮编 → 附带的点）。绝不按店名搜。 */
+    if (root.Lookup && typeof root.Lookup.lookup === "function") {
+      return root.Lookup.lookup(item, ctx).then(function (res) {
+        if (res && res.needsConfirm) {
+          out.status = "none";
+          out.chosen = null;
+          out.message = "";
+          return out;
+        }
+        if (res && isFinite(res.lat) && isFinite(res.lng)) {
+          out.chosen = { lat: res.lat, lng: res.lng, displayName: res.address || addr || name, source: res.source || "lookup" };
+          out.status = "ok";
+          out.autoLocated = false;
+          item.locSource = res.source || "";
+          return out;
+        }
+        out.status = "none";
+        out.message = "";
+        return out;
+      });
+    }
+
     var queries = [];
     if (name && addr) pushQuery(queries, name + ", " + addr);
     function stripArticle(n) {
@@ -750,27 +803,44 @@
 
     return searchNext(0).then(function (list) {
       out.candidates = list;
-      /* v5.2：只有一个结果但名字对不上（比如搜出来是楼里的某个单元、或别处同名的店）时不自动选，让用户确认 */
-      if (list.length === 1 && name && !nameMatches(name, list[0])) {
-        out.chosen = null;
-        out.status = "ambiguous";
-        out.message = "找到的位置可能不对，请确认地点";
-        return out;
+      /* v6.1：唯一且对得上才自动用；拿不准（多个、太远、名字或城市对不上）才问。 */
+      var F = root.FixCand;
+      var itemForMatch = item;
+      var classified = null;
+      if (F && F.classifyCandidates) {
+        classified = F.classifyCandidates(itemForMatch, list, ctx);
       }
-      if (list.length === 1 && ctx.bias && isFinite(ctx.bias.lat) && kmBetween(ctx.bias, list[0]) > FAR_KM) {
+      if (classified && classified.kind === "auto") {
+        out.candidates = classified.list;
+        out.chosen = chosenFrom(classified.chosen);
+        out.status = "ok";
+        out.autoLocated = true;
+      } else if (classified && classified.kind === "far") {
+        out.candidates = classified.list;
         out.chosen = null;
         out.status = "far";
-        out.message = "找到的位置离当天其他地点很远，请确认地点";
-        return out;
-      }
-      if (list.length === 1) {
-        out.chosen = chosenFrom(list[0]);
-        out.status = "ok";
-      } else if (list.length > 1) {
-        /* v5.3（IT老板）：多个结果绝不自动用第一个 */
+        out.message = "";
+      } else if (classified && classified.kind === "ask") {
+        out.candidates = classified.list;
         out.chosen = null;
         out.status = "ambiguous";
-        out.message = "找到 " + list.length + " 个候选，请确认地点";
+        out.message = "";
+      } else if (list.length === 1 && name && !nameMatches(name, list[0])) {
+        out.chosen = null;
+        out.status = "ambiguous";
+        out.message = "";
+      } else if (list.length === 1 && ctx.bias && isFinite(ctx.bias.lat) && kmBetween(ctx.bias, list[0]) > FAR_KM) {
+        out.chosen = null;
+        out.status = "far";
+        out.message = "";
+      } else if (list.length === 1) {
+        out.chosen = chosenFrom(list[0]);
+        out.status = "ok";
+        out.autoLocated = true;
+      } else if (list.length > 1) {
+        out.chosen = null;
+        out.status = "ambiguous";
+        out.message = "";
       } else {
         out.status = "none";
         out.message = FRIENDLY_NOT_FOUND;
@@ -957,6 +1027,7 @@
     biasArea: biasArea,
     CACHE_KEY: CACHE_KEY,
     nominatimSearch: nominatimSearch,
+    nominatimStructured: nominatimStructured,
     searchAddress: searchAddress,
     amapSearch: amapSearch,
     amapConfigured: amapConfigured,

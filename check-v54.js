@@ -32,8 +32,8 @@ function check(name, fn) {
 
 check("version is v5.4 (or v6, which carries v5.4) and sw cache is v18", function () {
   /* v6 合并 v5.4：版本号往前走，v5.4 的行为都还在 */
-  assert.ok(["v5.4", "v6", "v6.0"].indexOf(V.APP_VERSION) !== -1);
-  assert.ok(sw.indexOf('"xingcheng-map-shell-v18"') !== -1);
+  assert.ok(["v5.4", "v6", "v6.0", "v6.1"].indexOf(V.APP_VERSION) !== -1);
+  assert.ok(sw.indexOf('"xingcheng-map-shell-v19"') !== -1);
   assert.ok(sw.indexOf("xingcheng-map-shell-v16") === -1);
 });
 
@@ -119,21 +119,22 @@ check("pill text formatting, 300km cutoff, flight gap, missing coords, last-stop
   const nav = L.navPillSpec(london, near);
   assert.strictEqual(nav.show, true);
   assert.strictEqual(nav.kind, "nav");
-  assert.ok(/^直线 \d+ 米 · 路线 ›$/.test(nav.label), nav.label);
+  assert.strictEqual(nav.label, "↓ 怎么去");
   const far = L.navPillSpec(london, paris);
-  assert.strictEqual(far.show, false);
-  assert.strictEqual(far.reason, "far");
-  assert.ok(far.km > 300);
+  assert.strictEqual(far.show, true, "far same-day legs still get 怎么去");
+  assert.strictEqual(far.label, "↓ 怎么去");
   const gap1 = L.navPillSpec(london, flight);
-  assert.strictEqual(gap1.show, false);
-  assert.strictEqual(gap1.reason, "flight");
+  assert.strictEqual(gap1.show, true, "place → flight departure gets 怎么去");
+  assert.strictEqual(gap1.label, "↓ 怎么去");
   const gap2 = L.navPillSpec(flight, near);
-  assert.strictEqual(gap2.show, false);
+  assert.strictEqual(gap2.show, true, "flight arrival → place gets 怎么去");
   const fix = L.navPillSpec(london, missing);
-  assert.strictEqual(fix.show, true);
-  assert.strictEqual(fix.kind, "fix");
-  assert.strictEqual(fix.label, "补位置 ›");
-  assert.strictEqual(fix.fixId, "d");
+  assert.strictEqual(fix.show, true, "name-only dest still navigable");
+  assert.strictEqual(fix.kind, "nav");
+  assert.strictEqual(fix.label, "↓ 怎么去");
+  const blank = { id: "e", type: "place", date: "2026-12-04" };
+  const hidden = L.navPillSpec(london, blank);
+  assert.strictEqual(hidden.show, false, "no name, address or coords → no pill");
   const first = L.firstOfDayPill(london);
   assert.ok(!first.show, "no pill before the first stop");
   const firstFix = L.firstOfDayPill(missing);
@@ -161,7 +162,8 @@ check("pill text formatting, 300km cutoff, flight gap, missing coords, last-stop
   assert.ok(!checkoutTrail.show, "checkout day hides 回酒店");
   const noHotel = L.trailingHotelPill([london], [london], "2026-12-04");
   assert.ok(!noHotel.show, "no-hotel night hides 回酒店");
-  assert.ok(/spec\.label \|\| "补位置 ›"/.test(tl), "fix pills use the computed label including 回酒店");
+  assert.ok(!/补位置 ›/.test(tl), "no leftover 补位置 pill hook");
+  assert.ok(/!String\(spec\.label \|\| ""\)\.trim\(\)/.test(tl), "empty-label pills render nothing");
   assert.ok(/leg-pill/.test(css) && /height: 28px/.test(css) && /#6B7A8F/.test(css) && /#D9E2E0/.test(css));
 });
 
@@ -291,8 +293,8 @@ check("checkout card: two views from one record, default time, lock, no 回酒�
   assert.deepStrictEqual(dayOut.map((it) => it.id), ["h1::checkout", "f1"], "05:00 checkout sorts before 08:00 flight");
   const withEarly = L.expandViewItems([hotel, flightEarly, place]);
   const dayEarly = L.sortedItems(withEarly).filter((it) => L.itemDisplayDate(it) === "2026-12-06");
-  assert.strictEqual(dayEarly[0].id, "h1::checkout", "empty checkout time sorts at the start of the day");
-  assert.strictEqual(dayEarly[0].displayTime, "");
+  assert.strictEqual(dayEarly[dayEarly.length - 1].id, "h1::checkout", "empty checkout time sorts after timed items (没定时间)");
+  assert.strictEqual(dayEarly[dayEarly.length - 1].displayTime, "");
   hotel.checkOutTime = "15:00";
   assert.strictEqual(L.checkoutTimeInfo(hotel, [flight8]).time, "15:00", "user-set checkOutTime always wins");
   delete hotel.checkOutTime;
@@ -300,7 +302,8 @@ check("checkout card: two views from one record, default time, lock, no 回酒�
   const outCard = viewsOut.find((v) => v.viewRole === "checkout");
   const trailOut = L.trailingHotelPill([outCard, flight8], [hotel, flight8], "2026-12-06");
   assert.ok(!trailOut.show, "checkout card does not create a 回酒店 pill");
-  assert.ok(tl.indexOf("入住和退房两张都删掉吗？") !== -1 && tl.indexOf('okText: "都删"') !== -1);
+  assert.ok(tl.indexOf("入住和退房会一起删掉，删除后 5 秒内可以撤销。") !== -1, "hotel delete explains both cards in one line");
+  assert.ok(tl.indexOf("入住和退房两张都删掉吗？") === -1 && tl.indexOf('okText: "都删"') === -1, "hotel delete uses the shared 删除 button");
   assert.ok(/cardIsCheckout/.test(tl) && /有固定时间，不能拖/.test(tl), "checkout card uses the same lock as flights");
   assert.ok(/stay-tag/.test(tl) && /几点退房？/.test(tl) && / · 共 /.test(tl));
   assert.ok(/card-go-btn/.test(tl), "checkout card can still have 带我去");

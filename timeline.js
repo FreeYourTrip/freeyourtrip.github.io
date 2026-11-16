@@ -362,6 +362,23 @@
     return item.nameZh || item.nameEn || "未命名";
   }
 
+  /** 折叠卡片标题：只改展示，不改存储。店名去掉后面单独的城市；没店名就显示门牌+街道。 */
+  function cardHeading(item) {
+    if (item.type === "flight" || isGround(item)) return itemTitle(item);
+    if (window.Lookup && Lookup.displayTitleForItem) {
+      var t = Lookup.displayTitleForItem(item);
+      if (t) return t;
+    }
+    return itemTitle(item);
+  }
+
+  function cardAddressRowHtml(address) {
+    var a = String(address || "").trim();
+    if (!a) return "";
+    var ico = '<svg class="addr-ico" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 14.5s4.5-4.2 4.5-7.7A4.5 4.5 0 0 0 3.5 6.8C3.5 10.3 8 14.5 8 14.5z"/><circle cx="8" cy="6.8" r="1.6"/></svg>';
+    return '<p class="card-address" data-copy-address="1">' + ico + '<span>' + escapeHtml(a) + "</span></p>";
+  }
+
   function cardTarget(item) {
     if (window.Legs && isTransit(item)) return Legs.endpointFor(item, "dest");
     return {
@@ -664,6 +681,31 @@
     });
   }
 
+  function trimTripName(name) {
+    var t = String(name || "");
+    var chars = Array.from(t);
+    if (chars.length <= 6) return t;
+    return chars.slice(0, 6).join("") + "…";
+  }
+
+  var TRIP_TIP_KEY = "wishlist-map-trip-tip-v1";
+  function maybeShowTripTip() {
+    var tip = $("trip-tip");
+    if (!tip) return;
+    try {
+      if (localStorage.getItem(TRIP_TIP_KEY) === "1") {
+        tip.hidden = true;
+        return;
+      }
+    } catch (err) {}
+    tip.hidden = false;
+  }
+  function dismissTripTip() {
+    var tip = $("trip-tip");
+    if (tip) tip.hidden = true;
+    try { localStorage.setItem(TRIP_TIP_KEY, "1"); } catch (err) {}
+  }
+
   function updateTopBar() {
     var trip = currentTrip();
     var nameBtn = $("trip-name-btn");
@@ -673,19 +715,17 @@
     /* 还是默认名（也没被用户亲手定成这个名字）时，胶囊里直接写「点这里起名」+ 铅笔 */
     var isDefault = (window.TripName ? TripName.isDefaultName(name) : name === "我的行程") &&
       lsGet(window.TripName ? TripName.RENAMED_KEY : "") !== "1";
-    if (nameText) nameText.textContent = isDefault && window.TripName ? TripName.COPY.hint : name;
+    var shown = isDefault && window.TripName ? TripName.COPY.hint : trimTripName(name);
+    if (nameText) nameText.textContent = shown;
     if ($("trip-pill")) $("trip-pill").classList.toggle("is-default", isDefault);
     if (nameBtn) nameBtn.setAttribute("aria-label", isDefault ? "行程还没有名字，点一下起名" : "行程名称：" + name + "，点一下可以改");
-    var range = tripDateRangeText((trip && trip.items) || []);
+    var countEl = $("trip-count");
+    if (countEl) countEl.textContent = " · 共 " + (trips || []).length + " 趟";
     if (dates) {
-      if (range) {
-        dates.hidden = false;
-        dates.textContent = range;
-      } else {
-        dates.hidden = true;
-        dates.textContent = "";
-      }
+      dates.hidden = true;
+      dates.textContent = "";
     }
+    maybeShowTripTip();
     if (window.TripCalendar) {
       renderStrip((trip && trip.items) || []);
       return;
@@ -725,7 +765,7 @@
   var NAV_COPY = {
     go: "带我去",
     look: "看位置",
-    noAddr: "待补地址",
+    noAddr: "位置待确认",
     fixLink: "补上地址 ›",
     far: "这两站之间要坐飞机或火车",
     transitTip: "公交算不出来就换成驾车试试",
@@ -810,17 +850,18 @@
     );
   }
 
-  function transferHtml(label) {
+  function transferHtml(label, changeAirport) {
+    var badge = changeAirport ? '<span class="change-airport">要换机场</span>' : "";
     return (
       '<div class="conn-slot">' +
       '<span class="dash-seg" aria-hidden="true"></span>' +
       '<div class="transfer-bar" aria-label="' +
-      escapeHtml(label) +
+      escapeHtml(label) + (changeAirport ? "，要换机场" : "") +
       '">' +
       ico("transfer") +
       "<span>" +
       escapeHtml(label) +
-      "</span></div>" +
+      "</span>" + badge + "</div>" +
       '<span class="dash-seg" aria-hidden="true"></span>' +
       "</div>"
     );
@@ -856,7 +897,7 @@
     var when = i === -1 ? label : label.slice(0, i);
     var nights = i === -1 ? "" : label.slice(i + 3);
     return '<span class="card-time card-checkout-time"><span class="co-when">' + escapeHtml(when) + "</span>" +
-      (nights ? '<span class="co-dot">· </span><span class="co-nights">' + escapeHtml(nights) + "</span>" : "") + "</span>";
+      (nights ? '<span class="card-sub co-sub"><span class="co-dot">· </span><span class="co-nights">' + escapeHtml(nights) + "</span></span>" : "") + "</span>";
   }
 
   function isPendingItem(item) {
@@ -891,8 +932,8 @@
     return links.href || links.google || "";
   }
   function cardGoBtnHtml(item) {
-    /* v6：火车 / 船 / 大巴跟机票一样不放导航（isTransit） */
-    if (!item || isTransit(item)) return "";
+    /* v6.1：机票 / 火车 / 大巴 / 船也放『带我去』，导航到出发机场或车站（不带起点） */
+    if (!item) return "";
     var href = cardGoHref(item);
     if (!href) return "";
     return (
@@ -925,9 +966,11 @@
     var open = expanded[item.id] ? " is-open" : "";
     var extra = [];
     var needsAddr = !isTransit(item) && itemUnlocated(item);
-    /* v5.3：待补的卡片，地址那一行换成「是这里吗？」候选 */
-    if (needsAddr) extra.push(candBoxHtml(item));
-    else if (item.address) extra.push("<p>" + escapeHtml(item.address) + "</p>");
+    /* 展开后第一行才是完整地址；折叠卡不显示地址。没位置只留一行「位置待确认 ›」，不再叠其他提示。 */
+    if (!isTransit(item) && item.address) extra.push(cardAddressRowHtml(item.address));
+    var locPendingHtml = needsAddr
+      ? '<button type="button" class="loc-pending" data-fix-loc="' + escapeHtml(item.id) + '">位置待确认 ›</button>'
+      : "";
     if (item.note) extra.push("<p>" + escapeHtml(item.note) + "</p>");
     if (item.confirmationNo) extra.push("<p>确认号 " + secretToggleHtml(item.confirmationNo) + "</p>");
     if (item.seat) extra.push("<p>座位 " + escapeHtml(item.seat) + "</p>");
@@ -939,13 +982,8 @@
       var pairInfo = flightPairs[item.id];
       extra.push("<p>" + (pairInfo.role === "out" ? "返程 " : "去程 ") + escapeHtml(formatMd(pairInfo.otherDate)) + "</p>");
     }
-    if (itemUnlocated(item) && !needsAddr) {
-      extra.push(
-        '<button type="button" class="pick-location" data-pick="' + escapeHtml(item.id) + '">选一下位置</button>'
-      );
-    }
     /* v5.4：展开后只放「看位置 / 补上地址」，「带我去」在第二行右侧 */
-    if (!(needsAddr && candShowing(item))) extra.push(cardLookHtml(item));
+    if (!needsAddr) extra.push(cardLookHtml(item));
     var isCheckout = !!(window.Legs && Legs.isCheckoutView && Legs.isCheckoutView(item));
     var tagHtml = "";
     if (window.Legs && Legs.hasValidHotelStay && Legs.hasValidHotelStay(item)) {
@@ -958,7 +996,7 @@
     var metaMain = tagHtml +
       (timeLabel ? (isCheckout ? checkoutTimeHtml(timeLabel) : '<span class="card-time">' + escapeHtml(timeLabel) + "</span>") : "") +
       /* v6：机票、火车、船的时间都是各自当地时间，旁边小字注明 */
-      (timeLabel && isFixedTime(item) ? '<span class="tz-note">' + TZ_NOTE + "</span>" : "") +
+      (timeLabel && isFixedTime(item) ? '<span class="card-sub tz-note">' + TZ_NOTE + "</span>" : "") +
       (lockText ? flightLockSvg(lockText) : "");
     var goBtn = cardGoBtnHtml(item);
     var metaHtml = "";
@@ -1007,7 +1045,7 @@
       "</div>" +
       "<div class=\"card-copy\">" +
       '<div class="card-name-line"><h3 class="card-name">' +
-      escapeHtml(itemTitle(item)) +
+      escapeHtml(cardHeading(item)) +
       "</h3>" +
       '<button type="button" class="expand-btn" data-expand="' +
       escapeHtml(item.id) +
@@ -1018,9 +1056,8 @@
       "</button></div>" +
       metaHtml +
       pendingLine +
-      (needsAddr
-        ? '<button type="button" class="fix-addr" data-fix="' + escapeHtml(item.id) + '" aria-label="' + escapeHtml(DIRECT_COPY.fixBtn + "：" + itemTitle(item)) + '"><span class="fix-dot" aria-hidden="true"></span>' + escapeHtml(DIRECT_COPY.fixBtn) + "</button>"
-        : justFixed[item.id]
+      locPendingHtml +
+      (justFixed[item.id] && !needsAddr
         ? '<span class="fixed-pill" role="status"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 8.5l3 3 6-7"/></svg>' + escapeHtml(FC_COPY.fixed || "已补上") + "</span>"
         : "") +
       "</div>" +
@@ -1052,19 +1089,12 @@
   /* v5.4：相邻两站之间画直线距离胶囊；航班之间仍用转机条。 */
   function connectorSlot(conn) {
     if (!conn) return "";
-    if (conn.kind === "transfer") return transferHtml(conn.label);
+    if (conn.kind === "transfer") return transferHtml(conn.label, conn.changeAirport);
     return "";
   }
 
   function legPillHtml(spec) {
-    if (!spec || !spec.show) return "";
-    if (spec.kind === "fix") {
-      return (
-        '<div class="conn-slot has-leg-pill">' +
-        '<button type="button" class="leg-pill" data-fix="' + escapeHtml(spec.fixId) + '">' + escapeHtml(spec.label || "补位置 ›") + "</button>" +
-        "</div>"
-      );
-    }
+    if (!spec || !spec.show || !String(spec.label || "").trim()) return "";
     var origin = spec.from || null;
     var dest = spec.to;
     var href = "#";
@@ -1147,6 +1177,18 @@
     var h = top + chips.offsetHeight;
     try { document.documentElement.style.setProperty("--subhead-top", h + "px"); } catch (err) {}
   }
+  /* v6.1：时间不换行、不收缩；后面的小字（当地时间、· 共 N 晚）放不下就整段藏起来，绝不半截截断。 */
+  function fitCardMetaSubs(root) {
+    root = root || $("timeline") || document;
+    var nodes = root.querySelectorAll(".card-meta-main .card-sub");
+    Array.prototype.forEach.call(nodes, function (el) {
+      el.classList.remove("is-clipped");
+    });
+    Array.prototype.forEach.call(nodes, function (el) {
+      if (el.scrollWidth > el.clientWidth + 1) el.classList.add("is-clipped");
+    });
+  }
+
   function renderList() {
     updateFixBanner();
     var root = $("timeline");
@@ -1220,13 +1262,20 @@
         return;
       }
       html += '<div class="day-rail">';
+      var untimedHeadDone = false;
       g.items.forEach(function (item, i) {
+        var timed = window.Legs && Legs.itemHasTime ? Legs.itemHasTime(item) : true;
+        if (!timed && !untimedHeadDone) {
+          html += '<h4 class="untimed-head">没定时间</h4>';
+          untimedHeadDone = true;
+        }
         html += cardHtml(item, i === 0 ? null : connectorInto(connectors, item.id));
         var next = g.items[i + 1];
         if (next) {
           if (item.type === "flight" && next.type === "flight") {
             html += connectorSlot(findConnector(connectors, item.id, next.id));
-          } else if (window.Legs && Legs.navPillSpec) {
+          }
+          if (window.Legs && Legs.navPillSpec) {
             html += legPillHtml(Legs.navPillSpec(item, next));
           }
         } else if (selectedDay === "all") {
@@ -1249,12 +1298,19 @@
     syncStickyOffset();
     bindSecretToggles(root);
     bindListEvents(root);
+    fitCardMetaSubs(root);
+  }
+
+  function currentViewItems() {
+    var items = (currentTrip() && currentTrip().items) || [];
+    if (window.Legs && Legs.viewItems) return Legs.viewItems(items, selectedDay);
+    return { visible: items, count: (items || []).length, unlocated: [], pins: [], days: [], undated: [], pending: [] };
   }
 
   function updateListHead(items) {
     var count = $("list-count");
     var btn = $("clear-all-btn");
-    var n = (items || []).length;
+    var n = (window.Legs && Legs.viewItems) ? Legs.viewItems(items, selectedDay).count : (items || []).length;
     if (count) count.textContent = n ? "共 " + n + " 项" : "";
     if (btn) {
       btn.disabled = !n;
@@ -1370,6 +1426,13 @@
         openFixAddress(fix.getAttribute("data-fix"));
         return;
       }
+      var fixLoc = ev.target.closest && ev.target.closest("[data-fix-loc]");
+      if (fixLoc) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        openLocPending(fixLoc.getAttribute("data-fix-loc"));
+        return;
+      }
       var pick = ev.target.closest && ev.target.closest("[data-pick]");
       if (pick) {
         ev.preventDefault();
@@ -1439,7 +1502,7 @@
   }
 
   function interactiveFrom(el) {
-    return el && el.closest && el.closest("a, button, input, textarea, select, .leg-pill, .drag-tip, .nav-fix-link");
+    return el && el.closest && el.closest("a, button, input, textarea, select, .leg-pill, .drag-tip, .nav-fix-link, .card-address");
   }
 
   function bindCardDrag(root) {
@@ -1454,7 +1517,7 @@
       var t = ev.target;
       if (t && t.nodeType === 3) t = t.parentElement;
       if (!t || !t.closest) return;
-      if (t.closest("input, textarea, select, [contenteditable]")) return;
+      if (t.closest("input, textarea, select, [contenteditable], .card-address")) return;
       if (t.closest(".card")) ev.preventDefault();
     };
     root.addEventListener("contextmenu", noNative);
@@ -1730,7 +1793,7 @@
   }
 
   /** 拖到别的日子（或「还没定哪天」）：改日期，按落点排好；底部「已移到 11月17日」+ 撤销 5 秒 */
-  var MOVE_COPY = { moved: "已移到 ", undated: "已放进『还没定哪天』" };
+  var MOVE_COPY = { moved: "已移到 ", undated: "已放进「还没定哪天」" };
   function moveItemToDay(id, day, orderedIds) {
     var trip = currentTrip();
     var item = findItem(id);
@@ -1806,10 +1869,9 @@
     var isMap = currentView === "map";
     var listView = $("list-view");
     var mapView = $("map-view");
-    var btn = $("view-toggle-btn");
     if (listView) listView.hidden = isMap;
     if (mapView) mapView.hidden = !isMap;
-    if (btn) paintTopActions();
+    paintTopActions();
     if (isMap) {
       initTripMap();
       renderMap();
@@ -1824,10 +1886,14 @@
     var el = $("trip-map");
     if (!el) return;
     tripMap = L.map(el, { scrollWheelZoom: true, attributionControl: true });
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      maxZoom: 19,
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-    }).addTo(tripMap);
+    var host = el.parentElement || el;
+    if (window.MapTiles && MapTiles.attach) MapTiles.attach(tripMap, host);
+    else {
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        maxZoom: 19,
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+      }).addTo(tripMap);
+    }
     tripMap.setView([51.5074, -0.1278], 3);
   }
 
@@ -1837,28 +1903,29 @@
       tripMap.removeLayer(m);
     });
     tripMarkers = [];
-    var rows = Legs.numberedList(visibleItems());
+    var view = currentViewItems();
+    var rows = (view && view.pins) || (Legs.numberedList ? Legs.numberedList(visibleItems()) : []);
     var bounds = [];
     rows.forEach(function (row) {
       var pt = row.marker;
       if (!pt || typeof pt.lat !== "number" || typeof pt.lng !== "number") return;
+      var ll = (window.MapTiles && MapTiles.displayLatLng) ? MapTiles.displayLatLng(pt.lat, pt.lng) : pt;
       var meta = typeStyle(row.item);
+      var num = row.n ? '<span class="n">' + row.n + "</span>" : "";
       var html =
         '<div class="map-marker" style="' +
-        /* 「其他」：炭黑图标 + 沙色底；其余：彩色底白图标 */
         (meta.category === "other" ? "background:" + meta.tint + ";color:" + meta.color : "background:" + meta.color) +
         '">' +
         ico(meta.icon) +
-        '<span class="n">' +
-        row.n +
-        "</span></div>";
+        num +
+        "</div>";
       var icon = L.divIcon({
         className: "map-marker-wrap",
         html: html,
         iconSize: [36, 36],
         iconAnchor: [18, 18]
       });
-      var marker = L.marker([pt.lat, pt.lng], { icon: icon, title: itemTitle(row.item) });
+      var marker = L.marker([ll.lat, ll.lng], { icon: icon, title: cardHeading(row.item) });
       marker.on("click", function () {
         expanded[row.item.id] = true;
         setView("list");
@@ -1868,10 +1935,37 @@
       });
       marker.addTo(tripMap);
       tripMarkers.push(marker);
-      bounds.push([pt.lat, pt.lng]);
+      bounds.push([ll.lat, ll.lng]);
     });
     if (bounds.length === 1) tripMap.setView(bounds[0], 13);
     else if (bounds.length > 1) tripMap.fitBounds(bounds, { padding: [40, 40] });
+    paintMapMiss(view);
+  }
+
+  function paintMapMiss(view) {
+    var miss = $("map-miss");
+    if (!miss) return;
+    var list = (view && view.unlocated) || [];
+    if (!list.length) {
+      miss.hidden = true;
+      miss.textContent = "";
+      return;
+    }
+    miss.hidden = false;
+    miss.textContent = list.length + " 项还没位置 ›";
+    miss.onclick = function () {
+      var first = list[0];
+      setView("list");
+      renderList();
+      setTimeout(function () {
+        var el = document.querySelector(first ? '[data-item="' + first.id + '"]' : ".card");
+        if (el) {
+          el.classList.add("is-flash");
+          if (el.scrollIntoView) el.scrollIntoView({ block: "center" });
+          setTimeout(function () { el.classList.remove("is-flash"); }, 1600);
+        }
+      }, 80);
+    };
   }
 
   /** 双屏设备（左右两块屏）：列表和地图同时显示，地图在右屏。其他设备返回 false，行为不变。 */
@@ -1922,7 +2016,7 @@
       cards: [
         /* 第 1 层：广告文案宣传大师定稿 */
         { key: "add", title: "添加", text: "点『＋ 添加』，选加机票、酒店还是地点，搜到后点一下就加好了" },
-        { key: "ai", title: "截图交给 AI", text: "机票、酒店截图丢给任意 AI，自动整理成行程" },
+        { key: "ai", title: "截图交给 AI", text: "机票、酒店、小红书和抖音攻略，几张截图一起丢给 AI，粘贴一次全导进来" },
         { key: "map", title: "带我去", text: "卡片右边的『带我去』，从你现在的位置出发；两站中间的『路线』，从上一站去下一站", line: "长按卡片拖动，能换顺序，也能拖到别的日子" }
       ]
     },
@@ -1931,21 +2025,21 @@
       title: "常用",
       items: [
         { key: "day", icon: "calendar", title: "看行程", text: "顶部日期条左右滑，点哪天就看哪天" },
-        { key: "edit", icon: "trash", title: "改和删", text: "点开卡片就能改。删错了，马上点底部的「撤销」就能恢复" },
-        { key: "map", icon: "map", title: "地图", text: "点顶部的地图图标，所有地点一眼看全。右下角的按钮能定位到你自己" },
+        { key: "edit", icon: "trash", title: "改和删", text: "点开卡片就能改。删错了，马上点底部的『撤销』就能恢复" },
+        { key: "map", icon: "map", title: "地图", text: "点底部的『地图』，所有地点一眼看全，点『列表』回来。右下角的按钮能定位到你自己" },
         { key: "share", icon: "share", title: "分享我的行程", text: "发给同行的人，订单号和座位会自动隐藏" },
         { key: "install", icon: "device", title: "放到桌面", text: "像 App 一样，点图标就打开" },
-        { key: "rename", icon: "pencil", title: "改行程名", text: "点左上角的名字或铅笔" },
+        { key: "rename", icon: "pencil", title: "多个行程", text: "点『＋ 新行程』再建一趟；点左上角的行程名，能切换、改名、删除" },
         /* v5.3 定稿 */
-        { key: "fixplace", icon: "pin", title: "补位置", text: "卡片上写着『待补地址』的，点开从候选里选对的那个。都不对，就在地图上长按选点。" }
+        { key: "fixplace", icon: "pin", title: "补位置", text: "卡片上写着「位置待确认」的，点它就能补，不补也不影响用" }
       ]
     },
     faq: {
       title: "需要时再看",
       items: [
         { q: "换手机", a: "在设置里点『完整备份』，到新手机上点『导入』" },
-        { q: "更新", a: "看到的还是旧版，就把网页彻底关掉再打开" },
-        { q: "隐私", a: "行程只存在你手机里，没有账号，我们看不到。搜索和导航时，地名、地址和大概位置会发给地图服务" },
+        { q: "更新", a: "看到「有新版本」就点『立即更新』，行程不会丢。还是旧版，就把网页彻底关掉再打开" },
+        { q: "隐私", a: "行程只存在你手机里，没有账号，我们看不到。看地图、找位置和导航时，看的区域、地址和邮编会发给地图和邮编查询服务" },
         { q: "清空", a: "在使用说明最下面点『清空本机数据』，会删掉所有行程" }
       ]
     }
@@ -2092,7 +2186,7 @@
     btn.setAttribute("data-label", prev);
     if (span) span.textContent = AI_WIZARD_COPY.copied;
     else btn.textContent = AI_WIZARD_COPY.copied;
-    /* 向导里的复制按钮一直显示「已复制 ✓」，直到下次打开向导 */
+    /* 向导里的复制按钮一直显示描边的「已复制」，直到下次打开向导 */
     if (btn.id === "ai-copy-btn") {
       setAiStep(Math.max(aiStep, 2));
       return;
@@ -2323,8 +2417,8 @@
     step1: "点『给 AI 的话』看一眼，再点下面的『复制』",
     promptBtn: "给 AI 的话",
     copyBtn: "复制",
-    copied: "已复制 ✓",
-    step2: "打开你常用的 AI（豆包、Kimi、DeepSeek、ChatGPT 都行），先粘贴，再把截图发过去",
+    copied: "已复制",
+    step2: "打开你常用的 AI（豆包、Kimi、DeepSeek、ChatGPT 都行），先粘贴，再把截图发过去，好几张可以一起发",
     /* v5.3 定稿：步骤 2 下面的小字 */
     step2Small: "不会截图？同时按侧边键和音量加键",
     privacy: "发截图前，把护照号、银行卡、手机号裁掉或涂掉",
@@ -2334,8 +2428,17 @@
     fallbackHint: "长按这里，选『粘贴』，再点『添加』",
     fail: "没认出来，把 AI 的回复整段复制过来再试一次"
   };
+
+  /* v6.1 导入结果（文案可再由文案定稿，都放这里） */
+  var IMPORT_COPY = {
+    toastOk: function (n) { return "已导入 " + n + " 项"; },
+    toastNeed: function (n, y) { return "已导入 " + n + " 项，其中 " + y + " 项要补信息"; },
+    none: "没读到行程，把 AI 的回复整段粘贴进来再试一次",
+    lineDate: function (n) { return "第 " + n + " 行：日期不对"; },
+    lineCols: function (n) { return "第 " + n + " 行：没认出来"; },
+    fileBad: "这个文件打不开，要用这里导出的备份或分享文件"
+  };
   var aiStep = 1;
-  var aiLeftPage = false;
 
   /** v6：打开 / 收起「给 AI 的话」全文（下面是「复制」） */
   function showAiPrompt(on) {
@@ -2356,7 +2459,7 @@
     Array.prototype.forEach.call(document.querySelectorAll("#ai-help .ai-step"), function (li) {
       var k = Number(li.getAttribute("data-step"));
       li.classList.toggle("is-current", k === n);
-      li.classList.toggle("is-done", k < n);
+      li.classList.remove("is-done");
     });
   }
 
@@ -2594,13 +2697,18 @@
     $("confirm-ok").classList.toggle("is-primary", opts.tone === "primary");
     if ($("confirm-cancel")) $("confirm-cancel").textContent = opts.cancelText || "取消";
     var row = $("confirm-check-row");
+    var showCheck = !!(opts.checkbox && opts.checkbox.label);
     if (row) {
-      row.hidden = !opts.checkbox;
-      if (opts.checkbox) {
+      row.hidden = !showCheck;
+      if (showCheck) {
         $("confirm-check-text").textContent = opts.checkbox.label || "";
         $("confirm-check").checked = !!opts.checkbox.checked;
+      } else if ($("confirm-check")) {
+        $("confirm-check").checked = false;
       }
     }
+    var panel = document.querySelector("#confirm-sheet .confirm-panel");
+    if (panel) panel.classList.toggle("has-check", showCheck);
     var sheet = $("confirm-sheet");
     if (sheet) sheet.classList.toggle("is-ask", !!opts.ask);
     confirmAction = opts.onOk;
@@ -2635,6 +2743,9 @@
     if ($("confirm-cancel")) $("confirm-cancel").textContent = "取消";
     if ($("confirm-ok")) $("confirm-ok").textContent = "删除";
     if ($("confirm-check-row")) $("confirm-check-row").hidden = true;
+    if ($("confirm-check")) $("confirm-check").checked = false;
+    var panel = document.querySelector("#confirm-sheet .confirm-panel");
+    if (panel) panel.classList.remove("has-check");
     if ($("confirm-ok")) $("confirm-ok").classList.remove("is-primary");
     closeSheet("confirm-sheet");
     if (typeof later === "function") setTimeout(later, 0);
@@ -2647,39 +2758,56 @@
     }
   }
 
+  /** v6.1：删行程和删条目共用确认框。标题「删除“名字”吗？」 */
+  function deleteConfirmTitle(name) {
+    return "删除“" + (name || "这一项") + "”吗？";
+  }
+
+  /** 足迹页已上线，且这条/这趟真有到访记录时，才出示「同时删掉足迹」勾选框。默认不勾。 */
+  function footprintsReady() {
+    return !!(window.Favorites && Favorites.pageShipped);
+  }
+
+  function footprintsCheckbox(kind, hasVisits) {
+    if (!footprintsReady() || !hasVisits) return null;
+    return {
+      label: kind === "trip" ? "同时删掉这趟的足迹" : "同时删掉这里的足迹",
+      checked: false
+    };
+  }
+
   function askDeleteItem(id) {
     var item = findItem(id);
     if (!item) return;
     var realId = window.Legs && Legs.sourceId ? Legs.sourceId(item.id || id) : id;
-    if (item.type === "hotel" && window.Legs && Legs.hasValidHotelStay && Legs.hasValidHotelStay(item)) {
-      openConfirm({
-        title: "入住和退房两张都删掉吗？",
-        sub: "删除后 5 秒内可以撤销。",
-        okText: "都删",
-        cancelText: "取消",
-        onOk: function () {
-          deleteItemNow(realId);
-        }
-      });
-      return;
-    }
+    var real = findItem(realId) || item;
+    var trip = currentTrip();
+    var isHotelStay = real.type === "hotel" && window.Legs && Legs.hasValidHotelStay && Legs.hasValidHotelStay(real);
+    var hasVisit = !!(window.Places && Places.itemHasVisit && trip && Places.itemHasVisit(places, real, trip.id));
     openConfirm({
-      title: "确定删除这一项吗？",
-      sub: "删除后 5 秒内可以撤销。",
+      title: deleteConfirmTitle(itemTitle(real) || real.nameZh),
+      sub: isHotelStay ? "入住和退房会一起删掉，删除后 5 秒内可以撤销。" : "删除后 5 秒内可以撤销。",
       okText: "删除",
-      onOk: function () {
-        deleteItemNow(realId);
+      cancelText: "取消",
+      checkbox: footprintsCheckbox("item", hasVisit),
+      onOk: function (alsoVisits) {
+        deleteItemNow(realId, alsoVisits);
       }
     });
   }
 
-  function deleteItemNow(id) {
+  function deleteItemNow(id, alsoVisits) {
     var trip = currentTrip();
     var res = ItemEdit.removeItem(trip.items || [], id);
     if (!res.removed) return;
     var prevDay = selectedDay;
     trip.items = res.items;
     delete expanded[id];
+    var visitSnap = null;
+    if (alsoVisits && window.Places && Places.removeItemVisits) {
+      visitSnap = JSON.parse(JSON.stringify(places));
+      Places.removeItemVisits(places, trip.id, res.removed);
+    }
     fixSelectedDay(trip.items);
     saveAllTrips();
     closeSheet("detail-sheet");
@@ -2688,6 +2816,7 @@
     showToast("已删除", function () {
       var t = currentTrip();
       t.items = ItemEdit.restoreItem(t.items || [], res.removed, res.index);
+      if (visitSnap) places = visitSnap;
       if (prevDay !== "all" && tripDays(t.items).indexOf(prevDay) !== -1) selectedDay = prevDay;
       saveAllTrips();
       renderAll();
@@ -2740,6 +2869,8 @@
     if (save) save.textContent = isEdit ? "保存修改" : "保存";
     var fold = $("manual-fold");
     if (fold && isEdit) fold.open = true;
+    /* 类型相关显隐必须压过 edit-only：避免改地点时露出『再加一张返程』 */
+    if (typeof paintEditLabels === "function") paintEditLabels(getVal("manual-type") || "地点");
   }
 
   function setVal(id, v) {
@@ -2917,6 +3048,8 @@
     if (endTimeLabel) endTimeLabel.textContent = isHotel ? "退房时间" : "到达时间";
     if ($("edit-add-return")) $("edit-add-return").hidden = !isFlight;
     if ($("leg-role-row")) $("leg-role-row").hidden = !isFlight;
+    /* 地点图标格只给地点用；酒店和交通不出现 */
+    if ($("icon-pick-row")) $("icon-pick-row").hidden = isMove || isHotel;
     if (isFlight) {
       paintLegRoleSeg(pickedLegRole);
       paintLegRoleHint();
@@ -3454,7 +3587,13 @@
   function hideToast() {
     disarmToast();
     var el = $("toast");
-    if (el) el.hidden = true;
+    if (el) {
+      el.hidden = true;
+      el.classList.remove("is-import", "is-tap");
+      el.onclick = null;
+    }
+    var ck = $("toast-check");
+    if (ck) ck.hidden = true;
     toastUndo = null;
     if (toastTimer) {
       clearTimeout(toastTimer);
@@ -3632,7 +3771,7 @@
       box.hidden = true;
       box.innerHTML = "";
       if (String(query || "").trim() && !($("search-status") && $("search-status").classList.contains("is-error"))) {
-        setSearchStatus(fixingId ? DIRECT_COPY.fixNone : "没有找到匹配的地点");
+        setSearchStatus(DIRECT_COPY.fixNone);
       }
       return;
     }
@@ -3681,13 +3820,13 @@
     sub: "没有地图位置，也能放进行程",
     pickTitle: "给「{q}」选个图标（可不选）",
     go: "添加",
-    added: "已添加。点卡片上的『待补地址』，就能出现在地图上",
-    fixBtn: "待补地址",
+    added: "已添加。点卡片上的『位置待确认』，就能出现在地图上",
+    fixBtn: "位置待确认",
     fixTitle: "补地址",
     fixHead: "给「{name}」找位置，点一个结果就补上",
     fixDone: "已补上位置",
     fixManual: "手动填地址",
-    fixNone: "没搜到。换个说法试试，或点下面『找不到？换个方式加』"
+    fixNone: (window.Geocode && Geocode.FRIENDLY_NOT_FOUND) || "没搜到，换个名字试试，或点『找不到？换个方式加』"
   };
   var directName = "";
   var directIcon = "";
@@ -3785,7 +3924,13 @@
     var day = itemDay(item) || (item.pendingDate ? "" : selectedDateOrEmpty());
     var opts = { excludeId: item.id, time: item.time || item.checkInTime || "" };
     var c = TripName.dayCity(items, day, opts);
-    return { city: (c && c.query) || "", bias: TripName.dayArea ? TripName.dayArea(items, day, opts) : null };
+    var tripPts = [];
+    items.forEach(function (it) {
+      if (it && it.id !== item.id && typeof it.lat === "number" && typeof it.lng === "number") {
+        tripPts.push({ lat: it.lat, lng: it.lng });
+      }
+    });
+    return { city: (c && c.query) || "", bias: TripName.dayArea ? TripName.dayArea(items, day, opts) : null, places: places, tripPoints: tripPts };
   }
 
   function locPinSvg(color) {
@@ -3864,6 +4009,7 @@
     if (typeof next.lat !== "number") return false;
     var trip = currentTrip();
     trip.items = ItemEdit.updateItem(trip.items || [], id, next);
+    if (window.Lookup && Lookup.saveUserPosition) places = Lookup.saveUserPosition(places, next, next.lat, next.lng);
     saveAllTrips();
     expanded[id] = false;
     markJustFixed(id);
@@ -3889,12 +4035,9 @@
 
   /* ---------- 顶部「N 个地点待补位置」 ---------- */
   function updateFixBanner() {
-    var F = FC();
+    /* v6.1 UI 评审：去掉顶部黄色「N 个地点待补位置」条 */
     var el = $("fix-banner");
-    if (!el || !F) return;
-    var n = F.unlocated(currentTrip().items || []).length;
-    el.hidden = !n;
-    if ($("fix-banner-text")) $("fix-banner-text").textContent = F.bannerText(n);
+    if (el) el.hidden = true;
   }
 
   /* ---------- 批量面板 ---------- */
@@ -4064,7 +4207,7 @@
     pickAfter = null;
   }
 
-  /** 「就是这里」：只存坐标，不查地址，不发请求 */
+  /** 「就放这里」：只存坐标，不查地址，不发请求 */
   function saveMapPick() {
     if (pickNew && pickMarker) {
       var spec = pickNew;
@@ -4333,7 +4476,7 @@
     }, 120);
   }
 
-  var SEARCH_FAIL_MSG = "暂时找不到位置，请再试一次，或点下面「＋ 直接添加」。";
+  var SEARCH_FAIL_MSG = (window.Geocode && Geocode.FRIENDLY_NOT_FOUND) || "没搜到，换个名字试试，或点『找不到？换个方式加』";
 
   function runLiveSearch(query) {
     var q = String(query || "").trim();
@@ -4438,7 +4581,6 @@
   }
 
   function paintTopActions() {
-    var view = $("view-toggle-btn");
     var settings = $("settings-btn");
     var help = $("help-top-btn");
     var isMap = currentView === "map";
@@ -4450,15 +4592,10 @@
         help.innerHTML = ico("help") + '<span class="top-label">使用说明</span>';
       }
     }
-    if (view) {
-      view.classList.add("top-action");
-      view.classList.remove("icon-btn");
-      view.setAttribute("aria-label", isMap ? "列表" : "地图");
-      view.innerHTML =
-        ico(isMap ? "list" : "map") +
-        '<span class="top-optional-label">' +
-        (isMap ? "列表" : "地图") +
-        "</span>";
+    var fab = $("view-fab");
+    if (fab) {
+      fab.textContent = isMap ? "列表" : "地图";
+      fab.setAttribute("aria-label", isMap ? "回到列表" : "查看地图");
     }
     if (settings) {
       settings.classList.add("top-action");
@@ -4566,7 +4703,7 @@
     var items = (trip && trip.items) || [];
     if (!items.length) return "还没有内容";
     var days = tripDays(items);
-    var range = days.length ? formatMd(days[0]) + (days.length > 1 ? " – " + formatMd(days[days.length - 1]) : "") : "日期待定";
+    var range = days.length ? formatMd(days[0]) + (days.length > 1 ? " – " + formatMd(days[days.length - 1]) : "") : "还没定哪天";
     return range + " · " + items.length + " 项";
   }
 
@@ -4656,11 +4793,13 @@
     var t = tripById(id);
     if (!t) return;
     var n = (t.items || []).length;
+    var hasVisits = !!(window.Places && Places.tripVisitCount && Places.tripVisitCount(places, t.id) > 0);
     openConfirm({
-      title: "确定删除「" + (t.nameZh || "我的行程") + "」吗？",
-      sub: (n ? "这趟的 " + n + " 项会一起删掉，删除后不能撤销。" : "删除后不能撤销。") + "地点和备注会留在本机。",
+      title: deleteConfirmTitle(t.nameZh || "我的行程"),
+      sub: n ? "这趟的 " + n + " 项会一起删掉，删除后不能撤销。" : "删除后不能撤销。",
       okText: "删除",
-      checkbox: { label: "同时删掉这趟的足迹", checked: false },
+      cancelText: "取消",
+      checkbox: footprintsCheckbox("trip", hasVisits),
       onOk: function (alsoVisits) {
         deleteTripNow(id, alsoVisits);
       }
@@ -4968,6 +5107,7 @@
     resolutions.forEach(function (res, i) {
       if (window.Geocode && res.item) {
         Geocode.applyChoice(items[i] || res.item, res.chosen, res.fromChosen);
+        if (res.autoLocated && (items[i] || res.item)) (items[i] || res.item).autoLocated = true;
       }
     });
   }
@@ -4989,7 +5129,189 @@
     });
   }
 
-  function finishImport(items, resolutions, errors, notes) {
+  function itemsNeedingFix(items) {
+    return (items || []).filter(function (it) {
+      if (!it) return false;
+      var cur = findItem(it.id) || it;
+      if (isPendingItem(cur)) return true;
+      if (isTransit(cur)) return false;
+      if (itemUnlocated(cur)) return true;
+      return !!(window.FixCand && FixCand.needsFix(cur));
+    });
+  }
+
+  function showImportError(errors, notes) {
+    showAiFallback();
+    var lines = (errors || []).concat(notes || []).filter(Boolean);
+    if (!lines.length) lines = [IMPORT_COPY.none];
+    var html = lines.map(function (e) {
+      return '<p class="err import-err">' + escapeHtml(e) + "</p>";
+    }).join("");
+    showAddStatus(html);
+    var ta = $("add-text");
+    if (ta && ta.scrollIntoView) ta.scrollIntoView({ block: "center" });
+  }
+
+  function showImportToast(n, y) {
+    var text = y ? IMPORT_COPY.toastNeed(n, y) : IMPORT_COPY.toastOk(n);
+    showToast(text, null, 2500);
+    var el = $("toast");
+    var ck = $("toast-check");
+    if (ck) ck.hidden = false;
+    if (el) {
+      el.classList.add("is-import");
+      if (y) {
+        el.classList.add("is-tap");
+        el.onclick = function (ev) {
+          if (ev.target && ev.target.closest && ev.target.closest("#toast-undo, #toast-close")) return;
+          hideToast();
+          goToPendingOrFix();
+        };
+      }
+    }
+  }
+
+  function goToPendingOrFix() {
+    setView("list");
+    selectDay("all", true);
+    renderAll();
+    var blk = $("day-pending") || $("fix-banner") || document.querySelector(".card.is-pending, .fc-box, .nav-fix-link");
+    if (blk && blk.scrollIntoView) blk.scrollIntoView({ block: "start" });
+  }
+
+  function flashImported(ids) {
+    justImported = {};
+    (ids || []).forEach(function (id) {
+      justImported[id] = true;
+      justImported[String(id) + "::checkout"] = true;
+    });
+    renderList();
+    setTimeout(function () {
+      var nodes = document.querySelectorAll(".card.is-just-imported");
+      Array.prototype.forEach.call(nodes, function (el) { el.classList.add("is-fading"); });
+    }, 40);
+    setTimeout(function () {
+      justImported = {};
+      renderList();
+    }, 1600);
+  }
+
+  var justImported = {};
+  var importConfirm = null;
+
+  function finishStructuredImport(items, resolutions, errors, notes) {
+    applyResolutions(items, resolutions || []);
+    (resolutions || []).forEach(function (res) {
+      if (res && res.autoLocated && res.item) res.item.autoLocated = true;
+      if (res && res.status === "ok" && res.autoLocated && res.item) res.item.autoLocated = true;
+    });
+    var added = [];
+    if (items.length) added = appendItems(items, { keepDay: true }) || items;
+    seedCandidates(items, resolutions || []);
+    if (items.length) queueNameSuggest(items.length);
+    closeSheet("add-sheet");
+    closeSheet("add-menu");
+    closeSheet("settings-sheet");
+    setView("list");
+    selectDay("all", true);
+    renderAll();
+    flashImported((added || items).map(function (it) { return it.id; }));
+    /* 导入过程不弹确认：位置找不到也照样进行程，卡片上留「位置待确认 ›」 */
+    var n = (added || items).length;
+    var y = itemsNeedingFix(added || items).length;
+    showImportToast(n, y);
+  }
+
+  function startImportConfirm(items, resolutions, done) {
+    var F = window.FixCand;
+    if (!F) { if (done) done(); return; }
+    importConfirm = {
+      queue: items.slice(),
+      resolutions: resolutions || [],
+      left: items.length,
+      done: done
+    };
+    paintImportConfirm();
+  }
+
+  function paintImportConfirm() {
+    var st = importConfirm;
+    var bar = $("confirm-remain");
+    var sheet = $("import-confirm-sheet");
+    if (!st || !st.queue.length) {
+      if (bar) bar.hidden = true;
+      if (sheet) sheet.hidden = true;
+      var cb = st && st.done;
+      importConfirm = null;
+      if (cb) cb();
+      return;
+    }
+    if (bar) {
+      bar.hidden = false;
+      bar.textContent = FixCand.remainText(st.left);
+    }
+    var item = st.queue[0];
+    var res = null;
+    (st.resolutions || []).forEach(function (r) {
+      if (r && r.item && item && r.item.id === item.id) res = r;
+    });
+    var list = (res && res.candidates) || (FixCand.getCached(item) || []);
+    var kind = res && res.status === "far" ? "far" : "ask";
+    var ranked = FixCand.rankCandidates ? FixCand.rankCandidates(item, list, dayArgsFor(item)) : list;
+    if (!sheet) {
+      sheet = document.createElement("div");
+      sheet.id = "import-confirm-sheet";
+      sheet.className = "import-confirm-sheet";
+      document.body.appendChild(sheet);
+    }
+    var title = FixCand.askTitle(item, ranked, kind);
+    var cards = ranked.map(function (c, j) {
+      var name = (c.name || c.nameDetail || itemTitle(item) || "");
+      var addr = FixCand.fullAddress ? FixCand.fullAddress(c) : (c.displayName || "");
+      var mini = FixCand.staticMapHtml ? FixCand.staticMapHtml(c.lat, c.lng) : "";
+      return '<button type="button" class="cand-card" data-ci="' + j + '">' +
+        mini +
+        '<span class="cand-name">' + escapeHtml(name) + "</span>" +
+        (addr ? '<span class="cand-addr">' + escapeHtml(addr) + "</span>" : "") +
+        "</button>";
+    }).join("");
+    sheet.innerHTML =
+      '<div class="import-confirm-panel">' +
+      '<h2 class="import-confirm-title">' + escapeHtml(title) + "</h2>" +
+      '<div class="cand-cards">' + cards + "</div>" +
+      '<button type="button" class="text-link-btn" id="import-confirm-skip">' + escapeHtml(FixCand.COPY.skip) + "</button>" +
+      "</div>";
+    sheet.hidden = false;
+    Array.prototype.forEach.call(sheet.querySelectorAll(".cand-card"), function (btn) {
+      btn.addEventListener("click", function () {
+        var c = ranked[Number(btn.getAttribute("data-ci"))];
+        if (c) applyCandidate(item.id, c, { quiet: true });
+        var cur = findItem(item.id);
+        if (cur) delete cur.autoLocated;
+        st.queue.shift();
+        st.left = st.queue.length;
+        paintImportConfirm();
+      });
+    });
+    var skip = $("import-confirm-skip");
+    if (skip) skip.addEventListener("click", function () {
+      /* 先跳过：进待补，不写地点 */
+      st.queue.shift();
+      st.left = st.queue.length;
+      paintImportConfirm();
+    });
+  }
+
+  function finishImport(items, resolutions, errors, notes, opts) {
+    opts = opts || {};
+    if (opts.structured) {
+      if (!items || !items.length) {
+        showImportError(errors, notes);
+        return;
+      }
+      finishStructuredImport(items, resolutions, errors, notes);
+      return;
+    }
     applyResolutions(items, resolutions || []);
     if (items.length) appendItems(items);
     seedCandidates(items, resolutions || []);
@@ -5013,7 +5335,7 @@
         parts.push('<p class="err">' + escapeHtml(note) + "</p>");
       }
     });
-    if (!parts.length) parts.push('<p class="err">没有可导入的内容。</p>');
+    if (!parts.length) parts.push('<p class="err">' + escapeHtml(IMPORT_COPY.none) + "</p>");
     showAddStatus(parts.join(""));
     renderPickList(resolutions || []);
   }
@@ -5025,20 +5347,14 @@
     var errors = result.errors || [];
     var notes = result.notes || [];
     if (!items.length) {
-      var bits = (errors || []).map(function (e) {
-        return '<p class="err">' + escapeHtml(e) + "</p>";
-      }).concat((notes || []).map(function (n) {
-        return '<p class="note">' + escapeHtml(n) + "</p>";
-      })).join("");
-      showAddStatus('<p class="err">' + escapeHtml(AI_WIZARD_COPY.fail) + "</p>" + bits);
-      showAiFallback();
+      showImportError(errors, notes);
       return;
     }
     showAddStatus('<p class="ok">正在查找位置…</p>');
     /* v5.3（IT老板）：导入也用当天城市 + 区域（bounded=1 → 0）；酒店先找，后面的地点能用上 */
     Geocode.resolveAll(items, null, function (it) { return dayArgsFor(it, items); })
       .then(function (resolutions) {
-        finishImport(items, resolutions, errors, result.notes);
+        finishImport(items, resolutions, errors, result.notes, { structured: true });
       })
       .catch(function () {
         finishImport(
@@ -5047,7 +5363,8 @@
             return { item: it, status: "none", message: Geocode.FRIENDLY_NOT_FOUND, candidates: [], chosen: null };
           }),
           errors,
-          result.notes
+          result.notes,
+          { structured: true }
         );
       });
   }
@@ -5055,7 +5372,7 @@
   function runPlaceSearch(text) {
     var name = String(text || "").trim();
     if (!name) {
-      showAddStatus('<p class="err">请先输入地名，或粘贴一份清单。</p>');
+      showAddStatus('<p class="err">先输入店名，或粘贴地址</p>');
       return;
     }
     var item = {
@@ -5215,6 +5532,29 @@
     renderAll();
   }
 
+  window.LocConfirmMap = {
+    getMap: function () { return locConfirmMap; },
+    syncSize: syncLocConfirmMapSize,
+    scheduleSize: scheduleLocConfirmMapSize,
+    pinTipContainerPoint: function () {
+      var el = $("loc-confirm-map");
+      if (!el) return null;
+      return { x: el.clientWidth / 2, y: el.clientHeight / 2 };
+    },
+    pinTipLatLng: function () {
+      if (!locConfirmMap || typeof L === "undefined") return null;
+      var p = window.LocConfirmMap.pinTipContainerPoint();
+      if (!p) return null;
+      var ll = locConfirmMap.containerPointToLatLng(L.point(p.x, p.y));
+      return { lat: ll.lat, lng: ll.lng };
+    },
+    savedLatLng: function () {
+      if (!locConfirmMap) return null;
+      var c = locConfirmMap.getCenter();
+      return { lat: c.lat, lng: c.lng };
+    }
+  };
+
   window.TripApp = {
     exportState: exportState,
     importState: importState,
@@ -5275,11 +5615,290 @@
     }
   }
 
+
+  function bindAddressCopy() {
+    if (bindAddressCopy._on) return;
+    bindAddressCopy._on = true;
+    var timer = 0;
+    var startEl = null;
+    document.addEventListener("pointerdown", function (ev) {
+      var el = ev.target.closest && ev.target.closest("[data-copy-address]");
+      if (!el) return;
+      startEl = el;
+      clearTimeout(timer);
+      timer = setTimeout(function () {
+        timer = 0;
+        var text = (startEl && startEl.textContent || "").trim();
+        if (!text) return;
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(text).then(function () {
+            showToast("已复制地址", null, 1600);
+          }).catch(function () {});
+        }
+      }, 550);
+    });
+    ["pointerup", "pointercancel", "pointermove"].forEach(function (name) {
+      document.addEventListener(name, function () {
+        if (timer) {
+          clearTimeout(timer);
+          timer = 0;
+        }
+      }, name === "pointermove" ? { passive: true } : undefined);
+    });
+  }
+
+  function locProgressText(i, n) {
+    var s = (window.Lookup && Lookup.COPY && Lookup.COPY.progress) || "第 {i} 个，共 {n} 个";
+    return s.replace("{i}", String(i)).replace("{n}", String(n));
+  }
+
+  var locConfirm = null;
+  var locConfirmMap = null;
+
+  function unlocatedPlaceItems() {
+    var items = (currentTrip() && currentTrip().items) || [];
+    return items.filter(function (it) { return !isTransit(it) && itemUnlocated(it); });
+  }
+
+  function destroyLocConfirmMap() {
+    if (locConfirmMap) {
+      try { locConfirmMap.remove(); } catch (err) {}
+      locConfirmMap = null;
+    }
+    var el = $("loc-confirm-map");
+    if (el) {
+      el.className = "import-confirm-map";
+      el.innerHTML = "";
+    }
+  }
+
+  function closeLocConfirm() {
+    locConfirm = null;
+    destroyLocConfirmMap();
+    var sheet = $("import-confirm-sheet");
+    if (sheet) {
+      sheet.hidden = true;
+      sheet.innerHTML = "";
+    }
+  }
+
+  function syncLocConfirmMapSize() {
+    if (!locConfirmMap) return;
+    locConfirmMap.invalidateSize({ animate: false });
+  }
+
+  function scheduleLocConfirmMapSize() {
+    syncLocConfirmMapSize();
+    requestAnimationFrame(function () {
+      syncLocConfirmMapSize();
+      requestAnimationFrame(syncLocConfirmMapSize);
+    });
+    setTimeout(syncLocConfirmMapSize, 0);
+    setTimeout(syncLocConfirmMapSize, 100);
+  }
+
+  function bindLocConfirmResize() {
+    if (window.__locConfirmResizeBound) return;
+    window.__locConfirmResizeBound = true;
+    window.addEventListener("resize", syncLocConfirmMapSize);
+    if (window.visualViewport) window.visualViewport.addEventListener("resize", syncLocConfirmMapSize);
+  }
+
+  function locConfirmStartView(item, cand) {
+    if (cand && isFinite(cand.lat) && isFinite(cand.lng)) return { lat: cand.lat, lng: cand.lng, zoom: 15 };
+    var mc = tripMap ? tripMap.getCenter() : null;
+    var hint = mc ? { lat: mc.lat, lng: mc.lng, zoom: tripMap.getZoom() } : null;
+    var day = item ? itemDay(item) : "";
+    var c = FC().pickCenter && FC().pickCenter((currentTrip() && currentTrip().items) || [], day, { excludeId: item && item.id }, hint);
+    if (c && isFinite(c.lat) && isFinite(c.lng)) return { lat: c.lat, lng: c.lng, zoom: c.zoom || 15 };
+    return { lat: 51.5074, lng: -0.1278, zoom: 3 };
+  }
+
+  function bindLocConfirmMap(el, start) {
+    if (!el || typeof L === "undefined") return;
+    destroyLocConfirmMap();
+    locConfirmMap = L.map(el, { scrollWheelZoom: true, attributionControl: true, zoomControl: true });
+    if (window.MapTiles && MapTiles.attach) MapTiles.attach(locConfirmMap, el);
+    else {
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        maxZoom: 19,
+        attribution: "&copy; OpenStreetMap"
+      }).addTo(locConfirmMap);
+    }
+    var lat = start && isFinite(start.lat) ? start.lat : 51.5074;
+    var lng = start && isFinite(start.lng) ? start.lng : -0.1278;
+    var zoom = start && start.zoom ? start.zoom : 15;
+    locConfirmMap.setView([lat, lng], zoom);
+    if (locConfirm) locConfirm.userMoved = false;
+    locConfirmMap.on("dragstart", function () { if (locConfirm) locConfirm.userMoved = true; });
+    locConfirmMap.on("zoomstart", function () { if (locConfirm) locConfirm.userMoved = true; });
+    locConfirmMap.on("click", function (e) {
+      if (!e || !e.latlng || !locConfirmMap) return;
+      if (locConfirm) locConfirm.userMoved = true;
+      locConfirmMap.panTo(e.latlng);
+    });
+    bindLocConfirmResize();
+    scheduleLocConfirmMapSize();
+  }
+
+  function applyLocConfirmPoint(item) {
+    if (!item || !locConfirmMap) return false;
+    var c = locConfirmMap.getCenter();
+    if (!c || !isFinite(c.lat) || !isFinite(c.lng)) return false;
+    var old = findItem(item.id);
+    if (!old) return false;
+    var next = FC().applyMapPick(old, { lat: c.lat, lng: c.lng }, mapTiles);
+    var trip = currentTrip();
+    trip.items = ItemEdit.updateItem(trip.items || [], item.id, next);
+    if (window.Lookup && Lookup.saveUserPosition) places = Lookup.saveUserPosition(places, next, next.lat, next.lng);
+    saveAllTrips();
+    return true;
+  }
+
+  function locConfirmAdvance() {
+    if (!locConfirm) return;
+    locConfirm.index += 1;
+    if (locConfirm.index >= locConfirm.queue.length) {
+      closeLocConfirm();
+      renderAll();
+      return;
+    }
+    paintLocConfirm();
+  }
+
+  function openLocPending(id) {
+    var all = unlocatedPlaceItems();
+    var first = [];
+    var rest = [];
+    all.forEach(function (it) {
+      if (String(it.id) === String(id)) first.push(it);
+      else rest.push(it);
+    });
+    if (!first.length) {
+      var one = findItem(id);
+      if (one) first = [one];
+    }
+    if (!first.length) return;
+    locConfirm = { queue: first.concat(rest), index: 0 };
+    paintLocConfirm();
+  }
+
+  function paintLocConfirm() {
+    var st = locConfirm;
+    if (!st || !st.queue[st.index]) {
+      closeLocConfirm();
+      return;
+    }
+    if (locConfirmMap && st.paintedId && st.paintedId !== st.queue[st.index].id) {
+      destroyLocConfirmMap();
+    }
+    var item = findItem(st.queue[st.index].id) || st.queue[st.index];
+    var i = st.index + 1;
+    var n = st.queue.length;
+    var Lkp = window.Lookup && Lookup.COPY ? Lookup.COPY : {};
+    var sheet = $("import-confirm-sheet");
+    if (!sheet) {
+      sheet = document.createElement("div");
+      sheet.id = "import-confirm-sheet";
+      sheet.className = "import-confirm-sheet";
+      document.body.appendChild(sheet);
+    }
+    var cached = (window.FixCand && FixCand.getCached && FixCand.getCached(item)) || [];
+    function paintMeta(cand) {
+      var nameEl = sheet.querySelector(".import-confirm-name");
+      var addrEl = sheet.querySelector(".import-confirm-addr");
+      var titleEl = sheet.querySelector(".import-confirm-title");
+      var name = (cand && (cand.name || cand.nameDetail)) || itemTitle(item) || "";
+      var addr = cand
+        ? ((window.FixCand && FixCand.fullAddress) ? FixCand.fullAddress(cand) : (cand.displayName || ""))
+        : (item.address || "");
+      var title = cand
+        ? ((window.FixCand && FixCand.COPY && FixCand.COPY.askFar) || "是这里吗？")
+        : (Lkp.notFound || "地图上没找到这里");
+      if (titleEl) titleEl.textContent = title;
+      if (nameEl) nameEl.textContent = name;
+      if (addrEl) {
+        if (addr) addrEl.textContent = addr;
+        else addrEl.parentNode && addrEl.parentNode.removeChild(addrEl);
+      } else if (addr && nameEl) {
+        var p = document.createElement("div");
+        p.className = "import-confirm-addr";
+        p.textContent = addr;
+        nameEl.parentNode.appendChild(p);
+      }
+    }
+    function finish(list) {
+      if (!locConfirm || locConfirm.queue[locConfirm.index].id !== item.id) return;
+      var cand = (list && list[0]) || null;
+      var here = Lkp.confirmHere || "就放这里";
+      var head = Lkp.confirmHead || "确认位置";
+      var skipLabel = Lkp.skip || "先跳过";
+      var hint = Lkp.confirmHint || "拖动地图或点一下，把点对准那个地方";
+      var already = locConfirmMap && locConfirm.paintedId === item.id;
+      if (already) {
+        paintMeta(cand);
+        if (cand && isFinite(cand.lat) && isFinite(cand.lng) && !locConfirm.userMoved) {
+          locConfirmMap.setView([cand.lat, cand.lng], 15);
+        }
+        return;
+      }
+      var name = (cand && (cand.name || cand.nameDetail)) || itemTitle(item) || "";
+      var addr = cand
+        ? ((window.FixCand && FixCand.fullAddress) ? FixCand.fullAddress(cand) : (cand.displayName || ""))
+        : (item.address || "");
+      var title = cand
+        ? ((window.FixCand && FixCand.COPY && FixCand.COPY.askFar) || "是这里吗？")
+        : (Lkp.notFound || "地图上没找到这里");
+      destroyLocConfirmMap();
+      sheet.innerHTML =
+        '<div class="import-confirm-panel">' +
+        '<div class="import-confirm-top"><b>' + escapeHtml(head) + "</b><span>" + escapeHtml(locProgressText(i, n)) + "</span></div>" +
+        '<div class="import-confirm-map-wrap">' +
+        '<div class="import-confirm-map" id="loc-confirm-map"></div>' +
+        '<span class="import-confirm-pin-anchor" aria-hidden="true"><span class="import-confirm-pin"></span></span>' +
+        "</div>" +
+        '<p class="import-confirm-hint">' + escapeHtml(hint) + "</p>" +
+        '<div class="import-confirm-info">' +
+        '<h2 class="import-confirm-title">' + escapeHtml(title) + "</h2>" +
+        '<div class="import-confirm-name">' + escapeHtml(name) + "</div>" +
+        (addr ? '<div class="import-confirm-addr">' + escapeHtml(addr) + "</div>" : "") +
+        "</div>" +
+        '<div class="import-confirm-actions">' +
+        '<button type="button" class="btn primary" id="loc-pending-here">' + escapeHtml(here) + "</button>" +
+        '<button type="button" class="text-link-btn" id="loc-pending-skip">' + escapeHtml(skipLabel) + "</button>" +
+        "</div></div>";
+      sheet.hidden = false;
+      locConfirm.paintedId = item.id;
+      bindLocConfirmMap($("loc-confirm-map"), locConfirmStartView(item, cand));
+      var hereBtn = $("loc-pending-here");
+      if (hereBtn) {
+        hereBtn.addEventListener("click", function () {
+          applyLocConfirmPoint(item);
+          locConfirmAdvance();
+        });
+      }
+      var skip = $("loc-pending-skip");
+      if (skip) skip.addEventListener("click", locConfirmAdvance);
+    }
+    finish(cached);
+    if (window.Lookup && Lookup.searchByName) {
+      Lookup.searchByName(item.nameZh || item.nameEn || item.name || "", dayArgsFor(item)).then(function (list) {
+        finish(list && list.length ? list : cached);
+      }).catch(function () { finish(cached); });
+    }
+  }
+
   function initChrome() {
     decorateChrome();
-    $("view-toggle-btn").addEventListener("click", function () {
-      setView(currentView === "map" ? "list" : "map");
-    });
+    if (!window.__cardMetaResizeBound) {
+      window.__cardMetaResizeBound = true;
+      window.addEventListener("resize", function () { fitCardMetaSubs(); });
+    }
+    if ($("view-fab")) {
+      $("view-fab").addEventListener("click", function () {
+        setView(currentView === "map" ? "list" : "map");
+      });
+    }
     $("settings-btn").addEventListener("click", function () {
       openSheet("settings-sheet");
     });
@@ -5290,16 +5909,6 @@
     });
     if ($("ai-big-btn")) $("ai-big-btn").addEventListener("click", function () { openAiWizard(); });
     if ($("ai-paste-btn")) $("ai-paste-btn").addEventListener("click", pasteAndImport);
-    if ($("ai-step2-next")) $("ai-step2-next").addEventListener("click", function () { setAiStep(3); });
-    /* 第 ② 步：离开去 AI，再回来，自动跳到第 ③ 步 */
-    document.addEventListener("visibilitychange", function () {
-      if (document.hidden) {
-        aiLeftPage = aiStep === 2;
-      } else if (aiLeftPage && aiStep === 2 && $("ai-help") && !$("ai-help").hidden) {
-        aiLeftPage = false;
-        setAiStep(3);
-      }
-    });
     fillAiWizardText();
     if ($("ai-copy-btn")) $("ai-copy-btn").addEventListener("click", copyAiPrompt);
     if ($("ai-prompt-open")) {
@@ -5349,7 +5958,25 @@
     } catch (err) {}
     applyInstallVisibility(currentEnv());
     bindPlaceSearch();
-    $("trip-name-btn").addEventListener("click", openTrips);
+    $("trip-name-btn").addEventListener("click", function () {
+      dismissTripTip();
+      openTrips();
+    });
+    if ($("trip-add-btn")) {
+      $("trip-add-btn").addEventListener("click", function () {
+        dismissTripTip();
+        createTrip();
+        openTrips();
+      });
+    }
+    if ($("trip-tip")) {
+      $("trip-tip").addEventListener("click", function (ev) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        dismissTripTip();
+      });
+    }
+    bindAddressCopy();
     bindTripsSheet();
     $("trip-name-input").addEventListener("blur", function () { finishRename(); });
     $("trip-name-input").addEventListener("keydown", function (ev) {

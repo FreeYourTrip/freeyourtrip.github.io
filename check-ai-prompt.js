@@ -9,6 +9,8 @@ const Imp = require("./import.js");
 const Ai = require("./ai-prompt.js");
 const Icons = require("./icons.js");
 const T = require("./transport.js");
+const fs = require("fs");
+const path = require("path");
 
 let failures = 0;
 function check(name, fn) {
@@ -38,7 +40,7 @@ check("prompt mentions every official type and alias the importer should see, pl
 
 check("prompt tells the AI to use YYYY-MM-DD when unambiguous, leave 04/12 as-is, local times, 出发站 - 到达站, leave blanks, output only the block", function () {
   assert.ok(P.indexOf("YYYY-MM-DD") !== -1);
-  assert.ok(P.indexOf("截图里日月分不清（如 04/12），按原样写，别自己换算") !== -1);
+  assert.ok(P.indexOf("日月分不清的（如 04/12）按原样写，别自己换算") !== -1);
   assert.ok(P.indexOf("不要写成 4/12") === -1, "must not forbid writing 4/12");
   assert.ok(P.indexOf("当地时间") !== -1);
   assert.ok(P.indexOf("出发站 - 到达站") !== -1);
@@ -47,7 +49,35 @@ check("prompt tells the AI to use YYYY-MM-DD when unambiguous, leave 04/12 as-is
   assert.ok(P.indexOf("只输出这些行，放在一个代码块里，不要加任何解释") !== -1);
   assert.ok(P.indexOf("日期时间写“出发 ~ 到达”，用当地时间") !== -1);
   assert.ok(P.indexOf("火车 | G7 | 北京南 - 上海虹桥 | 2026-12-03 08:00 ~ 2026-12-03 12:28 |") !== -1);
+  assert.ok(P.indexOf("看不到年份就只写月和日，如 12-03 或 12月3日，不要自己补年份") !== -1);
+  assert.ok(P.indexOf("名称那一格只写店名或地名") !== -1);
+  assert.ok(P.indexOf("地址 @纬度,经度") !== -1);
 });
+
+check("收藏 is hidden from the shipped prompt while the 收藏 page is off; full text is kept for when the flag turns on", function () {
+  const Fav = require("./favorites.js");
+  assert.strictEqual(Fav.pageShipped, false);
+  assert.ok(P.indexOf("收藏") === -1, "shipped TEXT must not mention 收藏");
+  assert.ok(Ai.EXAMPLE.indexOf("收藏/") === -1);
+  assert.ok(Ai.TEXT_WITH_FAVORITES.indexOf("收藏/（后面接分类") !== -1);
+});
+
+const RULE10 = "10. 我可能一次发好几张截图，请全部整理在一起；攻略或帖子里有好几个地点的，按帖子里的顺序一站写一行，一个都不要漏；只有店名没有地址的，地址那一格留空";
+
+check("rule 10 matches 旅行顾问 final wording in TEXT and TEXT_WITH_FAVORITES; handoff file is the favorites text", function () {
+  assert.ok(Ai.TEXT.indexOf(RULE10) !== -1, "shipped TEXT rule 10");
+  assert.ok(Ai.TEXT_SHIPPED.indexOf(RULE10) !== -1);
+  assert.ok(Ai.TEXT_WITH_FAVORITES.indexOf(RULE10) !== -1);
+  assert.ok(Ai.TEXT.indexOf("收藏") === -1);
+  const refPath = path.join(__dirname, "..", "v61-handoff", "ai-prompt-v61.txt");
+  if (!fs.existsSync(refPath)) {
+    console.log("  skip  handoff file is not in this package; rule 10 still checked in TEXT / TEXT_WITH_FAVORITES");
+    return;
+  }
+  const ref = fs.readFileSync(refPath, "utf8");
+  assert.strictEqual(Ai.TEXT_WITH_FAVORITES, ref, "TEXT_WITH_FAVORITES must match the handoff file");
+});
+
 
 function assertClean(item, extra) {
   assert.ok(!item.pendingDate, (item.nameZh || item.flightNo || item.number || item.type) + " should not be 待补");
@@ -146,6 +176,33 @@ check("blind AI output fixture: seat/confirmation values stop at ； and confirm
   assert.ok(!(place.confirmationNo), "place keeps 预订号 in the note");
 });
 
-console.log("\n" + (5 - failures) + " passed, " + failures + " failed");
+
+check("parser: trailing @lat,lng is split off; month/day-only dates get a year; 收藏/xxx is recognised even when the page is off", function () {
+  const withHint = Imp.parseImport("地点/餐厅 | Example Cafe | 12 Example St, London EC1A 1BB, UK @51.5203,-0.1355 | 2026-12-05 13:00 |");
+  assert.deepStrictEqual(withHint.errors, []);
+  assert.strictEqual(withHint.items.length, 1);
+  assert.strictEqual(withHint.items[0].address, "12 Example St, London EC1A 1BB, UK");
+  assert.ok(Math.abs(withHint.items[0].hintLat - 51.5203) < 1e-6);
+  assert.ok(Math.abs(withHint.items[0].hintLng - (-0.1355)) < 1e-6);
+  assert.ok(withHint.items[0].lat == null, "trailing @ is a hint, not a confirmed pin");
+
+  const yearless = Imp.parseImport("地点 | Example Park | 1 Fake Rd, London | 12-03 15:00 |\n地点 | 示例公园 | 北京市东城区 | 12月3日 |", { today: "2026-11-16" });
+  assert.deepStrictEqual(yearless.errors, []);
+  assert.ok(yearless.items.length >= 2, String(yearless.items.length));
+  yearless.items.forEach((it) => {
+    assert.ok(/^202[6-7]-12-03$/.test(it.date || ""), "year filled for " + (it.nameZh) + " got " + it.date);
+    assert.ok(!it.pendingDate, it.nameZh + " should not be 待补");
+  });
+
+  const fav = Imp.parseImport("收藏/餐厅 | Monmouth Coffee | 2 Park St, London SE1 9AB, UK |  | 朋友推荐");
+  assert.deepStrictEqual(fav.errors, []);
+  assert.strictEqual(fav.items.length, 1);
+  assert.strictEqual(fav.items[0].type, "place");
+  assert.strictEqual(fav.items[0].subtype, "餐厅");
+  assert.ok(!fav.items[0].favorite, "收藏 page is off: imported as a regular place, not a hidden favorite");
+  assert.ok(!fav.items[0].date);
+});
+
+console.log("\n" + failures + " failed");
 if (failures) process.exit(1);
 console.log("All AI prompt checks passed. (Not a test against a real external AI.)");

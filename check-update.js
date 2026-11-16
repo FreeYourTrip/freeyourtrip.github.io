@@ -1,5 +1,5 @@
 /**
- * 「有新版本」横条与 service worker 更新规则校验。用法：node check-update.js
+ * 「有新版本」居中弹窗与 service worker 更新规则校验。用法：node check-update.js
  */
 "use strict";
 const assert = require("assert");
@@ -65,7 +65,7 @@ check("sw.js never forces updates and keeps offline fallback", function () {
   const install = sw.slice(sw.indexOf('addEventListener("install"'), sw.indexOf('addEventListener("message"'));
   assert.ok(install.indexOf("skipWaiting()") === -1, "install must not call skipWaiting");
   assert.ok(/SKIP_WAITING[\s\S]*self\.skipWaiting\(\)/.test(sw), "skipWaiting only on user message");
-  assert.ok(sw.indexOf('"xingcheng-map-shell-v18"') !== -1);
+  assert.ok(sw.indexOf('"xingcheng-map-shell-v19"') !== -1);
   assert.ok(sw.indexOf('"./update-banner.js"') !== -1);
   assert.ok(/return cached \|\| fresh/.test(sw), "cache-first so offline opens the cached version");
   assert.ok(/catch\(function \(\) \{\s*return cached \|\| caches\.match\("\.\/index\.html"\)/.test(sw), "offline fallback to cached index");
@@ -74,12 +74,14 @@ check("sw.js never forces updates and keeps offline fallback", function () {
 check("banner markup, texts and help line", function () {
   const html = fs.readFileSync(__dirname + "/index.html", "utf8");
   const tl = fs.readFileSync(__dirname + "/timeline.js", "utf8");
-  assert.ok(html.indexOf('id="update-banner"') > html.indexOf("</header>"));
-  assert.ok(html.indexOf('id="update-banner"') < html.indexOf('id="day-chips"'), "right under the top bar");
+  assert.ok(html.indexOf('id="update-banner"') !== -1);
+  assert.ok(html.indexOf('class="update-mask"') !== -1 && html.indexOf('class="update-card"') !== -1, "centred popup");
+  assert.ok(html.indexOf(">有新版本<") !== -1);
+  assert.ok(html.indexOf("刷新一次就能用上，行程不会丢") !== -1);
   assert.ok(html.indexOf(">稍后<") !== -1 && html.indexOf(">立即更新<") !== -1);
   assert.ok(html.indexOf('src="./update-banner.js"') !== -1);
   assert.ok(html.indexOf("serviceWorker.register") === -1, "registration lives in update-banner.js only");
-  assert.ok(tl.indexOf('{ q: "更新", a: "看到的还是旧版，就把网页彻底关掉再打开" }') !== -1, "help line (v5.2 copywriter)");
+  assert.ok(tl.indexOf('{ q: "更新", a: "看到「有新版本」就点『立即更新』，行程不会丢。还是旧版，就把网页彻底关掉再打开" }') !== -1, "help 更新");
 });
 
 check("works at root (freeyourtrip.github.io/) or any subfolder: relative paths only", function () {
@@ -140,6 +142,29 @@ check("link preview + iOS splash", function () {
   assert.ok(/rel="apple-touch-startup-image" href="\.\/splash-1290x2796\.png" media="\(device-width: 430px\) and \(device-height: 932px\) and \(-webkit-device-pixel-ratio: 3\) and \(orientation: portrait\)"/.test(html));
   assert.ok(fs.existsSync(__dirname + "/cover-1200x630.png") && fs.existsSync(__dirname + "/splash-1290x2796.png"));
   assert.ok(sw.indexOf("cover-1200x630") === -1 && sw.indexOf("splash-1290x2796") === -1, "not precached");
+});
+
+
+check("centred update popup matches the 300 / 20 / 40% spec; mixed files reload once", function () {
+  const css = fs.readFileSync(__dirname + "/styles.css", "utf8");
+  assert.ok(/\.update-mask,[\s\S]*#update-banner \{[\s\S]*background: rgba\(0, 0, 0, 0\.4\)/.test(css), "40% black mask");
+  assert.ok(/\.update-card \{[^}]*width: 300px;[^}]*border-radius: 20px;/.test(css), "300 wide, radius 20");
+  assert.ok(/\.update-title \{[^}]*font-size: 17px;[^}]*font-weight: 700;/.test(css), "17px bold title");
+  assert.ok(/\.update-body \{[^}]*font-size: 14px;/.test(css), "14px grey line");
+  assert.ok(/\.update-now \{[^}]*height: 44px;/.test(css), "44-tall primary");
+  assert.strictEqual(UB.SHELL_CACHE, "xingcheng-map-shell-v19");
+  const V = require("./version.js");
+  assert.strictEqual(V.SHELL_CACHE, "xingcheng-map-shell-v19");
+  const html = fs.readFileSync(__dirname + "/index.html", "utf8");
+  assert.ok(html.indexOf('name="shell-cache" content="xingcheng-map-shell-v19"') !== -1);
+  assert.strictEqual(UB.isMixed("xingcheng-map-shell-v19", "xingcheng-map-shell-v19", "xingcheng-map-shell-v19"), false);
+  assert.strictEqual(UB.isMixed("xingcheng-map-shell-v18", "xingcheng-map-shell-v19", "xingcheng-map-shell-v19"), true);
+  const store = {};
+  const storage = { getItem: (k) => (Object.prototype.hasOwnProperty.call(store, k) ? store[k] : null), setItem: (k, v) => { store[k] = v; } };
+  assert.strictEqual(UB.shouldReloadMixed(true, storage), true);
+  UB.markMixedReload(storage);
+  assert.strictEqual(UB.shouldReloadMixed(true, storage), false, "second time in the same session does not loop");
+  assert.strictEqual(UB.shouldReloadMixed(false, storage), false);
 });
 
 if (failures) {

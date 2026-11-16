@@ -170,7 +170,7 @@ check("first-of-day to a hotel targets the hotel itself", function () {
   assert.ok(!t.role || t.role === "place");
 });
 
-check("v5.2 nav: Google gets name + address; a unit like 'Suite X01' is never the name; no address → lat,lng; nothing → 待补地址", function () {
+check("v5.2 nav: Google gets name + address; a unit like 'Suite X01' is never the name; no address → lat,lng; nothing → 位置待确认", function () {
   const G = require("./geo.js");
   /* 全是假数据：假餐厅名 + 带楼内单元号的完整英国地址（含邮编） */
   const from = { name: "Example Hall", address: "1 Sample Square, London WC1H 0XX", lat: 51.5246, lng: -0.1281 };
@@ -187,9 +187,13 @@ check("v5.2 nav: Google gets name + address; a unit like 'Suite X01' is never th
   const fromMe = G.buildFlexibleNavLinks(null, shop, "公共交通").href;
   assert.ok(fromMe.indexOf("origin=") === -1, "default origin omitted = current location");
   const coordsOnly = { name: "Example Corner", lat: 51.5, lng: -0.12 };
-  assert.strictEqual(G.pointUsable(coordsOnly), true, "coords without address navigate normally");
-  assert.ok(G.buildFlexibleNavLinks(null, coordsOnly, "公共交通").href.indexOf("destination=51.500000%2C-0.120000") !== -1, "no address → lat,lng (never name + city)");
-  assert.strictEqual(G.pointUsable({ name: "Only a name" }), false, "neither address nor coords → grey + 待补地址");
+  assert.strictEqual(G.pointUsable(coordsOnly), true, "a name is enough to navigate");
+  const coordsHref = G.buildFlexibleNavLinks(null, coordsOnly, "公共交通").href;
+  assert.ok(coordsHref.indexOf(encodeURIComponent("Example Corner")) !== -1, "name without address is handed as text, not name+city: " + coordsHref);
+  assert.ok(coordsHref.indexOf("destination=51.500000") === -1, "coords only when there is no name or address");
+  assert.strictEqual(G.pointUsable({ name: "Only a name" }), true, "name text can be handed to the maps app");
+  const bare = { lat: 51.5, lng: -0.12 };
+  assert.ok(G.buildFlexibleNavLinks(null, bare, "公共交通").href.indexOf("destination=51.500000%2C-0.120000") !== -1, "no text at all → lat,lng");
   assert.ok(G.buildPlaceLink(shop).href.indexOf("https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent("Example Hotpot, " + shop.address)) === 0, "看位置 = place search, not a route");
 });
 
@@ -221,7 +225,7 @@ check("v5.2 provider: Amap only for coordinates inside mainland China; names nev
     assert.strictEqual(G.buildFlexibleNavLinks(null, p, "公共交通").recommended, "amap", k + " → Amap");
     const g = G.amapCoord(p.lat, p.lng);
     assert.ok(Math.abs(g.lat - p.lat) > 0.0005 || Math.abs(g.lng - p.lng) > 0.0005, k + " GCJ applied");
-    assert.ok(G.buildPlaceLink(p).href.indexOf("https://uri.amap.com/marker?") === 0, k + " 看位置 → Amap marker");
+    assert.ok(/https:\/\/uri\.amap\.com\/(marker|search)\?/.test(G.buildPlaceLink(p).href), k + " 看位置 → Amap");
   });
   assert.strictEqual(G.buildFlexibleNavLinks({ name: "x", lat: 35.68, lng: 139.69 }, { name: "y", lat: 31.23, lng: 121.47 }, "公共交通").recommended, "google", "origin outside the mainland → Google");
   const geo = fs.readFileSync(__dirname + "/geo.js", "utf8");
@@ -231,7 +235,7 @@ check("v5.2 provider: Amap only for coordinates inside mainland China; names nev
 
 check("v5.2 nav UI copy and styles", function () {
   const tl = fs.readFileSync(__dirname + "/timeline.js", "utf8");
-  assert.ok(tl.indexOf('go: "带我去"') !== -1 && tl.indexOf('look: "看位置"') !== -1 && tl.indexOf('noAddr: "待补地址"') !== -1);
+  assert.ok(tl.indexOf('go: "带我去"') !== -1 && tl.indexOf('look: "看位置"') !== -1 && tl.indexOf('noAddr: "位置待确认"') !== -1);
   assert.ok(tl.indexOf('far: "这两站之间要坐飞机或火车"') !== -1 && tl.indexOf('transitTip: "公交算不出来就换成驾车试试"') !== -1);
   assert.ok(/var NAV_FAR_KM = 300;/.test(tl) && /buildFlexibleNavLinks\(null, dest/.test(tl), "v5.4: card 带我去 always starts from the current location");
   assert.ok(tl.indexOf("在地图上看位置") === -1, "wording is 看位置");

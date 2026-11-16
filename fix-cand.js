@@ -1,7 +1,7 @@
 /**
  * v5.3 待补地址的自动候选 / 批量补位置 / 粘贴地址清理 / 在地图上选（纯逻辑，界面在 timeline.js）。
  * 规则（IT老板）：
- *   - 候选只给用户看，绝不自动填坐标，哪怕只有 1 个；用户点一下才算。
+ *   - 唯一且对得上（名字、城市或地址、50 公里内）就自动填；拿不准才问，候选只放在内存里。
  *   - 搜索用当天城市文字（item.city）+ 当天大概区域（Geocode.biasArea 先四舍五入），再试一次去掉「店 / 餐厅 / Restaurant」的简化名。
  *   - 候选只存内存（本文件的 cache），不写 localStorage、不进备份 / 分享。
  *   - 不解析地图分享短链。
@@ -26,13 +26,171 @@
     banner: "{n} 个地点待补位置",
     bannerGo: "去补 ›",
     panelTitle: "待补位置 {i}/{n}",
-    skip: "跳过",
+    skip: "先跳过",
     allDone: "都补好了",
-    pickHint: "长按放一个图钉，可以拖动，再点『就是这里』",
-    pickSave: "就是这里",
+    pickHint: "长按放一个图钉，可以拖动，再点『就放这里』",
+    pickSave: "就放这里",
     pickClose: "关闭",
-    placeholder: "输入店名，或粘贴地址"
+    placeholder: "输入店名，或粘贴地址",
+    askMany: "“{name}”找到 {n} 个，点对的那个",
+    askFar: "是这里吗？",
+    remain: "还有 {n} 个要确认",
   };
+  var CLEAR_KM = 50;
+
+  function normText(s) {
+    return String(s || "").toLowerCase().replace(/[\s,.'’\-·()（）]/g, "");
+  }
+
+  function itemName(item) {
+    return String((item && (item.nameZh || item.nameEn || item.name)) || "").trim();
+  }
+
+  function candNames(c) {
+    var unit = root.GeoUtil && root.GeoUtil.isUnitLikeName ? root.GeoUtil.isUnitLikeName : function () { return false; };
+    return [c && c.name, c && c.nameDetail, c && String(c.displayName || "").split(/[,，]/)[0]]
+      .map(function (s) { return String(s || "").trim(); })
+      .filter(function (s) { return s && !unit(s); });
+  }
+
+  function nameMatches(item, cand) {
+    var w = normText(itemName(item));
+    var names = candNames(cand).map(normText).filter(Boolean);
+    if (!w || !names.length) return false;
+    var i;
+    for (i = 0; i < names.length; i++) {
+      if (names[i].indexOf(w) !== -1 || w.indexOf(names[i]) !== -1) return true;
+    }
+    return false;
+  }
+
+  function candCityAddr(c) {
+    var city = String((c && (c.city || (c.address && c.address.city))) || "").trim();
+    var addr = "";
+    if (c && c.address && typeof c.address === "object") {
+      addr = [c.address.road, c.address.suburb, c.address.city, c.address.country, c.address.postcode].filter(Boolean).join(" ");
+    }
+    if (!addr) addr = String((c && (c.displayName || c.address || "")) || "");
+    return { city: city, addr: addr, blob: (city + " " + addr + " " + String((c && c.displayName) || "")).toLowerCase() };
+  }
+
+  function cityOrAddressMatches(item, cand, ctx) {
+    ctx = ctx || {};
+    var info = candCityAddr(cand);
+    var needles = [item && item.city, ctx.city, item && item.address].map(function (s) { return String(s || "").trim(); }).filter(Boolean);
+    /* 地址就是名字时，不当作地址来比 */
+    var nm = itemName(item);
+    needles = needles.filter(function (s) { return s && s !== nm; });
+    if (!needles.length) return true;
+    var blob = info.blob;
+    var i;
+    for (i = 0; i < needles.length; i++) {
+      var n = needles[i].toLowerCase();
+      if (n && blob.indexOf(n) !== -1) return true;
+    }
+    return false;
+  }
+
+  function kmBetween(a, b) {
+    if (!a || !b || !isFinite(a.lat) || !isFinite(b.lat) || !isFinite(a.lng) || !isFinite(b.lng)) return null;
+    if (root.GeoUtil && root.GeoUtil.haversineKm) return root.GeoUtil.haversineKm(a, b);
+    var R = 6371;
+    var dLat = ((b.lat - a.lat) * Math.PI) / 180;
+    var dLng = ((b.lng - a.lng) * Math.PI) / 180;
+    var x = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos((a.lat * Math.PI) / 180) * Math.cos((b.lat * Math.PI) / 180) * Math.sin(dLng / 2) * Math.sin(dLng / 2);
+    return 2 * R * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x));
+  }
+
+  function withinArea(cand, ctx) {
+    ctx = ctx || {};
+    if (!ctx.bias || !isFinite(ctx.bias.lat) || !isFinite(cand && cand.lat)) return true;
+    var km = kmBetween(ctx.bias, cand);
+    return km == null || km <= CLEAR_KM;
+  }
+
+  /** 唯一且对得上：名字对、城市或地址对、离当天其他点不超过 50 公里 → 自动用，不问。 */
+  function isClearMatch(item, cand, ctx) {
+    if (!item || !cand || typeof cand.lat !== "number") return false;
+    return nameMatches(item, cand) && cityOrAddressMatches(item, cand, ctx) && withinArea(cand, ctx);
+  }
+
+  function scoreCandidate(item, cand, ctx) {
+    var s = 0;
+    if (nameMatches(item, cand)) s += 10;
+    var names = candNames(cand).map(normText);
+    var w = normText(itemName(item));
+    if (w && names.indexOf(w) !== -1) s += 6;
+    if (cityOrAddressMatches(item, cand, ctx)) s += 8;
+    var km = ctx && ctx.bias ? kmBetween(ctx.bias, cand) : null;
+    if (km != null) s += Math.max(0, 8 - km / 5);
+    return s;
+  }
+
+  function rankCandidates(item, list, ctx) {
+    return (list || []).slice().sort(function (a, b) {
+      return scoreCandidate(item, b, ctx) - scoreCandidate(item, a, ctx);
+    });
+  }
+
+  function classifyCandidates(item, list, ctx) {
+    var ranked = rankCandidates(item, list, ctx);
+    if (!ranked.length) return { kind: "none", chosen: null, list: [] };
+    if (ranked.length === 1 && isClearMatch(item, ranked[0], ctx)) {
+      return { kind: "auto", chosen: ranked[0], list: ranked };
+    }
+    if (ranked.length === 1 && !withinArea(ranked[0], ctx)) {
+      return { kind: "far", chosen: null, list: ranked };
+    }
+    return { kind: "ask", chosen: null, list: ranked };
+  }
+
+  function askTitle(item, list, kind) {
+    if (kind === "far" || (list || []).length === 1) return COPY.askFar;
+    var name = itemName(item) || "这里";
+    return COPY.askMany.replace("{name}", name).replace("{n}", String((list || []).length));
+  }
+
+  function remainText(n) {
+    return COPY.remain.replace("{n}", String(n));
+  }
+
+  function tileXY(lat, lng, z) {
+    var n = Math.pow(2, z);
+    var x = Math.floor((Number(lng) + 180) / 360 * n);
+    var latRad = Number(lat) * Math.PI / 180;
+    var y = Math.floor((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2 * n);
+    return { x: x, y: y, z: z };
+  }
+
+  /** 静态小地图：只用当前底图的图块，不加新域名。 */
+  function staticMapUrl(lat, lng, z) {
+    z = z || 15;
+    var p = { lat: Number(lat), lng: Number(lng) };
+    var T = root.MapTiles;
+    if (T && T.usingAmap && T.usingAmap() && T.displayLatLng) {
+      var d = T.displayLatLng(p.lat, p.lng);
+      if (d) p = d;
+      var xy = tileXY(p.lat, p.lng, z);
+      var s = ((xy.x + xy.y) % 4) + 1;
+      return "https://webrd0" + s + ".is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x=" + xy.x + "&y=" + xy.y + "&z=" + xy.z;
+    }
+    var osm = tileXY(p.lat, p.lng, z);
+    var sub = ["a", "b", "c"][(osm.x + osm.y) % 3];
+    return "https://" + sub + ".tile.openstreetmap.org/" + osm.z + "/" + osm.x + "/" + osm.y + ".png";
+  }
+
+  function staticMapHtml(lat, lng) {
+    if (!isFinite(lat) || !isFinite(lng)) return "";
+    return '<div class="cand-mini" aria-hidden="true"><img alt="" src="' + staticMapUrl(lat, lng, 15) + '"><span class="cand-pin"></span></div>';
+  }
+
+  function fullAddress(c) {
+    var info = candCityAddr(c);
+    var line = String((c && c.displayName) || info.addr || "").trim();
+    if (info.city && line.toLowerCase().indexOf(info.city.toLowerCase()) === -1) line = line ? line + "，" + info.city : info.city;
+    return line;
+  }
 
   /* ---------- 简化名：去掉常见后缀 ---------- */
   var SUFFIX_RE = [
@@ -252,7 +410,7 @@
     return null;
   }
 
-  /** 「就是这里」：只写坐标（WGS-84；tiles = "gcj02" 时先转回），不查地址、不发任何请求 */
+  /** 「就放这里」：只写坐标（WGS-84；tiles = "gcj02" 时先转回），不查地址、不发任何请求 */
   function applyMapPick(item, latlng, tiles) {
     var next = JSON.parse(JSON.stringify(item || {}));
     if (!latlng || !isFinite(latlng.lat) || !isFinite(latlng.lng)) return next;
@@ -325,6 +483,18 @@
     hotelNights: hotelNights,
     hotelDateState: hotelDateState,
     COPY: COPY,
+    CLEAR_KM: CLEAR_KM,
+    nameMatches: nameMatches,
+    cityOrAddressMatches: cityOrAddressMatches,
+    isClearMatch: isClearMatch,
+    rankCandidates: rankCandidates,
+    classifyCandidates: classifyCandidates,
+    askTitle: askTitle,
+    remainText: remainText,
+    staticMapUrl: staticMapUrl,
+    staticMapHtml: staticMapHtml,
+    fullAddress: fullAddress,
+    kmBetween: kmBetween,
     MAX: MAX,
     simplifyName: simplifyName,
     cleanPasted: cleanPasted,

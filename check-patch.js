@@ -62,7 +62,7 @@ check("copy failing tells the user the URL to copy by hand", async function () {
   const toasts = [];
   const res = await R.recommend({ navigator: { clipboard: { writeText: () => Promise.reject(new Error("no")) } }, toast: (m) => toasts.push(m) });
   assert.strictEqual(res, "failed");
-  assert.deepStrictEqual(toasts, ["复制没成功，请手动复制：https://freeyourtrip.github.io"]);
+  assert.deepStrictEqual(toasts, ["没复制上，长按网址自己复制：https://freeyourtrip.github.io"]);
 });
 
 check("settings markup: 分享我的行程 / 分享给朋友 (v6) with subtitles; old labels gone; script + precache", function () {
@@ -83,8 +83,8 @@ check("settings markup: 分享我的行程 / 分享给朋友 (v6) with subtitles
   assert.ok(v51.indexOf("推荐给朋友") === -1 && v51.indexOf("「分享行程」") === -1, "v5.1 texts use the final names");
   assert.ok(tl.indexOf('title: "分享我的行程", text: "发给同行的人，订单号和座位会自动隐藏"') !== -1, "help sheet uses final names");
   assert.ok(html.indexOf('src="./recommend.js"') !== -1);
-  assert.ok(sw.indexOf('"./recommend.js"') !== -1 && sw.indexOf('"xingcheng-map-shell-v18"') !== -1);
-  assert.ok(["v5.1", "v5.2", "v5.3", "v5.4", "v6", "v6.0"].indexOf(v.APP_VERSION) !== -1);
+  assert.ok(sw.indexOf('"./recommend.js"') !== -1 && sw.indexOf('"xingcheng-map-shell-v19"') !== -1);
+  assert.ok(["v5.1", "v5.2", "v5.3", "v5.4", "v6", "v6.0", "v6.1"].indexOf(v.APP_VERSION) !== -1);
 });
 
 check("narrow top bar CSS: ≤360px brand 16px nowrap, icon-only buttons, 44px; help button keeps aria-label", function () {
@@ -133,7 +133,7 @@ check("iOS startup images: 9 portrait media queries, files exist, none precached
 
 check("no new external hosts in shipped code", function () {
   const files = ["index.html", "recommend.js", "timeline.js", "calendar.js", "import.js", "sw.js"];
-  const allowed = /freeyourtrip\.github\.io|openstreetmap|nominatim|amap|autonavi|google\.com|googleapis|w3\.org|leafletjs|github\.com\/Leaflet|maps\.apple|uri\.amap|schemas|example/i;
+  const allowed = /freeyourtrip\.github\.io|openstreetmap|nominatim|amap|autonavi|google\.com|googleapis|w3\.org|leafletjs|github\.com\/Leaflet|maps\.apple|uri\.amap|schemas|example|postcodes\.io/i;
   files.forEach((f) => {
     const src = fs.readFileSync(__dirname + "/" + f, "utf8");
     (src.match(/https?:\/\/[^\s"'<>)]+/g) || []).forEach((u) => assert.ok(allowed.test(u), f + ": unexpected host " + u));

@@ -111,12 +111,7 @@ check("malformed lines report Chinese line numbers and still import good ones", 
   assert.strictEqual(r.items[0].nameZh, "大英博物馆");
   assert.strictEqual(r.items[1].nameEn, "The Savoy");
   assert.strictEqual(r.errors.length, 3);
-  assert.ok(r.errors[0].indexOf("第 2 行") !== -1, r.errors[0]);
-  assert.ok(r.errors[0].indexOf("火车") !== -1, r.errors[0]);
-  assert.ok(r.errors[1].indexOf("第 3 行") !== -1, r.errors[1]);
-  assert.ok(/IATA|机场/.test(r.errors[1]), r.errors[1]);
-  assert.ok(r.errors[2].indexOf("第 5 行") !== -1, r.errors[2]);
-  assert.ok(r.errors[2].indexOf("5 列") !== -1, r.errors[2]);
+  assert.deepStrictEqual(r.errors, ["第 2 行：没认出来", "第 3 行：没认出来", "第 5 行：没认出来"]);
 });
 
 check("Dishoom JSON (Chinese keys, legacy)", function () {
@@ -194,11 +189,15 @@ check("JSON one bad record still imports the good one and names the index", func
   assert.ok(r.errors[0].indexOf("第 2 条") !== -1, r.errors[0]);
 });
 
-check("invalid JSON reports a Chinese parse error", function () {
+check("invalid JSON shows the friendly unrecognized message, never a raw parse error", function () {
   const r = ImportUtil.parseImport("{ not json");
   assert.strictEqual(r.items.length, 0);
   assert.strictEqual(r.format, "json");
-  assert.ok(r.errors[0].indexOf("JSON 无法解析") !== -1, r.errors[0]);
+  assert.strictEqual(r.errors[0], ImportUtil.IMPORT_UNRECOGNIZED || "没认出来，把 AI 的回复整段复制过来再试一次");
+  assert.ok(!/JSON|Unexpected|无法解析/.test(r.errors.join("\n")), r.errors[0]);
+  const bad = ImportUtil.parseImport('{"hello":1}');
+  assert.strictEqual(bad.errors[0], "没认出来，把 AI 的回复整段复制过来再试一次");
+  assert.ok(!/应为对象数组|error\.message/.test(bad.errors.join("\n")), bad.errors[0]);
 });
 
 check("parses coords from a Google Maps link in 地址", function () {
@@ -213,7 +212,7 @@ check("parses coords from a Google Maps link in 地址", function () {
 check("empty input error is in Chinese", function () {
   const r = ImportUtil.parseImport("   \n  ");
   assert.strictEqual(r.items.length, 0);
-  assert.ok(/没有可导入/.test(r.errors[0]));
+  assert.ok(/没读到行程/.test(r.errors[0]), r.errors[0]);
 });
 
 const AiPrompt = require("./ai-prompt.js");
@@ -259,7 +258,7 @@ check("team prompt example block parses into correct items", function () {
   assert.strictEqual(place.type, "place");
   assert.strictEqual(place.subtype, "餐厅");
   assert.strictEqual(place.nameEn, "Dishoom Covent Garden");
-  assert.strictEqual(place.address, "12 Upper St Martin's Ln, London WC2H 9FB");
+  assert.strictEqual(place.address, "12 Upper St Martin's Ln, London WC2H 9FB, UK");
   assert.strictEqual(place.date, "2026-12-05");
   assert.strictEqual(place.time, "13:00");
   assert.strictEqual(place.note, "排队的人多");
