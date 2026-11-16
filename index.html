@@ -11,12 +11,7 @@
   <link rel="manifest" href="./manifest.webmanifest">
   <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png">
   <link rel="icon" type="image/png" sizes="192x192" href="./icons/icon-192.png">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&family=Noto+Serif+SC:wght@700&family=Source+Sans+3:wght@400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
-        crossorigin="">
+  <link rel="stylesheet" href="./vendor/leaflet.css">
   <link rel="stylesheet" href="./styles.css">
 </head>
 <body>
@@ -32,8 +27,9 @@
     </div>
     <div class="header-right">
       <div class="backup-btns">
-        <button type="button" class="backup-btn" id="backup-export" title="导出后发给朋友，对方点导入即可">导出备份</button>
-        <button type="button" class="backup-btn" id="backup-import">导入备份</button>
+        <button type="button" class="backup-btn" id="backup-export-share" title="导出后发给朋友，对方点导入即可">分享给朋友（隐藏订单号）</button>
+        <button type="button" class="backup-btn backup-btn-secondary" id="backup-export-full" title="含确认号和座位，仅自己保存">完整备份（仅自己保存）</button>
+        <button type="button" class="backup-btn backup-btn-secondary" id="backup-import">导入备份</button>
         <input type="file" id="backup-file" accept="application/json,.json" hidden>
       </div>
       <div class="stats" id="result-count"></div>
@@ -147,13 +143,13 @@
   </div>
 
   <footer class="site-footer">
-    <p class="settings-note">数据只保存在本浏览器，换手机或清缓存前请先导出备份。想分享行程：导出后把文件发给朋友，对方点“导入备份”即可。</p>
-    <p>地图图块来自 OpenStreetMap；地理编码来自 Nominatim。可安装到手机主屏幕。相对路径部署，适用于 GitHub Pages 子目录。</p>
+    <p class="settings-note">数据只保存在本浏览器，不上传任何服务器。搜索地址时仅把搜索词发给 OpenStreetMap。想分享行程：点“分享给朋友”导出文件发给对方，对方点“导入备份”即可。换手机或清缓存前请先做“完整备份”。</p>
+    <p class="full-backup-warn">「完整备份」含机票/酒店确认号和座位，请仅自己保存。</p>
+    <p>地图图块来自 OpenStreetMap；查找地址时使用 Nominatim。可安装到手机主屏幕。相对路径部署，适用于 GitHub Pages 子目录。</p>
+    <p><button type="button" class="clear-data-btn" id="backup-clear">清空本机数据</button></p>
   </footer>
 
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-          integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
-          crossorigin=""></script>
+  <script src="./vendor/leaflet.js"></script>
   <script src="./data.js"></script>
   <script src="./airports.js"></script>
   <script src="./geo.js"></script>

@@ -1,5 +1,7 @@
 /**
- * 导出 / 导入全部本地数据备份（行程、条目、交通腿、心愿状态、地理编码缓存）。
+ * 导出 / 导入本地数据。
+ * 「分享给朋友」会去掉确认号、座位及备注里的对应字样，且不含地理编码缓存。
+ * 「完整备份」保留全部内容，仅供自己保存。
  */
 (function (root) {
   "use strict";
@@ -9,6 +11,7 @@
   var TRIP_KEY = "wishlist-map-trips-v1";
   var GEO_KEY = "wishlist-map-geocode-v1";
   var FLAG_KEY = "wishlist-map-examples-loaded-v1";
+  var APP_PREFIX = "wishlist-map";
 
   function readJson(key, fallback) {
     try {
@@ -25,7 +28,58 @@
     var y = d.getFullYear();
     var m = String(d.getMonth() + 1).padStart(2, "0");
     var day = String(d.getDate()).padStart(2, "0");
-    return y + "-" + m + "-" + day;
+    return "" + y + m + day;
+  }
+
+  /** 去掉备注中的「确认号 X」「座位 X」等字样。 */
+  function stripSecretPatterns(text) {
+    return String(text == null ? "" : text)
+      .replace(/确认号\s*[:：]?\s*\S+/g, "")
+      .replace(/座位\s*[:：]?\s*\S+/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  function redactItem(item) {
+    var copy = JSON.parse(JSON.stringify(item || {}));
+    delete copy.confirmationNo;
+    delete copy.confirmation;
+    delete copy.seat;
+    if (copy.note) copy.note = stripSecretPatterns(copy.note);
+    if (copy.flightFromLondon) {
+      delete copy.flightFromLondon.confirmationNo;
+      delete copy.flightFromLondon.confirmation;
+      delete copy.flightFromLondon.seat;
+    }
+    return copy;
+  }
+
+  function redactForShare(payload) {
+    var out = JSON.parse(JSON.stringify(payload || {}));
+    out.kind = "share";
+    delete out.geocodeCache;
+    out.trips = (out.trips || []).map(function (trip) {
+      var t = Object.assign({}, trip);
+      t.items = (t.items || []).map(redactItem);
+      if (Array.isArray(t.legs)) {
+        t.legs = t.legs.map(function (leg) {
+          var l = Object.assign({}, leg);
+          if (l.note) l.note = stripSecretPatterns(l.note);
+          return l;
+        });
+      }
+      return t;
+    });
+    if (out.legs && typeof out.legs === "object" && !Array.isArray(out.legs)) {
+      var legs = {};
+      Object.keys(out.legs).forEach(function (k) {
+        var leg = Object.assign({}, out.legs[k] || {});
+        if (leg.note) leg.note = stripSecretPatterns(leg.note);
+        legs[k] = leg;
+      });
+      out.legs = legs;
+    }
+    return out;
   }
 
   function collect(opts) {
@@ -36,26 +90,29 @@
       app: "行程地图",
       version: 1,
       exportedAt: new Date().toISOString(),
-      trips: live && live.trips ? live.trips : readJson(TRIP_KEY, []),
+      trips: live && live.trips ? live.trips : (function () {
+        var stored = readJson(TRIP_KEY, null);
+        if (stored && Array.isArray(stored.trips)) return stored.trips;
+        return Array.isArray(stored) ? stored : [];
+      })(),
       activeTripId: live && live.activeTripId ? live.activeTripId : "",
       examplesLoaded: live && typeof live.examplesLoaded === "boolean" ? live.examplesLoaded : readJson(FLAG_KEY, false),
       legs: live && live.legs ? live.legs : readJson(LEG_KEY, {}),
       statuses: wish && wish.statuses ? wish.statuses : readJson(STATUS_KEY, {}),
       wishlistLoaded: wish && wish.loaded ? true : false
     };
-    if (opts.includeGeocodeCache !== false) {
+    if (opts.includeGeocodeCache) {
       payload.geocodeCache = root.Geocode && root.Geocode.getCache ? root.Geocode.getCache() : readJson(GEO_KEY, {});
     }
     return payload;
   }
 
-  function downloadBackup() {
-    var payload = collect({ includeGeocodeCache: true });
+  function triggerDownload(payload, filename) {
     var blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json;charset=utf-8" });
     var a = document.createElement("a");
     var url = URL.createObjectURL(blob);
     a.href = url;
-    a.download = "行程备份-" + todayStamp() + ".json";
+    a.download = filename;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -65,11 +122,28 @@
     return payload;
   }
 
+  /** 分享给朋友：隐藏订单号/座位，不含地理编码缓存。 */
+  function downloadShare() {
+    var payload = redactForShare(collect({ includeGeocodeCache: false }));
+    return triggerDownload(payload, "行程分享-" + todayStamp() + ".json");
+  }
+
+  /** 完整备份：含确认号、座位和地理编码缓存，仅自己保存。 */
+  function downloadFullBackup() {
+    var payload = collect({ includeGeocodeCache: true });
+    payload.kind = "full";
+    return triggerDownload(payload, "行程完整备份-" + todayStamp() + ".json");
+  }
+
+  function downloadBackup() {
+    /* 兼容旧调用：默认走分享导出 */
+    return downloadShare();
+  }
+
   function applyBackup(payload, mode) {
     if (!payload || payload.app !== "行程地图" || !payload.version) {
-      /* 也接受缺 app 字段但有 trips 数组的文件 */
       if (!payload || !Array.isArray(payload.trips)) {
-        throw new Error("这不是一份有效的行程地图备份文件。");
+        throw new Error("这不是一份有效的行程地图备份或分享文件。");
       }
     }
     mode = mode === "merge" ? "merge" : "replace";
@@ -114,16 +188,38 @@
         localStorage.setItem(GEO_KEY, JSON.stringify(payload.geocodeCache));
       }
     }
-    return { mode: mode, tripCount: incomingTrips.length };
+    return { mode: mode, tripCount: incomingTrips.length, kind: payload.kind || "" };
+  }
+
+  function clearAllLocalData() {
+    var keys = [];
+    var i;
+    for (i = 0; i < localStorage.length; i++) {
+      var key = localStorage.key(i);
+      if (key && key.indexOf(APP_PREFIX) === 0) keys.push(key);
+    }
+    keys.forEach(function (k) {
+      localStorage.removeItem(k);
+    });
+    return keys;
   }
 
   function setupButtons() {
-    var exp = document.getElementById("backup-export");
+    var share = document.getElementById("backup-export-share") || document.getElementById("backup-export");
+    var full = document.getElementById("backup-export-full");
     var imp = document.getElementById("backup-import");
     var file = document.getElementById("backup-file");
-    if (exp) {
-      exp.addEventListener("click", function () {
-        downloadBackup();
+    var clearBtn = document.getElementById("backup-clear");
+    if (share) {
+      share.addEventListener("click", function () {
+        downloadShare();
+      });
+    }
+    if (full) {
+      full.addEventListener("click", function () {
+        var ok = window.confirm("完整备份包含机票/酒店确认号和座位，请仅自己保存，不要发给别人。确定导出吗？");
+        if (!ok) return;
+        downloadFullBackup();
       });
     }
     if (imp && file) {
@@ -140,26 +236,34 @@
           try {
             data = JSON.parse(String(reader.result || ""));
           } catch (err) {
-            alert("无法解析该文件，请确认是导出的 JSON 备份。");
+            alert("无法解析该文件，请确认是导出的 JSON 备份或分享文件。");
             return;
           }
           var how = window.confirm(
-            "要将备份合并到当前数据吗？\n\n确定 = 合并（保留现有行程，并加入备份里的内容）\n取消 = 再问一次是否整份替换"
+            "要将文件合并到当前数据吗？\n\n确定 = 合并（保留现有行程，并加入文件里的内容）\n取消 = 再问一次是否整份替换"
           );
           var mode = "merge";
           if (!how) {
-            var replace = window.confirm("确定要用这份备份整份替换当前数据吗？现有行程会被覆盖。");
+            var replace = window.confirm("确定要用这份文件整份替换当前数据吗？现有行程会被覆盖。");
             if (!replace) return;
             mode = "replace";
           }
           try {
             applyBackup(data, mode);
-            alert(mode === "replace" ? "已用备份替换当前数据。" : "已将备份合并到当前数据。");
+            alert(mode === "replace" ? "已用文件替换当前数据。" : "已将文件合并到当前数据。");
           } catch (err) {
             alert(err && err.message ? err.message : String(err));
           }
         };
         reader.readAsText(f, "utf-8");
+      });
+    }
+    if (clearBtn) {
+      clearBtn.addEventListener("click", function () {
+        var ok = window.confirm("将清空本机全部行程和缓存，且不可恢复。建议先做「完整备份」。确定清空吗？");
+        if (!ok) return;
+        clearAllLocalData();
+        window.location.reload();
       });
     }
   }
@@ -171,7 +275,14 @@
     FLAG_KEY: FLAG_KEY,
     collect: collect,
     downloadBackup: downloadBackup,
+    downloadShare: downloadShare,
+    downloadFullBackup: downloadFullBackup,
+    redactForShare: redactForShare,
+    stripSecretPatterns: stripSecretPatterns,
+    redactItem: redactItem,
     applyBackup: applyBackup,
+    clearAllLocalData: clearAllLocalData,
+    todayStamp: todayStamp,
     setupButtons: setupButtons,
     readJson: readJson
   };

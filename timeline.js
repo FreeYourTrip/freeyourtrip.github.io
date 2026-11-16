@@ -24,6 +24,24 @@
       .replace(/"/g, "&quot;");
   }
 
+  /** 确认号默认遮罩，如 ABC123 → AB****23。短于等于 4 个字符时全部用星号。 */
+  function maskSecret(s) {
+    s = String(s == null ? "" : s);
+    if (s.length <= 4) return "****";
+    return s.slice(0, 2) + "****" + s.slice(-2);
+  }
+
+  function secretToggleHtml(value) {
+    if (!value) return "";
+    return (
+      '<button type="button" class="secret-toggle" data-secret="' +
+      escapeHtml(value) +
+      '" aria-label="点击显示或隐藏确认号">' +
+      escapeHtml(maskSecret(value)) +
+      "</button>"
+    );
+  }
+
   function parseCivilDate(isoDate) {
     if (!isoDate || typeof isoDate !== "string") return null;
     var parts = isoDate.split("-");
@@ -222,11 +240,30 @@
     return groups;
   }
 
+
+  function bindSecretToggles(root) {
+    if (!root || root.getAttribute("data-secret-bound") === "1") return;
+    root.setAttribute("data-secret-bound", "1");
+    root.addEventListener("click", function (ev) {
+      var btn = ev.target.closest ? ev.target.closest(".secret-toggle") : null;
+      if (!btn || !root.contains(btn)) return;
+      ev.preventDefault();
+      ev.stopPropagation();
+      var raw = btn.getAttribute("data-secret") || "";
+      if (btn.getAttribute("data-open") === "1") {
+        btn.textContent = maskSecret(raw);
+        btn.removeAttribute("data-open");
+      } else {
+        btn.textContent = raw;
+        btn.setAttribute("data-open", "1");
+      }
+    });
+  }
   function flightCardHtml(item, compactArrive) {
     var code = formatFlightLocal(item);
     var extra = [];
-    if (item.confirmationNo) extra.push("确认号 " + item.confirmationNo);
-    if (item.seat) extra.push("座位 " + item.seat);
+    if (item.confirmationNo) extra.push("确认号 " + secretToggleHtml(item.confirmationNo));
+    if (item.seat) extra.push("座位 " + escapeHtml(item.seat));
     if (compactArrive) {
       return (
         '<article class="tl-card tl-flight">' +
@@ -277,7 +314,7 @@
       " " +
       escapeHtml(item.toAirport) +
       "</dd></div>" +
-      (extra.length ? "<div><dt>其他</dt><dd>" + escapeHtml(extra.join(" · ")) + "</dd></div>" : "") +
+      (extra.length ? "<div><dt>其他</dt><dd>" + extra.join(" · ") + "</dd></div>" : "") +
       "</dl></article>"
     );
   }
@@ -304,7 +341,7 @@
       (item.checkOutTime ? " " + escapeHtml(item.checkOutTime) : "") +
       "</dd></div>" +
       (item.confirmationNo
-        ? "<div><dt>确认号</dt><dd>" + escapeHtml(item.confirmationNo) + "</dd></div>"
+        ? "<div><dt>确认号</dt><dd>" + secretToggleHtml(item.confirmationNo) + "</dd></div>"
         : "") +
       "</dl></article>"
     );
@@ -451,6 +488,7 @@
     root.innerHTML = html;
     bindLegEvents(trip);
     renderTripMap(trip);
+    bindSecretToggles($("timeline"));
   }
 
   function updateLegPanelLinks(panel, from, to, mode) {

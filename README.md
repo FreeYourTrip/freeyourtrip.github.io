@@ -30,6 +30,7 @@ python3 -m http.server 8080 --directory .
 | `geocode.js` | Nominatim 地理编码（1 次/秒，localStorage 缓存） |
 | `import.js` | 行程导入（自动识别管道格式 / JSON，支持中英文字段） |
 | `backup.js` | 导出 / 导入全部数据备份 |
+| `vendor/` | 本地 Leaflet 脚本、样式与标记图，避免再请求脚本 CDN |
 | `manifest.webmanifest` / `sw.js` / `icons/` | 可安装到手机主屏幕（相对路径，适合 GitHub Pages 子目录） |
 | `导入格式说明.txt` | 导入格式说明（推荐管道格式） |
 | `check.js` / `check-import.js` | 可选的离线校验（`node check.js`、`node check-import.js`） |
@@ -109,7 +110,7 @@ flightFromLondon: {
 
 航班的日期时间按**各自身机场的当地墙钟时间**书写，例如 `2026-12-01 09:30 ~ 2026-12-02 07:00`。文字地址和名称会通过 OpenStreetMap Nominatim 查找坐标（无需密钥，每秒 1 次，结果缓存在本机）。机票先查内置机场表。找不到或多个候选时，预览行会标成黄色，可挑选或重试；不会因此中断整批导入。页面不计算导航路线。
 
-行程数据保存在本机 `localStorage`（`wishlist-map-trips-v1` 等）。请用页眉上醒目的「导出备份 / 导入备份」按钮下载带日期的 JSON；导入时可选择合并或整份替换。页脚有提示：数据只保存在本浏览器，换手机或清缓存前请先导出备份。
+行程数据只保存在本机浏览器（`localStorage` 键 `wishlist-map-trips-v1` 等），不上传到我们的服务器。页眉提供两种导出：「分享给朋友（隐藏订单号）」会去掉确认号、座位及备注里的对应字样，也不含地理编码缓存，文件名如 `行程分享-YYYYMMDD.json`；「完整备份（仅自己保存）」保留全部内容（含预订号），文件名如 `行程完整备份-YYYYMMDD.json`，请不要把完整备份发给别人。两种文件都可以用「导入备份」合并或替换。换手机或清缓存前请先做完整备份；也可以在页脚「清空本机数据」。
 
 把站点放到 GitHub Pages 时，所有本地资源都使用相对路径（`./styles.css`、`./sw.js`、`start_url: "./"`），可部署在子目录如 `/repo-name/`。可用浏览器「添加到主屏幕」安装。service worker 只在 http/https 下注册，用 file:// 直接打开时不会启用，但不影响基本功能。
 

@@ -2,6 +2,7 @@
  * OpenStreetMap Nominatim 地理编码（无需 API Key）。
  * 限制：每秒最多 1 次请求；结果缓存在 localStorage。
  * 机票优先查本地机场表，找不到再搜「<IATA> airport」。
+ * 请求中只包含名称、地址或 IATA，不会发送确认号、座位或备注。
  */
 (function (root) {
   "use strict";
@@ -104,8 +105,19 @@
     return run;
   }
 
+  /**
+   * 只把地名/地址/IATA 发给 Nominatim，去掉可能夹带的确认号、座位、备注字样。
+   */
+  function sanitizeGeocodeQuery(query) {
+    return String(query == null ? "" : query)
+      .replace(/确认号\s*[:：]?\s*\S+/g, " ")
+      .replace(/座位\s*[:：]?\s*\S+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
   function nominatimSearch(query) {
-    var q = String(query || "").trim();
+    var q = sanitizeGeocodeQuery(query);
     if (!q) return Promise.resolve([]);
     var hit = cacheGet(q);
     if (hit && Array.isArray(hit.results)) {
@@ -414,6 +426,7 @@
   var api = {
     CACHE_KEY: CACHE_KEY,
     nominatimSearch: nominatimSearch,
+    sanitizeGeocodeQuery: sanitizeGeocodeQuery,
     lookupIata: lookupIata,
     resolveItem: resolveItem,
     resolveAll: resolveAll,
