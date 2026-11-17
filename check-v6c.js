@@ -33,8 +33,9 @@ const rule = (sel) => {
 };
 
 check("cards: no text selection / callout on long-press (inputs still selectable); contextmenu + selectstart blocked on cards only", function () {
-  assert.ok(css.indexOf(".card { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }") !== -1);
-  assert.ok(/\.card input, \.card textarea, \.card select, \.card \[contenteditable\] \{ -webkit-user-select: text; user-select: text;/.test(css));
+  assert.ok(/body\s*\{[^}]*user-select:\s*none/.test(css) && /body\s*\{[^}]*-webkit-user-select:\s*none/.test(css) && /body\s*\{[^}]*-webkit-touch-callout:\s*none/.test(css));
+  assert.ok(/input, textarea, \[contenteditable\]\s*\{[^}]*user-select:\s*text/.test(css));
+  assert.ok(/\.card-address\s*\{[^}]*user-select:\s*text/.test(css));
   assert.ok(/if \(t\.closest\("input, textarea, select, \[contenteditable\](?:, \.card-address)?"\)\) return;\s*if \(t\.closest\("\.card"\)\) ev\.preventDefault\(\);/.test(tl));
   assert.ok(/root\.addEventListener\("contextmenu", noNative\);\s*root\.addEventListener\("selectstart", noNative\);/.test(tl));
 });

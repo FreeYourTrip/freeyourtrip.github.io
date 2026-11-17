@@ -37,16 +37,12 @@ function redact(s) {
 }
 
 async function run() {
-  await check("APP_VERSION v6.1.1, cache v20, announcement and changelog signed off", function () {
-    assert.strictEqual(V.APP_VERSION, "v6.1.1");
-    assert.strictEqual(V.SHELL_CACHE, "xingcheng-map-shell-v20");
+  await check("v6.1.1 changelog remains signed off (historical)", function () {
     assert.ok(V.compareVersion("v6.1", "v6.1.1") < 0);
-    assert.deepStrictEqual(V.ANNOUNCEMENT.bullets, [
-      "国内的店名和地址，现在用高德搜，搜得更准",
-      "『地图』按钮挪到『添加』旁边，看底部就能找到",
-      "国内地点点『带我去』，直接打开高德 App"
-    ]);
-    assert.deepStrictEqual(V.CHANGELOG[0].lines, [
+    assert.ok(V.compareVersion("v6.1.1", V.APP_VERSION) <= 0);
+    const e = V.CHANGELOG.find((x) => x.version === "v6.1.1");
+    assert.ok(e && !e.draft, "v6.1.1 changelog stays signed off");
+    assert.deepStrictEqual(e.lines, [
       "新增：搜国内地点改用高德，搜得更准",
       "调整：『地图』按钮挪到『添加』左边",
       "修复：导入成功后，输入框会自动清空",
@@ -54,7 +50,7 @@ async function run() {
       "优化：屏幕下方的提示，点一下就能关掉",
       "优化：国内地点打开地图，直接跳到高德 App，不再卡在网页"
     ]);
-    assert.strictEqual(V.CHANGELOG[1].version, "v6.1");
+    assert.strictEqual(V.CHANGELOG.find((x) => x.version === "v6.1").version, "v6.1");
   });
 
   await check("CSP script-src is exactly the approved list; connect-src unchanged; no script unsafe-inline or wasm-unsafe-eval; repo keys empty", function () {

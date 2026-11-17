@@ -10,23 +10,32 @@
   "use strict";
 
   /* 版本规则（用户定）：大版本 v5、v6…；小更新只变小数点 v5.1、v5.2… 公告按这个号判断是否弹出。 */
-  var APP_VERSION = "v6.1.1";
-  var SHELL_CACHE = "xingcheng-map-shell-v20";
-  var APP_DATE = "2026-11-16";
+  var APP_VERSION = "v6.1.2";
+  var SHELL_CACHE = "xingcheng-map-shell-v21";
+  var APP_DATE = "2026-11-17";
   var LAST_SEEN_KEY = "wishlist-map-last-seen-version-v1";
 
   var ANNOUNCEMENT = {
-    /* v6.1.1 公告：定稿 */
+    /* v6.1.2 公告：定稿 */
     title: APP_VERSION + " 更新",
     bullets: [
-      "国内的店名和地址，现在用高德搜，搜得更准",
-      "『地图』按钮挪到『添加』旁边，看底部就能找到",
-      "国内地点点『带我去』，直接打开高德 App"
+      "长按页面任何地方，都不会再选中文字了",
+      "改地点时，『保存修改』一直在底部，不用往下找"
     ],
     tip: "看到的还是旧版，就把网页彻底关掉再打开"
   };
 
   var CHANGELOG = [
+    {
+      /* v6.1.2 更新记录：定稿 */
+      version: "v6.1.2",
+      date: "2026-11-17",
+      lines: [
+        "修复：长按空白处和标题不会再选中文字，展开后的地址照样能长按复制",
+        "修复：弹出的页面每次打开都从最上面开始，不会停在上次划到的地方",
+        "调整：『保存修改』和『取消』一直在底部，不用往下划就能看到"
+      ]
+    },
     {
       /* v6.1.1 更新记录：定稿 */
       version: "v6.1.1",

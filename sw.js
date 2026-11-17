@@ -1,5 +1,5 @@
 /* 行程地图：缓存应用外壳。全部使用相对路径，可部署在 GitHub Pages 子目录（如 /repo-name/）。 */
-var CACHE = "xingcheng-map-shell-v20";
+var CACHE = "xingcheng-map-shell-v21";
 var SHELL = [
   "./",
   "./index.html",

@@ -2,7 +2,7 @@
 <html lang="zh-Hans">
 <head>
   <meta charset="UTF-8">
-  <meta name="shell-cache" content="xingcheng-map-shell-v20">
+  <meta name="shell-cache" content="xingcheng-map-shell-v21">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-eval' https://webapi.amap.com https://restapi.amap.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.tile.openstreetmap.org https://*.is.autonavi.com; connect-src 'self' https://nominatim.openstreetmap.org https://api.postcodes.io https://webapi.amap.com https://restapi.amap.com; media-src 'self'; font-src 'self'; worker-src 'self'; manifest-src 'self'">
   <meta name="theme-color" content="#FFFFFF">
@@ -147,6 +147,7 @@
   <div class="sheet" id="add-sheet" hidden>
     <div class="sheet-backdrop" data-close="add-sheet"></div>
     <div class="sheet-panel" role="dialog" aria-labelledby="add-sheet-title">
+      <div class="sheet-scroll">
       <div class="sheet-handle" aria-hidden="true"></div>
       <div class="sheet-head">
         <button type="button" class="sheet-back" id="add-sheet-back" aria-label="返回「添加什么？」" hidden>‹</button>
@@ -271,12 +272,15 @@
             <label for="edit-note">备注</label>
             <input type="text" id="edit-note" autocomplete="off" placeholder="可以不填">
           </div>
-          <button type="button" class="primary-btn" id="manual-save">保存</button>
           <button type="button" class="secondary-btn edit-only" id="edit-add-return" hidden>再加一张返程</button>
-          <button type="button" class="secondary-btn edit-only" id="edit-cancel" hidden>取消</button>
           <div class="add-status" id="manual-status" role="status"></div>
         </div>
       </details>
+      </div>
+      <div class="sheet-actions" id="manual-actions" hidden>
+        <button type="button" class="sheet-cancel edit-only" id="edit-cancel" hidden>取消</button>
+        <button type="button" class="sheet-save primary-btn" id="manual-save">保存</button>
+      </div>
     </div>
   </div>
 

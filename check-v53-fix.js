@@ -280,7 +280,7 @@ check("location never persisted: candidates and map-pick state live in memory; n
   const days = tl.slice(tl.indexOf("function dayArgsFor"), tl.indexOf("function locPinSvg"));
   assert.ok(/TripName\.dayArea\(items, day, opts\)/.test(days), "area comes from trip items only");
   const sw = read("sw.js");
-  assert.ok(sw.indexOf('"./fix-cand.js"') !== -1 && sw.indexOf('"xingcheng-map-shell-v20"') !== -1);
+  assert.ok(sw.indexOf('"./fix-cand.js"') !== -1 && sw.indexOf('"xingcheng-map-shell-v21"') !== -1);
   assert.ok(/<script src="\.\/fix-cand\.js"><\/script>\s*/.test(html) && html.indexOf("fix-cand.js") < html.indexOf("<script src=\"./timeline.js\""));
 });
 

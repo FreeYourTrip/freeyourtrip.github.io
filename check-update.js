@@ -65,7 +65,7 @@ check("sw.js never forces updates and keeps offline fallback", function () {
   const install = sw.slice(sw.indexOf('addEventListener("install"'), sw.indexOf('addEventListener("message"'));
   assert.ok(install.indexOf("skipWaiting()") === -1, "install must not call skipWaiting");
   assert.ok(/SKIP_WAITING[\s\S]*self\.skipWaiting\(\)/.test(sw), "skipWaiting only on user message");
-  assert.ok(sw.indexOf('"xingcheng-map-shell-v20"') !== -1);
+  assert.ok(sw.indexOf('"xingcheng-map-shell-v21"') !== -1);
   assert.ok(sw.indexOf('"./update-banner.js"') !== -1);
   assert.ok(/return cached \|\| fresh/.test(sw), "cache-first so offline opens the cached version");
   assert.ok(/catch\(function \(\) \{\s*return cached \|\| caches\.match\("\.\/index\.html"\)/.test(sw), "offline fallback to cached index");
@@ -152,13 +152,13 @@ check("centred update popup matches the 300 / 20 / 40% spec; mixed files reload 
   assert.ok(/\.update-title \{[^}]*font-size: 17px;[^}]*font-weight: 700;/.test(css), "17px bold title");
   assert.ok(/\.update-body \{[^}]*font-size: 14px;/.test(css), "14px grey line");
   assert.ok(/\.update-now \{[^}]*height: 44px;/.test(css), "44-tall primary");
-  assert.strictEqual(UB.SHELL_CACHE, "xingcheng-map-shell-v20");
+  assert.strictEqual(UB.SHELL_CACHE, "xingcheng-map-shell-v21");
   const V = require("./version.js");
-  assert.strictEqual(V.SHELL_CACHE, "xingcheng-map-shell-v20");
+  assert.strictEqual(V.SHELL_CACHE, "xingcheng-map-shell-v21");
   const html = fs.readFileSync(__dirname + "/index.html", "utf8");
-  assert.ok(html.indexOf('name="shell-cache" content="xingcheng-map-shell-v20"') !== -1);
-  assert.strictEqual(UB.isMixed("xingcheng-map-shell-v20", "xingcheng-map-shell-v20", "xingcheng-map-shell-v20"), false);
-  assert.strictEqual(UB.isMixed("xingcheng-map-shell-v19", "xingcheng-map-shell-v20", "xingcheng-map-shell-v20"), true);
+  assert.ok(html.indexOf('name="shell-cache" content="xingcheng-map-shell-v21"') !== -1);
+  assert.strictEqual(UB.isMixed("xingcheng-map-shell-v21", "xingcheng-map-shell-v21", "xingcheng-map-shell-v21"), false);
+  assert.strictEqual(UB.isMixed("xingcheng-map-shell-v20", "xingcheng-map-shell-v21", "xingcheng-map-shell-v21"), true);
   const store = {};
   const storage = { getItem: (k) => (Object.prototype.hasOwnProperty.call(store, k) ? store[k] : null), setItem: (k, v) => { store[k] = v; } };
   assert.strictEqual(UB.shouldReloadMixed(true, storage), true);

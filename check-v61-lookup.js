@@ -132,7 +132,7 @@ async function run() {
     const sw = fs.readFileSync(path.join(__dirname, "sw.js"), "utf8");
     assert.ok(sw.indexOf('cache: "reload"') !== -1);
     assert.ok(sw.indexOf('cache: "no-cache"') !== -1);
-    assert.ok(sw.indexOf("xingcheng-map-shell-v20") !== -1);
+    assert.ok(sw.indexOf("xingcheng-map-shell-v21") !== -1);
   });
 
   if (failed) {

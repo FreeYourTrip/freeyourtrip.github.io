@@ -161,7 +161,7 @@ check("train / boat / bus also get 怎么去 between same-day legs; sw v19", fun
   assert.strictEqual(Legs.navPillSpec(st, pl).show, true);
   assert.strictEqual(Legs.navPillSpec(st, pl).label, "↓ 怎么去");
   assert.strictEqual(Legs.navPillSpec(pl, Object.assign({}, st, { type: "bus" })).show, true);
-  assert.ok(read("sw.js").indexOf('var CACHE = "xingcheng-map-shell-v20";') !== -1);
+  assert.ok(read("sw.js").indexOf('var CACHE = "xingcheng-map-shell-v21";') !== -1);
 });
 
 console.log("\n" + passes + " passed, " + failures + " failed");

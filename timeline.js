@@ -2060,10 +2060,76 @@
     showAddStatus("");
   }
 
+  function resetSheetScroll(root) {
+    if (!root) return;
+    function zap(el) {
+      if (!el) return;
+      try {
+        if (el.scrollTop) el.scrollTop = 0;
+        if (el.scrollLeft) el.scrollLeft = 0;
+      } catch (err) {}
+    }
+    zap(root);
+    Array.prototype.forEach.call(root.querySelectorAll("*"), function (el) {
+      if (el.scrollTop || el.scrollLeft) zap(el);
+    });
+  }
+
+  function syncManualActions() {
+    var sheet = $("add-sheet");
+    var actions = $("manual-actions");
+    var fold = $("manual-fold");
+    if (!actions) return;
+    var editing = !!(sheet && sheet.classList.contains("is-editing"));
+    var open = !!(fold && fold.open);
+    actions.hidden = !(editing || open);
+  }
+
+  function bindSheetKeyboard() {
+    function kbInset() {
+      var vv = window.visualViewport;
+      if (!vv) return 0;
+      return Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+    }
+    function placeFocusedField() {
+      var ae = document.activeElement;
+      if (!ae) return;
+      var tag = (ae.tagName || "").toLowerCase();
+      if (tag !== "input" && tag !== "textarea" && tag !== "select") return;
+      var panel = ae.closest && (ae.closest(".sheet-panel") || ae.closest(".hotel-date-panel") || ae.closest(".confirm-panel"));
+      if (!panel) return;
+      var scroller = panel.querySelector(".sheet-scroll") || panel;
+      var bar = panel.querySelector(".sheet-actions:not([hidden])");
+      var field = ae.getBoundingClientRect();
+      var barTop = bar
+        ? bar.getBoundingClientRect().top
+        : (window.visualViewport ? window.visualViewport.offsetTop + window.visualViewport.height : window.innerHeight);
+      var need = field.bottom + 16 - barTop;
+      if (need > 0 && scroller && scroller.scrollTop !== undefined) scroller.scrollTop += need;
+    }
+    function syncKb() {
+      document.documentElement.style.setProperty("--kb-inset", kbInset() + "px");
+      if (typeof requestAnimationFrame === "function") requestAnimationFrame(placeFocusedField);
+      else placeFocusedField();
+    }
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener("resize", syncKb);
+      window.visualViewport.addEventListener("scroll", syncKb);
+    }
+    window.addEventListener("focusin", syncKb);
+    window.addEventListener("resize", syncKb);
+  }
+
   function openSheet(id) {
     var el = $(id);
-    if (id === "add-sheet") resetAddPasteUi();
-    if (el) el.hidden = false;
+    if (id === "add-sheet") {
+      resetAddPasteUi();
+      syncManualActions();
+    }
+    if (el) {
+      el.hidden = false;
+      resetSheetScroll(el);
+    }
   }
 
   function closeSheet(id) {
@@ -2980,6 +3046,7 @@
     if (fold && isEdit) fold.open = true;
     /* 类型相关显隐必须压过 edit-only：避免改地点时露出『再加一张返程』 */
     if (typeof paintEditLabels === "function") paintEditLabels(getVal("manual-type") || "地点");
+    syncManualActions();
   }
 
   function setVal(id, v) {
@@ -3606,6 +3673,7 @@
     closeSheet("help-sheet");
     closeSheet("install-sheet");
     el.hidden = false;
+    resetSheetScroll(el);
     document.body.classList.add("ig-open");
   }
 
@@ -5415,6 +5483,7 @@
       '<button type="button" class="text-link-btn" id="import-confirm-skip">' + escapeHtml(FixCand.COPY.skip) + "</button>" +
       "</div>";
     sheet.hidden = false;
+      resetSheetScroll(sheet);
     Array.prototype.forEach.call(sheet.querySelectorAll(".cand-card"), function (btn) {
       btn.addEventListener("click", function () {
         var c = ranked[Number(btn.getAttribute("data-ci"))];
@@ -6015,6 +6084,7 @@
         '<button type="button" class="text-link-btn" id="loc-pending-skip">' + escapeHtml(skipLabel) + "</button>" +
         "</div></div>";
       sheet.hidden = false;
+      resetSheetScroll(sheet);
       locConfirm.paintedId = item.id;
       bindLocConfirmMap($("loc-confirm-map"), locConfirmStartView(item, cand));
       var hereBtn = $("loc-pending-here");
@@ -6066,6 +6136,8 @@
       });
     }
     if ($("manual-save")) $("manual-save").addEventListener("click", handleManualSave);
+    if ($("manual-fold")) $("manual-fold").addEventListener("toggle", syncManualActions);
+    bindSheetKeyboard();
     renderIconPicker();
     if ($("icon-picker")) $("icon-picker").addEventListener("click", function (ev) {
       var btn = ev.target.closest && ev.target.closest("[data-icon]");

@@ -10,7 +10,7 @@
 
   var LATER_KEY = "wishlist-map-update-later-v1";
   var MIX_KEY = "wishlist-map-mix-reload-v1";
-  var SHELL_CACHE = "xingcheng-map-shell-v20";
+  var SHELL_CACHE = "xingcheng-map-shell-v21";
 
   function laterThisSession(storage) {
     try {
