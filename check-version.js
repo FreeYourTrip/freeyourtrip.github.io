@@ -28,9 +28,9 @@ function tapOk(store) {
   store[V.LAST_SEEN_KEY] = V.APP_VERSION;
 }
 
-check("version is v6.1.2, defined once", function () {
-  assert.strictEqual(V.APP_VERSION, "v6.1.2");
-  assert.strictEqual(V.versionLabel(), "当前版本 v6.1.2 · 2026-11-17");
+check("version is v6.1.3, defined once", function () {
+  assert.strictEqual(V.APP_VERSION, "v6.1.3");
+  assert.strictEqual(V.versionLabel(), "当前版本 v6.1.3 · 2026-11-17");
   const files = ["timeline.js", "index.html", "update-banner.js", "item-edit.js", "app.js"];
   files.forEach((f) => {
     const s = fs.readFileSync(__dirname + "/" + f, "utf8");
@@ -52,7 +52,7 @@ check("compareVersion", function () {
 check("first-time user → help only, version recorded silently, never the card", function () {
   const store = {};
   assert.strictEqual(openApp(store, { hasTrips: false }), "help");
-  assert.strictEqual(store[V.LAST_SEEN_KEY], "v6.1.2");
+  assert.strictEqual(store[V.LAST_SEEN_KEY], "v6.1.3");
   assert.strictEqual(openApp(store, { hasTrips: true }), "help", "next open: still help (until 不再自动弹出), no card");
   assert.strictEqual(openApp(store, { hasTrips: true, helpHidden: true }), "none");
 });
@@ -78,11 +78,11 @@ check("v4 user with no trips but 不再自动弹出 ticked → card (not first-t
   assert.strictEqual(openApp({}, { hasTrips: false, helpHidden: true }), "announce");
 });
 
-check("someone who already saw v5 … v6.1.1 gets the v6.1.2 card once", function () {
+check("someone who already saw v5 … v6.1.2 gets the v6.1.3 card once", function () {
   const store = { [V.LAST_SEEN_KEY]: "v5" };
   assert.strictEqual(openApp(store, { hasTrips: true, helpHidden: true }), "announce");
   tapOk(store);
-  assert.strictEqual(store[V.LAST_SEEN_KEY], "v6.1.2");
+  assert.strictEqual(store[V.LAST_SEEN_KEY], "v6.1.3");
   assert.strictEqual(openApp(store, { hasTrips: true, helpHidden: true }), "none");
   assert.strictEqual(openApp({ [V.LAST_SEEN_KEY]: "v5" }, { hasTrips: false, helpHidden: false }), "announce", "even without trips, a v5 viewer is a returning user");
   assert.strictEqual(openApp({ [V.LAST_SEEN_KEY]: "v5.1" }, { hasTrips: true, helpHidden: true }), "announce", "v5.1 viewer gets the v6 card");
@@ -90,24 +90,31 @@ check("someone who already saw v5 … v6.1.1 gets the v6.1.2 card once", functio
   assert.strictEqual(openApp({ [V.LAST_SEEN_KEY]: "v5.3" }, { hasTrips: true, helpHidden: true }), "announce", "v5.3 viewer gets the v6 card");
   assert.strictEqual(openApp({ [V.LAST_SEEN_KEY]: "v5.4" }, { hasTrips: true, helpHidden: true }), "announce", "v5.4 viewer gets the v6 card");
   assert.strictEqual(openApp({ [V.LAST_SEEN_KEY]: "v6.0" }, { hasTrips: true, helpHidden: true }), "announce", "v6.0 viewer gets the new card");
-  assert.strictEqual(openApp({ [V.LAST_SEEN_KEY]: "v6.1" }, { hasTrips: true, helpHidden: true }), "announce", "v6.1 viewer gets the v6.1.2 card");
-  assert.strictEqual(openApp({ [V.LAST_SEEN_KEY]: "v6.1.1" }, { hasTrips: true, helpHidden: true }), "announce", "v6.1.1 viewer gets the v6.1.2 card");
+  assert.strictEqual(openApp({ [V.LAST_SEEN_KEY]: "v6.1" }, { hasTrips: true, helpHidden: true }), "announce", "v6.1 viewer gets the v6.1.3 card");
+  assert.strictEqual(openApp({ [V.LAST_SEEN_KEY]: "v6.1.1" }, { hasTrips: true, helpHidden: true }), "announce", "v6.1.1 viewer gets the v6.1.3 card");
+  assert.strictEqual(openApp({ [V.LAST_SEEN_KEY]: "v6.1.2" }, { hasTrips: true, helpHidden: true }), "announce", "v6.1.2 viewer gets the v6.1.3 card");
 });
 
-check("v6.1.2 announcement is signed off; earlier changelog entries untouched", function () {
-  assert.strictEqual(V.ANNOUNCEMENT.title, "v6.1.2 更新");
-  assert.ok(!V.ANNOUNCEMENT.draft, "v6.1.2 announcement is signed off");
-  assert.strictEqual(V.CHANGELOG[0].version, "v6.1.2");
-  assert.ok(!V.CHANGELOG[0].draft, "v6.1.2 changelog is signed off");
+check("v6.1.3 announcement is signed off; earlier changelog entries untouched", function () {
+  assert.strictEqual(V.ANNOUNCEMENT.title, "v6.1.3 更新");
+  assert.ok(!V.ANNOUNCEMENT.draft, "v6.1.3 announcement is signed off");
+  assert.strictEqual(V.CHANGELOG[0].version, "v6.1.3");
+  assert.ok(!V.CHANGELOG[0].draft, "v6.1.3 changelog is signed off");
   assert.deepStrictEqual(V.ANNOUNCEMENT.bullets, [
-    "长按页面任何地方，都不会再选中文字了",
-    "改地点时，『保存修改』一直在底部，不用往下找"
+    "分享给朋友，发个链接就行，朋友点开就能存好",
+    "顶上的『+ 新行程』改叫『我的行程』，点了只打开列表"
   ]);
   assert.deepStrictEqual(V.CHANGELOG[0].lines, [
-    "修复：长按空白处和标题不会再选中文字，展开后的地址照样能长按复制",
-    "修复：弹出的页面每次打开都从最上面开始，不会停在上次划到的地方",
-    "调整：『保存修改』和『取消』一直在底部，不用往下划就能看到"
+    "新增：分享行程改成发链接，朋友点开就能存到自己的行程",
+    "新增：链接打不开时，可以点『改发文字』，发一段文字过去",
+    "修复：同一趟行程存两次，不会多出一份",
+    "修复：点顶上的『我的行程』只打开列表，不会再多出一个空行程",
+    "调整：设置里的「分享给朋友」改回「推荐这个工具」；新手说明加了一条，讲怎么和同行的人共用行程",
+    "修复：所有地点都能拖着换顺序，『没定时间』和『待补』里的也行，刷新后不会变回去",
+    "调整：『给 AI 的话』不用再展开一大段，点一下就复制好"
   ]);
+  const v612 = V.CHANGELOG.find((e) => e.version === "v6.1.2");
+  assert.ok(v612 && !v612.draft, "v6.1.2 changelog remains signed off");
   const v611 = V.CHANGELOG.find((e) => e.version === "v6.1.1");
   assert.ok(v611 && !v611.draft, "v6.1.1 changelog remains signed off");
   assert.deepStrictEqual(v611.lines, [
@@ -180,7 +187,7 @@ check("v6.1.2 announcement is signed off; earlier changelog entries untouched", 
 });
 
 check("next release re-announces", function () {
-  const d = V.decideOnOpen({ lastSeen: "v6.1.1", hasTrips: true, helpHidden: true, current: "v6.1.2" });
+  const d = V.decideOnOpen({ lastSeen: "v6.1.2", hasTrips: true, helpHidden: true, current: "v6.1.3" });
   assert.strictEqual(d.show, "announce");
 });
 
@@ -209,16 +216,16 @@ check("v6.0 changelog lines remain the signed-off copy (incl. bus lock + date st
     "修复：长按卡片不再选中文字；退房卡的文字不再被『带我去』挡住",
     "修复：往返中间没订酒店时，误显示成转机"
   ]);
-  assert.ok(V.ANNOUNCEMENT.bullets[0].indexOf("选中文字") !== -1);
+  assert.ok(V.CHANGELOG.find((e) => e.version === "v6.1.2").lines[0].indexOf("选中文字") !== -1);
   assert.ok(V.ANNOUNCEMENT.bullets.length >= 1 && V.ANNOUNCEMENT.bullets.length <= 5);
 });
 
-check("changelog v1–v6.1.2, newest first = APP_VERSION, no hashes or private data", function () {
-  assert.deepStrictEqual(V.CHANGELOG.map((v) => v.version), ["v6.1.2", "v6.1.1", "v6.1", "v6.0", "v5.4", "v5.3", "v5.2", "v5.1", "v5", "v4", "v3", "v2", "v1"]);
+check("changelog v1–v6.1.3, newest first = APP_VERSION, no hashes or private data", function () {
+  assert.deepStrictEqual(V.CHANGELOG.map((v) => v.version), ["v6.1.3", "v6.1.2", "v6.1.1", "v6.1", "v6.0", "v5.4", "v5.3", "v5.2", "v5.1", "v5", "v4", "v3", "v2", "v1"]);
   assert.strictEqual(V.CHANGELOG[0].version, V.APP_VERSION);
   assert.strictEqual(V.CHANGELOG.find((e) => e.version === "v5.4").lines.length, 5, "v5.4 copywriter copy is 5 lines");
   V.CHANGELOG.forEach((v) => {
-    const max = (v.version === "v6.0" || v.version === "v6.1" || v.version === "v6.1.1" || v.version === "v6.1.2") ? 12 : 5;
+    const max = (v.version === "v6.0" || v.version === "v6.1" || v.version === "v6.1.1" || v.version === "v6.1.2" || v.version === "v6.1.3") ? 12 : 5;
     assert.ok(v.lines.length >= 1 && v.lines.length <= max, v.version + " has " + v.lines.length + " lines");
     v.lines.forEach((l) => {
       assert.ok(!/\b[0-9a-f]{7,40}\b/.test(l), "no commit hash: " + l);
@@ -236,7 +243,7 @@ check("settings shows version label and 更新记录 row; sw caches version.js",
   assert.ok(settings.indexOf("更新记录") !== -1);
   assert.ok(tl.indexOf("AppVersion.versionLabel()") !== -1);
   assert.ok(html.indexOf('src="./version.js"') !== -1 && html.indexOf('src="./version.js"') < html.indexOf('src="./timeline.js"'));
-  assert.ok(sw.indexOf('"./version.js"') !== -1 && sw.indexOf('"xingcheng-map-shell-v21"') !== -1);
+  assert.ok(sw.indexOf('"./version.js"') !== -1 && sw.indexOf('"xingcheng-map-shell-v22"') !== -1);
   assert.ok(V.LAST_SEEN_KEY.indexOf("wishlist-map") === 0, "清空本机数据 resets it");
 });
 

@@ -665,14 +665,32 @@
     return out;
   }
 
+  var GROUP_UNDATED = "未标明日期";
+  var GROUP_PENDING = "待补";
+
+  /** 落点 / 分组键：没日期和「未标明日期」都是 ""；日期待确认是「待补」。 */
+  function normalizeDropDay(day) {
+    var d = day == null ? "" : String(day);
+    if (!d || d === GROUP_UNDATED || d === "还没定哪天") return "";
+    if (d === GROUP_PENDING || d === "待确认日期") return GROUP_PENDING;
+    return d;
+  }
+
+  function itemGroupKey(it) {
+    if (!it) return "";
+    if (it.pendingDate) return GROUP_PENDING;
+    return itemDisplayDate(it) || "";
+  }
+
   function applyDayOrder(items, day, orderedIds) {
+    var key = normalizeDropDay(day);
     var map = {};
     (orderedIds || []).forEach(function (id, idx) {
       if (String(id).indexOf("::checkout") !== -1) return;
       map[id] = idx;
     });
     (items || []).forEach(function (it) {
-      if ((itemDisplayDate(it) || "") !== day) return;
+      if (itemGroupKey(it) !== key) return;
       if (Object.prototype.hasOwnProperty.call(map, it.id)) it.dayOrder = map[it.id];
     });
     return items;
@@ -982,8 +1000,13 @@
 
   var api = {
     itemDisplayDate: itemDisplayDate,
+    normalizeDropDay: normalizeDropDay,
+    itemGroupKey: itemGroupKey,
+    GROUP_PENDING: GROUP_PENDING,
+    GROUP_UNDATED: GROUP_UNDATED,
     itemSortKey: itemSortKey,
     sortedItems: sortedItems,
+    sortDayItems: sortDayItems,
     formatDayHeader: formatDayHeader,
     departEndpoint: departEndpoint,
     arriveEndpoint: arriveEndpoint,

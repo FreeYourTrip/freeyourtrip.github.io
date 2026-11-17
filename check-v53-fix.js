@@ -280,7 +280,7 @@ check("location never persisted: candidates and map-pick state live in memory; n
   const days = tl.slice(tl.indexOf("function dayArgsFor"), tl.indexOf("function locPinSvg"));
   assert.ok(/TripName\.dayArea\(items, day, opts\)/.test(days), "area comes from trip items only");
   const sw = read("sw.js");
-  assert.ok(sw.indexOf('"./fix-cand.js"') !== -1 && sw.indexOf('"xingcheng-map-shell-v21"') !== -1);
+  assert.ok(sw.indexOf('"./fix-cand.js"') !== -1 && sw.indexOf('"xingcheng-map-shell-v22"') !== -1);
   assert.ok(/<script src="\.\/fix-cand\.js"><\/script>\s*/.test(html) && html.indexOf("fix-cand.js") < html.indexOf("<script src=\"./timeline.js\""));
 });
 
@@ -332,7 +332,7 @@ check("「＋ 添加」 opens 「添加什么？」: 加机票 / 加酒店 / 加
   ["flight", "hotel", "place"].forEach((k) => assert.ok(new RegExp('<button type="button" class="am-row" id="am-' + k + '" data-add-kind="' + k + '">').test(html), k));
   assert.ok(/style="color:#6B7A8F;/.test(html) && /style="color:#8E5CF7;/.test(html) && /style="color:#0F9D8A;/.test(html), "ticket / bed / pin colours");
   assert.ok(/<div class="am-divider" role="separator"><\/div>\s*<button type="button" class="am-whole" id="am-whole" data-add-kind="whole">/.test(html));
-  assert.ok(/data-close="add-menu" aria-label="关闭"/.test(html) && /closeSheet\("add-menu"\);\s*closeMapPick\(\);/.test(tl), "close button, backdrop and Esc");
+  assert.ok(/data-close="add-menu" aria-label="关闭"/.test(html) && /closeSheet\("add-menu"\);\s*closeSheet\("friend-paste-sheet"\);\s*closeMapPick\(\);/.test(tl), "close button, backdrop and Esc");
   assert.ok(/\.am-row \{[^}]*height: 64px;/.test(css) && /\.am-ico \{[^}]*width: 40px; height: 40px; border-radius: 50%;/.test(css));
   assert.ok(/\.am-main \{ font-size: 16px; font-weight: 700;/.test(css) && /\.am-sub \{ font-size: 13px; color: #6B7A8F;/.test(css));
   assert.ok(/\.am-whole \{[^}]*min-height: 44px;/.test(css), "44px+ tap targets");

@@ -366,21 +366,26 @@
     return next;
   }
 
+  var LOCKED_TYPES = { hotel: 1, flight: 1, train: 1, boat: 1, bus: 1 };
+
   /**
-   * v6：「全部」里跨天拖动。拖到某一天 → 改成那天；拖进「还没定哪天」（day 为空）→ 去掉日期。
-   * 只改地点；酒店、机票、火车、船、大巴都不能拖，原样返回。顺序（dayOrder）清掉，由调用方按落点重排。
+   * 跨组拖动。拖到某一天 → 改成那天；拖进「还没定哪天」或空落点 → 去掉日期。
+   * 酒店、机票、火车、船、大巴不能改日期，原样返回。地点、餐厅等可以。
+   * 从「待补」拖到某天：写下日期，其他都齐了就离开待补；拖到「还没定哪天」：清掉日期并离开待补。
+   * 顺序（dayOrder）清掉，由调用方按落点重排。
    */
   function moveToDay(item, day) {
     if (!item) return item;
+    if (LOCKED_TYPES[item.type]) return item;
     var next = Object.assign({}, item);
+    var pendingDest = day === "待补" || day === "待确认日期";
+    if (pendingDest) return item;
     day = isIso(day) ? day : "";
-    if (next.type === "place" || !next.type) {
-      if (day) next.date = day;
-      else delete next.date;
-    } else {
-      return item;
-    }
+    if (day) next.date = day;
+    else delete next.date;
     delete next.dayOrder;
+    if (day) return clearPendingIfDated(next);
+    PENDING_KEYS.forEach(function (k) { delete next[k]; });
     return next;
   }
 

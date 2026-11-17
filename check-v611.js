@@ -129,7 +129,7 @@ async function run() {
     assert.ok(tl.indexOf('text: "点卡片上的『带我去』，手机地图会直接带你过去"') !== -1);
     assert.ok(tl.indexOf('title: "各种订单、攻略截图，都能变成行程"') !== -1);
     assert.ok(tl.indexOf('lead: "车票机票、酒店订单、小红书、抖音、大众点评都行"') !== -1);
-    assert.ok(tl.indexOf("在这里点『复制』，复制一段给 AI 的话") !== -1);
+    assert.ok(tl.indexOf("在这里点『复制给 AI 的话』") !== -1);
     assert.ok(tl.indexOf("打开你手机上的 AI App（豆包、DeepSeek、ChatGPT 都行），先粘贴，再把截图发过去，一张或好几张都行") !== -1);
     assert.ok(tl.indexOf("把 AI 的回复全部复制，回到这里点『粘贴并导入』") !== -1);
     assert.ok(tl.indexOf('<ol class="ai-steps">') !== -1);
@@ -139,7 +139,7 @@ async function run() {
     assert.ok(tl.indexOf('rect x="8" y="6" width="54" height="84"') !== -1);
     const html = read("index.html");
     const css = read("styles.css");
-    assert.ok(html.indexOf('id="ai-copy-btn">复制</button>') !== -1);
+    assert.ok(html.indexOf('id="ai-copy-btn">复制给 AI 的话</button>') !== -1);
     assert.ok(/\.help-card-illu \{[^}]*width:\s*160px;[^}]*height:\s*96px;/.test(css));
   });
 

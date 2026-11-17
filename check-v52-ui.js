@@ -20,7 +20,7 @@ function check(name, fn) {
 check("help: 3 tiers as cards; only tier 1 on first open; privacy line; 常用 grid incl. 多个行程; FAQ collapsed", function () {
   const tl = fs.readFileSync(__dirname + "/timeline.js", "utf8");
   const css = fs.readFileSync(__dirname + "/styles.css", "utf8");
-  assert.ok(tl.indexOf('title: "新手先看这 3 条"') !== -1 && tl.indexOf('title: "常用"') !== -1 && tl.indexOf('title: "需要时再看"') !== -1);
+  assert.ok(tl.indexOf('title: "新手先看这 4 条"') !== -1 && tl.indexOf('title: "常用"') !== -1 && tl.indexOf('title: "需要时再看"') !== -1);
   assert.ok(tl.indexOf('var HELP_PRIVACY_LINE = "发截图前，把护照号、银行卡、手机号裁掉或涂掉";') !== -1 && /class="help-alert-ico" viewBox="0 0 14 14" width="14" height="14"/.test(tl));
   /* 界面不用 emoji（公告 / 更新记录文案和分享文字除外） */
   const EMOJI = /[\u{1F300}-\u{1FAFF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{FE0F}]/u;
@@ -31,7 +31,7 @@ check("help: 3 tiers as cards; only tier 1 on first open; privacy line; 常用 g
     'text: "点底部『＋ 添加』，输入店名或地址，点一下结果就存好了"',
     'title: "各种订单、攻略截图，都能变成行程"',
     'lead: "车票机票、酒店订单、小红书、抖音、大众点评都行"',
-    "在这里点『复制』，复制一段给 AI 的话",
+    "在这里点『复制给 AI 的话』",
     'title: "到了当天，一键导航"',
     'text: "点卡片上的『带我去』，手机地图会直接带你过去"',
     'line: "长按卡片拖动，能换顺序或换日子"'
@@ -51,7 +51,7 @@ check("help: 3 tiers as cards; only tier 1 on first open; privacy line; 常用 g
   const B = require("./backup.js");
   const shared = B.redactItem({ nameZh: "示例航班", confirmationNo: "ABC123", seat: "12A", note: "确认号 ABC123 座位 12A 靠窗" });
   assert.ok(!shared.confirmationNo && !shared.seat && shared.note === "靠窗", "分享我的行程 hides 订单号 / 座位");
-  assert.ok(tl.indexOf('{ key: "rename", icon: "pencil", title: "多个行程", text: "点『＋ 新行程』再建一趟；点左上角的行程名，能切换、改名、删除" }') !== -1);
+  assert.ok(tl.indexOf('{ key: "rename", icon: "pencil", title: "多个行程", text: "点顶上的『我的行程』，再点最下面的『+ 新建行程』" }') !== -1);
   assert.ok(/<details class="help-faq">/.test(tl), "FAQ uses collapsed <details>");
   assert.ok(/openHelp\("first"\)/.test(tl) && /\.help-sheet\.help-first \.help-tier-2,\s*\.help-sheet\.help-first \.help-tier-3 \{ display: none; \}/.test(css));
   assert.ok(/scroll-snap-type: x mandatory/.test(css), "swipeable cards");
@@ -63,15 +63,15 @@ check("help: 3 tiers as cards; only tier 1 on first open; privacy line; 常用 g
   assert.ok(tl.indexOf("删错了，马上点底部的『撤销』就能恢复") !== -1);
 });
 
-check("AI wizard: big button on top, 1-2-3 progress, exact copy, clipboard read + fallback, no links", function () {
+check("AI wizard: big button on top, 1-2-3 progress, exact copy, clipboard read only on 粘贴并导入 tap, fallback paste box, no links", function () {
   const tl = fs.readFileSync(__dirname + "/timeline.js", "utf8");
   const html = fs.readFileSync(__dirname + "/index.html", "utf8");
   assert.ok(html.indexOf('id="ai-big-btn"') !== -1 && html.indexOf('id="ai-big-btn"') < html.indexOf('id="add-search-block"'), "big button above search");
   assert.ok(html.indexOf('<details class="fold add-only" id="ai-help">') === -1, "not folded any more");
   const C = {
     title: "截图交给 AI，自动排好行程",
-    step1: "点『给 AI 的话』看一眼，再点下面的『复制』", /* v6.0 定稿 */
-    copied: "已复制",
+    step1: "点『复制给 AI 的话』",
+    copied: "✓ 已复制",
     step2: "打开你常用的 AI（豆包、Kimi、DeepSeek、ChatGPT 都行），先粘贴，再把截图发过去，好几张可以一起发",
     step2Small: "不会截图？同时按侧边键和音量加键", /* v5.3 定稿：去掉 iPhone */
     privacy: "发截图前，把护照号、银行卡、手机号裁掉或涂掉",
@@ -81,8 +81,12 @@ check("AI wizard: big button on top, 1-2-3 progress, exact copy, clipboard read 
     fallbackHint: "长按这里，选『粘贴』，再点『添加』"
   };
   Object.keys(C).forEach((k) => assert.ok(tl.indexOf(k + ': "' + C[k] + '"') !== -1, k));
-  assert.ok(tl.indexOf("navigator.clipboard.readText()") !== -1);
-  assert.ok(/function \(\) \{\s*showAiFallback\(\);\s*\}\);/.test(tl), "denied / failed → paste box opens");
+  const paste = tl.slice(tl.indexOf("var PASTE_FAIL_TOAST"), tl.indexOf("function selectedDateOrEmpty"));
+  assert.ok(paste.indexOf("navigator.clipboard.readText()") !== -1, "tap 粘贴并导入 with an empty box reads the clipboard");
+  assert.ok(paste.indexOf("长按输入框粘贴，再点一次") !== -1, "denied / unsupported / empty clipboard → toast");
+  assert.ok(paste.indexOf("showAiFallback()") !== -1, "denied / failed → paste box opens");
+  const onlyInPaste = (tl.split("clipboard.readText").length - 1) === (paste.split("clipboard.readText").length - 1);
+  assert.ok(onlyInPaste, "clipboard.readText only inside pasteAndImport, never on load");
   assert.ok(tl.indexOf("aiLeftPage") === -1 && html.indexOf("发好了，下一步") === -1 && html.indexOf("ai-step2-next") === -1, "no 发好了 link or auto-advance");
   const wiz = html.slice(html.indexOf('id="ai-help"'), html.indexOf('id="manual-fold"'));
   assert.ok(!/https?:\/\//.test(wiz) && !/https?:\/\//.test(tl.slice(tl.indexOf("var AI_WIZARD_COPY"), tl.indexOf("var aiStep"))), "no links to AI sites");

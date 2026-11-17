@@ -98,6 +98,8 @@ check("UI wiring: 待确认日期 group, banner, colours, raw text, toast wordin
   const css = fs.readFileSync(__dirname + "/styles.css", "utf8");
   assert.ok(tl.indexOf("<span>待确认日期</span>") !== -1);
   assert.ok(tl.indexOf('"<span>有 " + pending.length + " 条日期待确认</span>') !== -1);
+  assert.ok(tl.indexOf('data-drop-day="待补"') !== -1, "待补 group is a drop target in every view");
+  assert.ok(/if \(pending\.length\) \{[\s\S]*?day-pending[\s\S]*?day-rail/.test(tl), "pending cards render whenever there are any, wrapped in a rail");
   assert.ok(tl.indexOf("这个时间看不懂：") !== -1);
   assert.ok(tl.indexOf('"，" + pendingN + " 条日期待确认"') !== -1);
   assert.ok(tl.indexOf('if (card.classList.contains("is-pending")) enterEditMode(') !== -1);

@@ -42,28 +42,19 @@ function check(name, fn) {
   }
 }
 
-check("APP_VERSION v6.1.2, cache v21, announcement 2 bullets and changelog 3 lines signed off", function () {
-  assert.strictEqual(V.APP_VERSION, "v6.1.2");
-  assert.strictEqual(V.SHELL_CACHE, "xingcheng-map-shell-v21");
-  assert.strictEqual(V.versionLabel(), "当前版本 v6.1.2 · 2026-11-17");
+check("v6.1.2 changelog remains signed off (historical)", function () {
   assert.ok(V.compareVersion("v6.1.1", "v6.1.2") < 0);
-  assert.strictEqual(V.ANNOUNCEMENT.title, "v6.1.2 更新");
-  assert.ok(!V.ANNOUNCEMENT.draft);
-  assert.deepStrictEqual(V.ANNOUNCEMENT.bullets, [
-    "长按页面任何地方，都不会再选中文字了",
-    "改地点时，『保存修改』一直在底部，不用往下找"
-  ]);
-  assert.strictEqual(V.ANNOUNCEMENT.tip, "看到的还是旧版，就把网页彻底关掉再打开");
-  assert.strictEqual(V.CHANGELOG[0].version, "v6.1.2");
-  assert.ok(!V.CHANGELOG[0].draft);
-  assert.deepStrictEqual(V.CHANGELOG[0].lines, [
+  assert.ok(V.compareVersion("v6.1.2", V.APP_VERSION) <= 0);
+  const e = V.CHANGELOG.find((x) => x.version === "v6.1.2");
+  assert.ok(e && !e.draft, "v6.1.2 changelog stays signed off");
+  assert.deepStrictEqual(e.lines, [
     "修复：长按空白处和标题不会再选中文字，展开后的地址照样能长按复制",
     "修复：弹出的页面每次打开都从最上面开始，不会停在上次划到的地方",
     "调整：『保存修改』和『取消』一直在底部，不用往下划就能看到"
   ]);
-  assert.strictEqual(sw.match(/var CACHE = "([^"]+)"/)[1], "xingcheng-map-shell-v21");
-  assert.ok(ub.indexOf('var SHELL_CACHE = "xingcheng-map-shell-v21"') !== -1);
-  assert.ok(html.indexOf('name="shell-cache" content="xingcheng-map-shell-v21"') !== -1);
+  assert.strictEqual(sw.match(/var CACHE = "([^"]+)"/)[1], "xingcheng-map-shell-v22");
+  assert.ok(ub.indexOf('var SHELL_CACHE = "xingcheng-map-shell-v22"') !== -1);
+  assert.ok(html.indexOf('name="shell-cache" content="xingcheng-map-shell-v22"') !== -1);
   const d = V.decideOnOpen({ lastSeen: "v6.1.1", hasTrips: true, helpHidden: true, current: "v6.1.2" });
   assert.strictEqual(d.show, "announce");
 });
@@ -236,7 +227,7 @@ async function headless() {
       localStorage.setItem("wishlist-map-drag-tip-v1","1");
       localStorage.setItem("wishlist-map-ios-guide-closed-v1","1");
       localStorage.setItem("wishlist-map-install-guide-done-v1","1");
-      localStorage.setItem("wishlist-map-last-seen-version-v1","v6.1.2");
+      localStorage.setItem("wishlist-map-last-seen-version-v1","v6.1.3");
     `;
     await send("Page.enable");
     await send("Runtime.enable");

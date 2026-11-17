@@ -2,7 +2,7 @@
 <html lang="zh-Hans">
 <head>
   <meta charset="UTF-8">
-  <meta name="shell-cache" content="xingcheng-map-shell-v21">
+  <meta name="shell-cache" content="xingcheng-map-shell-v22">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-eval' https://webapi.amap.com https://restapi.amap.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.tile.openstreetmap.org https://*.is.autonavi.com; connect-src 'self' https://nominatim.openstreetmap.org https://api.postcodes.io https://webapi.amap.com https://restapi.amap.com; media-src 'self'; font-src 'self'; worker-src 'self'; manifest-src 'self'">
   <meta name="theme-color" content="#FFFFFF">
@@ -51,7 +51,7 @@
           <span class="brand-name"><span class="brand-free">Free</span> Your Trip</span>
         </h1>
         <div class="trip-line">
-          <!-- v6.1：固定一行「名字(最多6字) · 共 N 趟 ⌄」+『＋ 新行程』 -->
+          <!-- v6.1.3：顶栏『我的行程』只打开列表；新建只走底部『＋ 新建行程』 -->
           <div class="trip-name-row">
           <div class="trip-pill" id="trip-pill" data-role="switch">
             <button type="button" class="trip-name" id="trip-name-btn" aria-label="当前行程，点一下切换或管理行程" aria-haspopup="dialog"><span class="trip-name-text" id="trip-name-text">我的行程</span><span class="trip-count" id="trip-count"> · 共 1 趟</span><svg class="trip-pill-ico" id="trip-pill-ico" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="#8A9099" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6l4 4 4-4"/></svg></button>
@@ -67,7 +67,7 @@
               </div>
             </div>
           </div>
-          <button type="button" class="trip-add-btn" id="trip-add-btn" aria-label="＋ 新行程">＋ 新行程</button>
+          <button type="button" class="trip-add-btn" id="trip-add-btn" aria-label="我的行程">我的行程</button>
           <div class="trip-tip" id="trip-tip" hidden role="status">点这里切换或新建行程</div>
           </div>
         </div>
@@ -138,9 +138,27 @@
         <button type="button" class="am-row" id="am-flight" data-add-kind="flight"><span class="am-ico" style="color:#6B7A8F;background:#6B7A8F1A"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8a2 2 0 0 0 2-2h14a2 2 0 0 0 2 2v2a2 2 0 0 0 0 4v2a2 2 0 0 0-2 2H5a2 2 0 0 0-2-2v-2a2 2 0 0 0 0-4z"/><path d="M14 6v12" stroke-dasharray="2 2"/></svg></span><span class="am-txt"><span class="am-main" id="am-flight-main"></span><span class="am-sub" id="am-flight-sub"></span></span><span class="am-chev" aria-hidden="true">›</span></button>
         <button type="button" class="am-row" id="am-hotel" data-add-kind="hotel"><span class="am-ico" style="color:#8E5CF7;background:#8E5CF71A"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 18V7"/><path d="M3 14h18v4"/><path d="M21 14v-3a3 3 0 0 0-3-3h-7v6"/><circle cx="7" cy="11" r="2"/></svg></span><span class="am-txt"><span class="am-main" id="am-hotel-main"></span><span class="am-sub" id="am-hotel-sub"></span></span><span class="am-chev" aria-hidden="true">›</span></button>
         <button type="button" class="am-row" id="am-place" data-add-kind="place"><span class="am-ico" style="color:#0F9D8A;background:#0F9D8A1A"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s7-6.5 7-12a7 7 0 0 0-14 0c0 5.5 7 12 7 12z"/><circle cx="12" cy="9" r="2.5"/></svg></span><span class="am-txt"><span class="am-main" id="am-place-main"></span><span class="am-sub" id="am-place-sub"></span></span><span class="am-chev" aria-hidden="true">›</span></button>
+        <button type="button" class="am-row" id="am-friend-paste" data-add-kind="friend-paste"><span class="am-ico" style="color:#6B7A8F;background:#6B7A8F1A"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="3" width="8" height="4" rx="1"/><path d="M8 5H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><path d="M9 13h6M9 17h4"/></svg></span><span class="am-txt"><span class="am-main" id="am-friend-paste-main"></span><span class="am-sub" id="am-friend-paste-sub"></span></span><span class="am-chev" aria-hidden="true">›</span></button>
       </div>
       <div class="am-divider" role="separator"></div>
       <button type="button" class="am-whole" id="am-whole" data-add-kind="whole"></button>
+    </div>
+  </div>
+
+
+  <div class="sheet" id="friend-paste-sheet" hidden>
+    <div class="sheet-backdrop" data-close="friend-paste-sheet"></div>
+    <div class="sheet-panel" role="dialog" aria-modal="true" aria-labelledby="friend-paste-title">
+      <div class="sheet-handle" aria-hidden="true"></div>
+      <div class="sheet-head">
+        <button type="button" class="sheet-back" id="friend-paste-back" aria-label="返回「添加什么？」">‹</button>
+        <h2 id="friend-paste-title">粘贴朋友发来的行程</h2>
+        <button type="button" class="icon-btn sheet-close" data-close="friend-paste-sheet" aria-label="关闭"></button>
+      </div>
+      <label class="sr-only" for="friend-paste-text">粘贴朋友发来的行程</label>
+      <textarea id="friend-paste-text" rows="8" spellcheck="false"></textarea>
+      <button type="button" class="primary-btn" id="friend-paste-btn">粘贴并导入</button>
+      <div class="add-status" id="friend-paste-status" role="status"></div>
     </div>
   </div>
 
@@ -189,12 +207,7 @@
         <ol class="ai-steps">
           <li class="ai-step is-current" data-step="1">
             <p class="ai-step-text" id="ai-step1-text"></p>
-            <!-- v6：原来的看提示词和复制两个按钮合成一个：先打开全文，下面一个「复制」 -->
-            <button type="button" class="primary-btn" id="ai-prompt-open" aria-expanded="false" aria-controls="ai-prompt-box">给 AI 的话</button>
-            <div class="ai-prompt-box" id="ai-prompt-box" hidden>
-              <pre class="prompt-view" id="ai-prompt-view"></pre>
-              <button type="button" class="primary-btn copy-btn" id="ai-copy-btn">复制</button>
-            </div>
+            <button type="button" class="primary-btn copy-btn" id="ai-copy-btn">复制给 AI 的话</button>
           </li>
           <li class="ai-step" data-step="2">
             <p class="ai-step-text" id="ai-step2-text"></p>
@@ -308,8 +321,8 @@
       <div class="more-actions">
         <button type="button" class="more-btn" id="help-open-btn">使用说明</button>
         <button type="button" class="more-btn more-btn-sub" id="install-btn" data-sub="像 App 一样，点图标就打开">放到手机桌面</button>
-        <button type="button" class="more-btn more-btn-sub" id="backup-export-share" data-sub="发给同行的人，对方导入就能看到">分享我的行程</button>
-        <button type="button" class="more-btn more-btn-sub" id="recommend-btn" data-sub="只发网址，不含你的行程">分享给朋友</button>
+        <button type="button" class="more-btn more-btn-sub" id="backup-export-share" data-sub="发个链接给同行的人，对方点开就能存好">分享我的行程</button>
+        <button type="button" class="more-btn more-btn-sub" id="recommend-btn" data-sub="只发网址，不含你的行程">推荐这个工具</button>
         <button type="button" class="more-btn" id="backup-import">导入</button>
         <input type="file" id="backup-file" accept="application/json,.json" hidden>
         <button type="button" class="more-btn" id="backup-export-full" title="含确认号和座位，仅自己保存">完整备份</button>
@@ -500,6 +513,41 @@
     <div class="mp-foot"><button type="button" class="mp-save" id="mp-save" disabled>就放这里</button></div>
   </div>
 
+  <div class="sheet" id="share-link-sheet" hidden>
+    <div class="sheet-backdrop" data-close="share-link-sheet"></div>
+    <div class="sheet-panel" role="dialog" aria-labelledby="share-link-title">
+      <div class="sheet-handle" aria-hidden="true"></div>
+      <div class="sheet-head">
+        <h2 id="share-link-title">分享我的行程</h2>
+        <button type="button" class="icon-btn sheet-close" data-close="share-link-sheet" aria-label="关闭"></button>
+      </div>
+      <label class="share-link-notes" id="share-link-notes-label"><input type="checkbox" id="share-link-notes"> <span>把备注也分享出去</span></label>
+      <p class="share-link-hint" id="share-link-hint">拿到链接的人都能看到这趟行程</p>
+      <button type="button" class="primary-btn" id="share-link-go">发链接</button>
+      <button type="button" class="share-link-alt" id="share-link-text">改发文字</button>
+      <p class="share-link-alt-hint" id="share-link-alt-hint">链接打不开时用这个</p>
+    </div>
+  </div>
+
+  <div class="sheet friend-share-sheet" id="friend-share-sheet" hidden>
+    <div class="sheet-backdrop" data-close="friend-share-sheet"></div>
+    <div class="friend-share-card" role="dialog" aria-modal="true" aria-labelledby="friend-share-title">
+      <h2 class="friend-share-title" id="friend-share-title">朋友分享了一趟行程</h2>
+      <p class="friend-share-sub" id="friend-share-sub"></p>
+      <button type="button" class="friend-share-save" id="friend-share-save">存到我的行程</button>
+      <button type="button" class="friend-share-no" id="friend-share-no">不要</button>
+    </div>
+  </div>
+
+  <div class="sheet share-broken-sheet" id="share-broken-sheet" hidden>
+    <div class="sheet-backdrop" data-close="share-broken-sheet"></div>
+    <div class="share-broken-card" role="alertdialog" aria-modal="true" aria-labelledby="share-broken-title" aria-describedby="share-broken-body">
+      <h2 class="share-broken-title" id="share-broken-title">这个链接打不开</h2>
+      <p class="share-broken-body" id="share-broken-body">这个链接没发完整，打不开。请对方分享时点『改发文字』，再发你一次</p>
+      <button type="button" class="share-broken-ok" id="share-broken-ok">知道了</button>
+    </div>
+  </div>
+
   <div class="toast" id="toast" hidden>
     <span id="toast-msg"></span>
     <button type="button" id="toast-undo">撤销</button>
@@ -525,6 +573,7 @@
   <script src="./fix-cand.js"></script>
   <script src="./ai-prompt.js"></script>
   <script src="./backup.js"></script>
+  <script src="./share-link.js"></script>
   <script src="./legs.js"></script>
   <script src="./calendar.js"></script>
   <script src="./recommend.js"></script>

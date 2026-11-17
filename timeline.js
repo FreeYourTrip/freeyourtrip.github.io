@@ -1271,6 +1271,7 @@
       return;
     }
     var pending = items.filter(isPendingItem);
+    if (pending.length && window.Legs && Legs.sortDayItems) pending = Legs.sortDayItems(pending);
     var datedRaw = items.filter(function (it) { return !isPendingItem(it); });
     flightPairs = (window.Legs && Legs.pairRoundTrips) ? Legs.pairRoundTrips(datedRaw) : {};
     var dated = (window.Legs && Legs.expandViewItems) ? Legs.expandViewItems(datedRaw) : datedRaw;
@@ -1301,13 +1302,14 @@
       }
     }
     var html = pendingBanner;
-    if (pending.length && selectedDay === "all") {
-      html += '<section class="day-block pending-block" id="day-pending" aria-label="待确认日期">';
+    if (pending.length) {
+      html += '<section class="day-block pending-block" id="day-pending" data-drop-day="待补" aria-label="待确认日期">';
       html += '<h3 class="pending-head">' + ico("calendar", "ico-sm") + "<span>待确认日期</span><span class=\"pending-count\">" + pending.length + " 条 · 点一下改日期</span></h3>";
+      html += '<div class="day-rail">';
       pending.forEach(function (item) {
         html += cardHtml(item);
       });
-      html += "</section>";
+      html += "</div></section>";
     }
     /*
      * v6（日程表样式）：「全部」里有酒店 / 机票 / 火车 / 船（日期定死的）时，从第一天到最后一天每天一条日期带，
@@ -1318,12 +1320,12 @@
     var undatedGroup = null;
     if (agenda) groups = fillEmptyDays(groups, datedRaw);
     groups.forEach(function (g) {
-      if (selectedDay !== "all" && g.date !== selectedDay) return;
-      /* v6：没日期的放到最下面的「还没定哪天」（只在「全部」里出现） */
-      if (agenda && g.date === UNDATED_KEY) {
+      /* 没日期的一律进「还没定哪天」，落点是空字符串（不要写成「未标明日期」） */
+      if (g.date === UNDATED_KEY) {
         undatedGroup = g;
         return;
       }
+      if (selectedDay !== "all" && g.date !== selectedDay) return;
       html += '<section class="day-block" id="day-' + escapeHtml(g.date) + '" data-drop-day="' + escapeHtml(g.date) + '">';
       if (showAll) html += '<h3 class="day-subhead">' + escapeHtml(g.header || formatMd(g.date)) + "</h3>";
       if (!g.items.length) {
@@ -1362,7 +1364,7 @@
       if (window.Legs && Legs.trailingHotelPill) html += legPillHtml(Legs.trailingHotelPill(g.items, datedRaw, g.date));
       html += "</div></section>";
     });
-    if (showAll) html += undatedBlockHtml(undatedGroup);
+    html += undatedBlockHtml(undatedGroup);
     root.innerHTML = html;
     syncStickyOffset();
     bindSecretToggles(root);
@@ -1604,7 +1606,7 @@
       var rail = card.closest(".day-rail");
       if (!rail) return;
       var block = card.closest(".day-block");
-      if (block && block.classList.contains("pending-block")) return;
+      /* 待补也可以拖：在组内换顺序，或拖到某一天 / 「还没定哪天」 */
       var startX = ev.clientX;
       var startY = ev.clientY;
       var pointerId = ev.pointerId;
@@ -1660,7 +1662,7 @@
     return Array.prototype.slice.call(root.querySelectorAll(".day-block[data-drop-day]")).map(function (el) {
       return {
         el: el,
-        day: el.getAttribute("data-drop-day") || "",
+        day: window.Legs && Legs.normalizeDropDay ? Legs.normalizeDropDay(el.getAttribute("data-drop-day")) : (el.getAttribute("data-drop-day") || ""),
         rail: el.querySelector(".day-rail"),
         cards: Array.prototype.slice.call(el.querySelectorAll(".day-rail .card"))
       };
@@ -1867,6 +1869,11 @@
     var trip = currentTrip();
     var item = findItem(id);
     if (!item || !window.ItemEdit || !ItemEdit.moveToDay) return;
+    day = window.Legs && Legs.normalizeDropDay ? Legs.normalizeDropDay(day) : (day || "");
+    if (day === "待补") {
+      if (item.pendingDate) applyReorder(day, orderedIds, id);
+      return;
+    }
     var next = ItemEdit.moveToDay(item, day);
     if (next === item) return;
     var snapshot = snapshotItems();
@@ -1886,10 +1893,22 @@
     try { return JSON.parse(JSON.stringify((currentTrip().items || []))); } catch (err) { return (currentTrip().items || []).slice(); }
   }
 
+  function groupOrderIds(items, day) {
+    var key = window.Legs && Legs.normalizeDropDay ? Legs.normalizeDropDay(day) : (day || "");
+    var list = (items || []).filter(function (it) {
+      var k = window.Legs && Legs.itemGroupKey ? Legs.itemGroupKey(it) : (((window.Legs && Legs.itemDisplayDate(it)) || ""));
+      return k === key;
+    });
+    if (window.Legs && Legs.sortDayItems) list = Legs.sortDayItems(list);
+    return list.map(function (it) { return it.id; }).join(",");
+  }
+
   function applyReorder(day, newIds, movedId) {
     var trip = currentTrip();
-    orderUndoSnapshot = snapshotItems();
+    var snapshot = snapshotItems();
     if (window.Legs && Legs.applyDayOrder) Legs.applyDayOrder(trip.items || [], day, newIds);
+    if (groupOrderIds(snapshot, day) === groupOrderIds(trip.items || [], day)) return;
+    orderUndoSnapshot = snapshot;
     saveAllTrips();
     renderList();
     var ordered = (window.Legs ? Legs.sortedItems(trip.items) : trip.items || []).filter(function (it) {
@@ -2055,9 +2074,21 @@
     }
   }
 
+  function resetAiWizard() {
+    setAiStep(1);
+    var copy = $("ai-copy-btn");
+    if (copy) {
+      copy.classList.remove("is-copied");
+      copy.removeAttribute("data-label");
+      copy.textContent = AI_WIZARD_COPY.copyBtn;
+      decorateCopyBtn();
+    }
+  }
+
   function resetAddPasteUi() {
     if ($("add-text")) $("add-text").value = "";
     showAddStatus("");
+    resetAiWizard();
   }
 
   function resetSheetScroll(root) {
@@ -2153,7 +2184,7 @@
   var HELP_ALERT_SVG = '<svg class="help-alert-ico" viewBox="0 0 14 14" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 1.6l5.6 10H1.4z"/><path d="M7 5.6v2.8"/><path d="M7 10.2v.1"/></svg>';
   /* 新手 3 条文案集中在这一处，改字只动这里。插图放到 cards[].svg（规格 160×96，描边 #0F9D8A、2px；UI 正式稿已内联）。 */
   var HELP_STARTER = {
-    title: "新手先看这 3 条",
+    title: "新手先看这 4 条",
     subtitle: "把要去的地方放进来，按天排好，出门跟着走",
     cards: [
       { key: "add", title: "想去的地方，先存进来", text: "点底部『＋ 添加』，输入店名或地址，点一下结果就存好了", svg: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 96" width="160" height="96" fill="none" stroke="#0F9D8A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="6" width="54" height="84" rx="8"/><path d="M16 18h38M16 28h30M16 38h34"/><rect x="14" y="66" width="14" height="16" rx="4"/><rect x="32" y="66" width="24" height="16" rx="5" fill="#0F9D8A"/><path d="M44 70v8M40 74h8" stroke="#fff"/><circle cx="44" cy="74" r="13" stroke-width="1.5" stroke-dasharray="2 3"/><path d="M66 48h10M72 44l4 4-4 4"/><rect x="82" y="6" width="70" height="84" rx="8"/><rect x="88" y="14" width="58" height="14" rx="7"/><circle cx="96" cy="21" r="3"/><path d="M98.5 23.5l2 2M104 21h20"/><rect x="88" y="34" width="58" height="18" rx="5"/><path d="M96 38.5c-2.2 0-3.5 1.6-3.5 3.4 0 2.6 3.5 5.6 3.5 5.6s3.5-3 3.5-5.6c0-1.8-1.3-3.4-3.5-3.4z"/><path d="M104 40h28M104 46h18"/><circle cx="118" cy="43" r="13" stroke-width="1.5" stroke-dasharray="2 3"/><path d="M88 64h58" stroke-dasharray="3 3"/><path d="M88 74h30M88 82h22"/></svg>' },
@@ -2163,12 +2194,13 @@
         title: "各种订单、攻略截图，都能变成行程",
         lead: "车票机票、酒店订单、小红书、抖音、大众点评都行",
         steps: [
-          "在这里点『复制』，复制一段给 AI 的话",
+          "在这里点『复制给 AI 的话』",
           "打开你手机上的 AI App（豆包、DeepSeek、ChatGPT 都行），先粘贴，再把截图发过去，一张或好几张都行",
           "把 AI 的回复全部复制，回到这里点『粘贴并导入』"
         ]
       },
-      { key: "map", title: "到了当天，一键导航", text: "点卡片上的『带我去』，手机地图会直接带你过去", line: "长按卡片拖动，能换顺序或换日子", svg: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 96" width="160" height="96" fill="none" stroke="#0F9D8A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="12" width="88" height="40" rx="8"/><path d="M14 26h34M14 36h22"/><rect x="58" y="22" width="30" height="20" rx="10" fill="#0F9D8A"/><path d="M67 32h11M75 29l3 3-3 3" stroke="#fff"/><circle cx="73" cy="32" r="15" stroke-width="1.5" stroke-dasharray="2 3"/><path d="M98 34c14 0 10 22 22 22s10-24 20-30" stroke-dasharray="3 4"/><path d="M140 8c-5 0-8 4-8 8 0 6 8 13 8 13s8-7 8-13c0-4-3-8-8-8z"/><circle cx="140" cy="16" r="2.5"/><rect x="6" y="68" width="20" height="20" rx="5"/><path d="M10 74l4-2 4 2 4-2v10l-4 2-4-2-4 2z"/><rect x="32" y="68" width="62" height="20" rx="6" fill="#0F9D8A"/><path d="M63 73v10M58 78h10" stroke="#fff"/></svg>' }
+      { key: "map", title: "到了当天，一键导航", text: "点卡片上的『带我去』，手机地图会直接带你过去", line: "长按卡片拖动，能换顺序或换日子", svg: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 96" width="160" height="96" fill="none" stroke="#0F9D8A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="12" width="88" height="40" rx="8"/><path d="M14 26h34M14 36h22"/><rect x="58" y="22" width="30" height="20" rx="10" fill="#0F9D8A"/><path d="M67 32h11M75 29l3 3-3 3" stroke="#fff"/><circle cx="73" cy="32" r="15" stroke-width="1.5" stroke-dasharray="2 3"/><path d="M98 34c14 0 10 22 22 22s10-24 20-30" stroke-dasharray="3 4"/><path d="M140 8c-5 0-8 4-8 8 0 6 8 13 8 13s8-7 8-13c0-4-3-8-8-8z"/><circle cx="140" cy="16" r="2.5"/><rect x="6" y="68" width="20" height="20" rx="5"/><path d="M10 74l4-2 4 2 4-2v10l-4 2-4-2-4 2z"/><rect x="32" y="68" width="62" height="20" rx="6" fill="#0F9D8A"/><path d="M63 73v10M58 78h10" stroke="#fff"/></svg>' },
+      { key: "sharetrip", title: "和同行的人共用行程", texts: ["发：点『设置』里的『分享我的行程』，把链接发过去", "收：点开朋友发来的链接，再点『存到我的行程』"], line: "收到的是一段文字：整段复制，点底部『＋ 添加』，再点『粘贴朋友发来的行程』，最后点『粘贴并导入』", svg: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 96" width="160" height="96" fill="none" stroke="#0F9D8A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="8" width="40" height="80" rx="7"/><path d="M13 20h20M13 28h26M13 36h16"/><rect x="14" y="63" width="24" height="14" rx="7" fill="#0F9D8A"/><path d="M26 73.5v-7M23 69.5l3-3 3 3" stroke="#fff"/><circle cx="26" cy="70" r="15" stroke-width="1.5" stroke-dasharray="2 3"/><path d="M50 48h8M55 45l3 3-3 3"/><path d="M64 30h30a6 6 0 0 1 6 6v14a6 6 0 0 1-6 6H76l-7 6v-6h-5a6 6 0 0 1-6-6V36a6 6 0 0 1 6-6z"/><path d="M75 46l8-6M73.5 42.5l-2 2a3 3 0 0 0 4 4l2-2M84.5 43.5l2-2a3 3 0 0 0-4-4l-2 2"/><path d="M102 48h8M107 45l3 3-3 3"/><rect x="114" y="8" width="40" height="80" rx="7"/><rect x="118" y="24" width="32" height="48" rx="5"/><path d="M123 32h22M126 39h16"/><rect x="124" y="55" width="20" height="9" rx="4.5" fill="#0F9D8A"/><circle cx="134" cy="59.5" r="13" stroke-width="1.5" stroke-dasharray="2 3"/></svg>' }
     ]
   };
 
@@ -2181,9 +2213,9 @@
         { key: "day", icon: "calendar", title: "看行程", text: "顶部日期条左右滑，点哪天就看哪天" },
         { key: "edit", icon: "trash", title: "改和删", text: "点开卡片就能改。删错了，马上点底部的『撤销』就能恢复" },
         { key: "map", icon: "map", title: "地图", text: "点『添加』左边的『地图』，所有地点一眼看全，再点『列表』回来。右下角的按钮能定位到你自己" },
-        { key: "share", icon: "share", title: "分享我的行程", text: "发给同行的人，订单号和座位会自动隐藏" },
+        { key: "share", icon: "share", title: "分享我的行程", text: "点一下生成链接，发给同行的人，订单号和座位会自动隐藏" },
         { key: "install", icon: "device", title: "放到桌面", text: "像 App 一样，点图标就打开" },
-        { key: "rename", icon: "pencil", title: "多个行程", text: "点『＋ 新行程』再建一趟；点左上角的行程名，能切换、改名、删除" },
+        { key: "rename", icon: "pencil", title: "多个行程", text: "点顶上的『我的行程』，再点最下面的『+ 新建行程』" },
         /* v5.3 定稿 */
         { key: "fixplace", icon: "pin", title: "补位置", text: "卡片上写着「位置待确认」的，点它就能补，不补也不影响用" }
       ]
@@ -2337,7 +2369,7 @@
     afterOpenDialogClosed();
   }
 
-  /** mode "first"：第一次打开自动弹，只显示「新手先看这 3 条」，点「看更多说明」再展开；手动打开显示全部三层。 */
+  /** mode "first"：第一次打开自动弹，只显示「新手先看这 4 条」，点「看更多说明」再展开；手动打开显示全部三层。 */
   function openHelp(mode) {
     var sh = $("help-sheet");
     if (sh) sh.classList.toggle("help-first", mode === "first");
@@ -2361,7 +2393,7 @@
     btn.setAttribute("data-label", prev);
     if (span) span.textContent = AI_WIZARD_COPY.copied;
     else btn.textContent = AI_WIZARD_COPY.copied;
-    /* 向导里的复制按钮一直显示描边的「已复制」，直到下次打开向导 */
+    /* 向导里的复制按钮一直显示「✓ 已复制」，直到下次打开向导 */
     if (btn.id === "ai-copy-btn") {
       setAiStep(Math.max(aiStep, 2));
       return;
@@ -2425,6 +2457,8 @@
     hotelSub: "搜酒店名，点一下加进行程",
     place: "加地点",
     placeSub: "吃的、玩的、逛的",
+    friendPaste: "粘贴朋友发来的行程",
+    friendPasteSub: "朋友发来一段文字，就点这里",
     whole: "有整份行程截图？交给 AI 一次整理 ›",
     hotelPlaceholder: "输入酒店名，或粘贴地址",
     hotelTitle: "加酒店",
@@ -2588,11 +2622,10 @@
   var AI_WIZARD_COPY = {
     bigSub: "截图交给 AI，自动排好行程",
     title: "截图交给 AI，自动排好行程",
-    /* v6：一个按钮「给 AI 的话」先打开全文，下面「复制」（文案定稿） */
-    step1: "点『给 AI 的话』看一眼，再点下面的『复制』",
-    promptBtn: "给 AI 的话",
-    copyBtn: "复制",
-    copied: "已复制",
+    /* 提示词只留在 JS 里，点按钮就整段复制，页面上不展示 */
+    step1: "点『复制给 AI 的话』",
+    copyBtn: "复制给 AI 的话",
+    copied: "✓ 已复制",
     step2: "打开你常用的 AI（豆包、Kimi、DeepSeek、ChatGPT 都行），先粘贴，再把截图发过去，好几张可以一起发",
     /* v5.3 定稿：步骤 2 下面的小字 */
     step2Small: "不会截图？同时按侧边键和音量加键",
@@ -2614,15 +2647,6 @@
     fileBad: "这个文件打不开，要用这里导出的备份或分享文件"
   };
   var aiStep = 1;
-
-  /** v6：打开 / 收起「给 AI 的话」全文（下面是「复制」） */
-  function showAiPrompt(on) {
-    var box = $("ai-prompt-box");
-    if (!box) return;
-    if (on && $("ai-prompt-view")) $("ai-prompt-view").textContent = aiPromptText();
-    box.hidden = !on;
-    if ($("ai-prompt-open")) $("ai-prompt-open").setAttribute("aria-expanded", on ? "true" : "false");
-  }
 
   function setAiStep(n) {
     aiStep = n;
@@ -2663,15 +2687,9 @@
     if (btn) btn.setAttribute("aria-expanded", open ? "true" : "false");
     if (open) {
       fillAiWizardText();
-      var copy = $("ai-copy-btn");
-      if (copy) {
-        copy.classList.remove("is-copied");
-        decorateCopyBtn();
-      }
-      showAiPrompt(false);
+      resetAiWizard();
       var fb = $("ai-fallback");
       if (fb) fb.hidden = true;
-      setAiStep(1);
     }
   }
 
@@ -2682,9 +2700,43 @@
     if (ta) ta.setAttribute("placeholder", AI_WIZARD_COPY.fallbackHint);
   }
 
+  function showSharePasteFail(fromFriend) {
+    var msg = '<p class="err">' + escapeHtml(AI_WIZARD_COPY.fail) + "</p>";
+    if (fromFriend) {
+      var st = $("friend-paste-status");
+      if (st) st.innerHTML = msg;
+      return;
+    }
+    showAddStatus(msg);
+    showAiFallback();
+  }
+
+  function trySharePaste(text, fromFriend) {
+    if (!(window.ShareLink && ShareLink.ENABLED && ShareLink.handlePastedText)) return null;
+    var t = String(text || "");
+    var header = (ShareLink.HEADER || "【Free Your Trip】");
+    if (ShareLink.isPasteTooLong && ShareLink.isPasteTooLong(t) && (fromFriend || t.indexOf(header) !== -1)) {
+      showSharePasteFail(fromFriend);
+      return Promise.resolve(false);
+    }
+    if (!(ShareLink.parseTextBlock && ShareLink.parseTextBlock(t))) return null;
+    return ShareLink.handlePastedText(t).then(function (result) {
+      if (result && result.ok) {
+        closeSheet("add-sheet");
+        closeSheet("friend-paste-sheet");
+        closeSheet("add-menu");
+        return true;
+      }
+      showSharePasteFail(fromFriend);
+      return false;
+    });
+  }
+
   /** 向导里的导入：认不出任何一行就提示，并展开手动粘贴框。 */
   function wizardImport(text) {
     var t = String(text || "");
+    var share = trySharePaste(t, false);
+    if (share) return share;
     var ok = t.trim() && looksStructured(t) && window.ImportUtil && (ImportUtil.parseImport(t).items || []).length;
     if (!ok) {
       showAddStatus('<p class="err">' + escapeHtml(AI_WIZARD_COPY.fail) + "</p>");
@@ -2695,21 +2747,82 @@
     return true;
   }
 
-  function pasteAndImport() {
-    setAiStep(3);
-    if (!navigator.clipboard || typeof navigator.clipboard.readText !== "function") {
-      showAiFallback();
+  var PASTE_FAIL_TOAST = "长按输入框粘贴，再点一次";
+
+  /** 只在用户点『粘贴并导入』且输入框是空的时候读剪贴板。打开页面或点开 #s= 链接时不读。 */
+  function readClipboardOnPasteTap(onText, onFail) {
+    var canRead = typeof navigator !== "undefined" && navigator.clipboard && typeof navigator.clipboard.readText === "function";
+    if (!canRead) {
+      if (onFail) onFail();
+      showToast(PASTE_FAIL_TOAST);
       return;
     }
-    navigator.clipboard.readText().then(function (text) {
-      if (!String(text || "").trim()) {
-        showAiFallback();
+    navigator.clipboard.readText().then(function (t) {
+      if (!String(t || "").trim()) {
+        if (onFail) onFail();
+        showToast(PASTE_FAIL_TOAST);
         return;
       }
-      if ($("add-text")) $("add-text").value = text;
-      wizardImport(text);
+      onText(t);
     }, function () {
-      showAiFallback();
+      if (onFail) onFail();
+      showToast(PASTE_FAIL_TOAST);
+    });
+  }
+
+  function importPastedText(text, fromFriend) {
+    var t = String(text || "");
+    var share = trySharePaste(t, fromFriend);
+    if (share) return share;
+    if (fromFriend) {
+      var ok = t.trim() && looksStructured(t) && window.ImportUtil && (ImportUtil.parseImport(t).items || []).length;
+      if (!ok) {
+        showSharePasteFail(true);
+        return false;
+      }
+      closeSheet("friend-paste-sheet");
+      runStructuredImport(t);
+      return true;
+    }
+    return wizardImport(t);
+  }
+
+  function pasteAndImport() {
+    setAiStep(3);
+    var box = $("add-text");
+    var text = (box && box.value) || "";
+    if (String(text).trim()) {
+      wizardImport(text);
+      return;
+    }
+    readClipboardOnPasteTap(function (t) {
+      if (box) box.value = t;
+      wizardImport(t);
+    }, function () { showAiFallback(); });
+  }
+
+  function openFriendPaste() {
+    closeSheet("add-menu");
+    var ta = $("friend-paste-text");
+    if (ta) ta.value = "";
+    var st = $("friend-paste-status");
+    if (st) st.innerHTML = "";
+    openSheet("friend-paste-sheet");
+    if (ta) {
+      try { ta.focus(); } catch (err) {}
+    }
+  }
+
+  function pasteFriendImport() {
+    var box = $("friend-paste-text");
+    var text = (box && box.value) || "";
+    if (String(text).trim()) {
+      importPastedText(text, true);
+      return;
+    }
+    readClipboardOnPasteTap(function (t) {
+      if (box) box.value = t;
+      importPastedText(t, true);
     });
   }
 
@@ -2735,7 +2848,7 @@
       return;
     }
     if (type === "机票") {
-      showManualStatus('<p class="err">机票请用『给 AI 的话』整理截图，或把「机票 | 航班号 | LHR - HND | 起飞时间 ~ 落地时间 | 」粘贴到「用 AI 帮我整理」里的框中。</p>');
+      showManualStatus('<p class="err">机票请用『复制给 AI 的话』整理截图，或把「机票 | 航班号 | LHR - HND | 起飞时间 ~ 落地时间 | 」粘贴到「用 AI 帮我整理」里的框中。</p>');
       return;
     }
     var day = selectedDateOrEmpty();
@@ -4476,6 +4589,10 @@
 
   function openAddFor(kind) {
     closeSheet("add-menu");
+    if (kind === "friend-paste") {
+      openFriendPaste();
+      return;
+    }
     if (kind === "flight" || kind === "whole") {
       setAddPreset("place");
       openSheet("add-sheet");
@@ -4502,7 +4619,11 @@
     put("am-hotel-sub", C.hotelSub);
     put("am-place-main", C.place);
     put("am-place-sub", C.placeSub);
+    put("am-friend-paste-main", C.friendPaste);
+    put("am-friend-paste-sub", C.friendPasteSub);
     put("am-whole", C.whole);
+    put("friend-paste-title", C.friendPaste);
+    put("friend-paste-btn", AI_WIZARD_COPY.pasteBtn);
     put("add-fallback", C.fallback);
     if ($("add-sheet-back")) {
       $("add-sheet-back").setAttribute("aria-label", C.back);
@@ -4511,6 +4632,11 @@
         openAddMenu();
       });
     }
+    if ($("friend-paste-back")) $("friend-paste-back").addEventListener("click", function () {
+      closeSheet("friend-paste-sheet");
+      openAddMenu();
+    });
+    if ($("friend-paste-btn")) $("friend-paste-btn").addEventListener("click", pasteFriendImport);
     if ($("add-fallback")) $("add-fallback").addEventListener("click", openAddFallback);
     var menu = $("add-menu");
     if (!menu) return;
@@ -4905,6 +5031,10 @@
     updateTopBar();
     flashPill();
   }
+
+  /* v6.1.3 定稿：顶栏按钮文案（打开行程列表，不再直接新建）。 */
+  var TRIPS_HEADER_BTN = "我的行程";
+  /* v6.1.3 更新记录已定稿的一行（版本号和公告还没改）：修复：点顶上的『我的行程』只打开列表，不会再多出一个空行程 */
 
   /* ---------- v6「我的行程」：切换 / 新建 / 改名 / 删除 ---------- */
   var tripsRenamingId = null;
@@ -5771,6 +5901,42 @@
     }
   };
 
+
+  function newShareItemId() {
+    return "s" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+  }
+
+  function acceptSharedTrip(payload) {
+    if (window.ShareLink && ShareLink.sanitizePayload) payload = ShareLink.sanitizePayload(payload);
+    if (!payload || !payload.trips || !payload.trips.length) return false;
+    var hash = window.ShareLink && ShareLink.contentHash ? ShareLink.contentHash(payload) : "";
+    if (hash && window.ShareLink && ShareLink.hasSeen(hash)) return false;
+    var src = payload.trips[0];
+    var t = JSON.parse(JSON.stringify(src));
+    t.id = TripStore.newTripId(trips);
+    t.nameZh = t.nameZh || t.name || "我的行程";
+    t.items = (t.items || []).map(function (it) {
+      var n = Object.assign({}, it);
+      n.id = newShareItemId();
+      return n;
+    });
+    if (Array.isArray(payload.places) && window.Places && Places.mergeIncoming) {
+      try {
+        var merged = Places.mergeIncoming(places, payload.places);
+        if (merged && merged.places) places = merged.places;
+      } catch (err) {}
+    } else if (Array.isArray(payload.places) && payload.places.length) {
+      places = (places || []).concat(payload.places);
+    }
+    trips.push(t);
+    activeTripId = t.id;
+    expanded = {};
+    selectedDay = defaultSelectedDay ? defaultSelectedDay(t.items || []) : "all";
+    saveAllTrips();
+    renderAll();
+    return true;
+  }
+
   window.TripApp = {
     exportState: exportState,
     importState: importState,
@@ -5811,7 +5977,12 @@
       openHotelDateSheet(item || { type: "hotel", nameZh: "示例酒店" }, addFn || function () {});
     },
     setDayPickedByUser: function (on) { dayPickedByUser = !!on; },
-    selectedDay: function () { return selectedDay; }
+    selectedDay: function () { return selectedDay; },
+    acceptSharedTrip: acceptSharedTrip,
+    selectDay: selectDay,
+    reorderGroup: applyReorder,
+    moveItemToGroup: moveItemToDay,
+    lockReason: lockReason
   };
 
   function applyDemo(which) {
@@ -6128,13 +6299,6 @@
     if ($("ai-paste-btn")) $("ai-paste-btn").addEventListener("click", pasteAndImport);
     fillAiWizardText();
     if ($("ai-copy-btn")) $("ai-copy-btn").addEventListener("click", copyAiPrompt);
-    if ($("ai-prompt-open")) {
-      $("ai-prompt-open").textContent = AI_WIZARD_COPY.promptBtn;
-      $("ai-prompt-open").addEventListener("click", function () {
-        var box = $("ai-prompt-box");
-        showAiPrompt(!!(box && box.hidden));
-      });
-    }
     if ($("manual-save")) $("manual-save").addEventListener("click", handleManualSave);
     if ($("manual-fold")) $("manual-fold").addEventListener("toggle", syncManualActions);
     bindSheetKeyboard();
@@ -6182,11 +6346,15 @@
       openTrips();
     });
     if ($("trip-add-btn")) {
+      $("trip-add-btn").textContent = TRIPS_HEADER_BTN;
+      $("trip-add-btn").setAttribute("aria-label", TRIPS_HEADER_BTN);
       $("trip-add-btn").addEventListener("click", function () {
         dismissTripTip();
-        createTrip();
         openTrips();
       });
+    }
+    if (window.ShareLink && ShareLink.ENABLED && typeof ShareLink.consumeIncoming === "function") {
+      ShareLink.consumeIncoming();
     }
     if ($("trip-tip")) {
       $("trip-tip").addEventListener("click", function (ev) {
@@ -6251,6 +6419,7 @@
         closeSheet("month-sheet");
         closeSheet("fix-panel");
         closeSheet("add-menu");
+        closeSheet("friend-paste-sheet");
         closeMapPick();
       }
     });

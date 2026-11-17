@@ -32,8 +32,8 @@ function check(name, fn) {
 
 check("version is v5.4 (or v6, which carries v5.4) and sw cache is v18", function () {
   /* v6 合并 v5.4：版本号往前走，v5.4 的行为都还在 */
-  assert.ok(["v5.4", "v6", "v6.0", "v6.1", "v6.1.1", "v6.1.2"].indexOf(V.APP_VERSION) !== -1);
-  assert.ok(sw.indexOf('"xingcheng-map-shell-v21"') !== -1);
+  assert.ok(["v5.4", "v6", "v6.0", "v6.1", "v6.1.1", "v6.1.2", "v6.1.3"].indexOf(V.APP_VERSION) !== -1);
+  assert.ok(sw.indexOf('"xingcheng-map-shell-v22"') !== -1);
   assert.ok(sw.indexOf("xingcheng-map-shell-v16") === -1);
 });
 

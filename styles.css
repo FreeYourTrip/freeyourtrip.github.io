@@ -674,6 +674,22 @@ body.ig-open .view-toggle { visibility: hidden; }
   background: var(--bg);
 }
 
+#friend-paste-sheet .sheet-panel { padding-bottom: 24px; }
+#friend-paste-text {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 160px;
+  margin: 8px 0 0;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 12px 14px;
+  resize: vertical;
+  background: var(--bg);
+}
+#friend-paste-btn { margin-top: 16px; }
+#friend-paste-status { margin-top: 12px; }
+
 .primary-btn {
   display: flex;
   align-items: center;
@@ -2033,7 +2049,7 @@ body.ig-open .add-dock, body.ig-open .locate-btn { visibility: hidden; }
 .help-tier { margin: 0 0 20px; }
 .help-tier h3 { margin: 14px 0 10px; font-size: 18px; font-weight: 800; color: #16332F; }
 .help-tier-sub { margin: -4px 0 12px; font-size: 15px; font-weight: 400; line-height: 1.5; color: #6B7A8F; }
-.help-card-line { margin-top: 8px; font-size: 13px; line-height: 1.45; color: #6B7A8F; }
+.help-card-line { margin-top: 8px; font-size: 13px; font-weight: 400; line-height: 1.45; color: #6B7A8F; }
 .help-privacy {
   margin: 0 0 12px;
   padding: 10px 12px;
@@ -2046,7 +2062,7 @@ body.ig-open .add-dock, body.ig-open .locate-btn { visibility: hidden; }
 }
 .help-cards {
   display: flex;
-  align-items: flex-start;
+  align-items: stretch;
   gap: 12px;
   overflow-x: auto;
   scroll-snap-type: x mandatory;
@@ -2058,6 +2074,8 @@ body.ig-open .add-dock, body.ig-open .locate-btn { visibility: hidden; }
 }
 .help-cards::-webkit-scrollbar { display: none; }
 .help-card {
+  display: flex;
+  flex-direction: column;
   flex: 0 0 82%;
   scroll-snap-align: start;
   box-sizing: border-box;
@@ -2067,6 +2085,18 @@ body.ig-open .add-dock, body.ig-open .locate-btn { visibility: hidden; }
   background: #F3FAF8;
   border: 1px solid #D7F3EE;
   padding: 14px 16px 16px;
+}
+/* more specific than .help-card p / p + p so small print stays 13px #6B7A8F */
+.help-card p.help-card-line {
+  margin-top: auto;
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.45;
+  color: #6B7A8F;
+}
+/* card 4: sit 12px under the 「收」 paragraph; spare space stays at the bottom of the card */
+.help-card[data-card="sharetrip"] p.help-card-line {
+  margin-top: 12px;
 }
 .help-card-illu { display: block; width: 160px; height: 96px; flex: 0 0 96px; margin: 0 auto; background: #fff; border: 1.5px dashed #B9DCD5; border-radius: 12px; }
 .help-card-n { margin: 10px 0 2px; font-size: 12px; color: #8A9099; }
@@ -3152,8 +3182,17 @@ button.leg-pill { font-family: inherit; }
 /* v6：「清空本机数据」在使用说明最下面，跟上面内容隔开 */
 .help-danger { margin: 24px 0 8px; padding: 16px 16px 0; border-top: 1px solid #ECE6DC; }
 .help-danger .more-btn { width: 100%; }
-.ai-prompt-box { margin-top: 10px; }
-.ai-prompt-box .copy-btn { margin-top: 10px; }
+#ai-copy-btn.primary-btn,
+#ai-copy-btn.primary-btn.is-copied {
+  width: 100%;
+  height: 48px;
+  min-height: 48px;
+  margin-top: 12px;
+  border-radius: 12px;
+  background: #0F9D8A;
+  color: #fff;
+  border: 0;
+}
 .help-sheet.help-first .help-danger { display: none; }
 /* v6：确认框要盖在使用说明（全屏）上面——清空本机数据现在从使用说明里点 */
 .sheet.confirm-sheet { z-index: 55; }
@@ -3527,5 +3566,95 @@ input:focus-visible, select:focus-visible, textarea:focus-visible {
   background: none;
   color: #8A9099;
   font-size: 14px;
+  cursor: pointer;
+}
+
+/* v6.1.3：分享链接 / 朋友行程弹窗 / 打不开 */
+.share-link-notes {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0 0;
+  min-height: 44px;
+  font-size: 16px;
+}
+.share-link-notes input { width: 20px; height: 20px; accent-color: var(--brand); }
+.share-link-hint {
+  margin: 0 0 16px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: #6B7A8F;
+}
+.share-link-alt {
+  display: block;
+  width: 100%;
+  margin: 4px auto 0;
+  min-height: 44px;
+  border: 0;
+  background: transparent;
+  color: #8A9099;
+  font-size: 14px;
+  cursor: pointer;
+}
+.share-link-alt-hint {
+  margin: 4px 0 12px;
+  text-align: center;
+  font-size: 12px;
+  line-height: 1.45;
+  color: #8A9099;
+}
+.friend-share-sheet, .share-broken-sheet {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  z-index: 60;
+}
+.friend-share-sheet[hidden], .share-broken-sheet[hidden] { display: none !important; }
+.friend-share-card, .share-broken-card {
+  position: relative;
+  width: 100%;
+  max-width: 340px;
+  background: #fff;
+  border-radius: 16px;
+  padding: 22px 20px 18px;
+  box-shadow: 0 12px 40px rgba(20, 35, 33, 0.25);
+  text-align: center;
+}
+.friend-share-title, .share-broken-title {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.4;
+  color: #1F2329;
+}
+.friend-share-sub, .share-broken-body {
+  margin: 8px 0 0;
+  font-size: 14px;
+  color: #8A9099;
+  line-height: 1.5;
+}
+.friend-share-save, .share-broken-ok {
+  display: block;
+  width: 100%;
+  height: 48px;
+  margin-top: 18px;
+  border: 0;
+  border-radius: 12px;
+  background: #0F9D8A;
+  color: #fff;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.friend-share-no {
+  display: block;
+  width: 100%;
+  margin: 4px auto 0;
+  min-height: 44px;
+  border: 0;
+  background: transparent;
+  color: #8A9099;
+  font-size: 15px;
   cursor: pointer;
 }

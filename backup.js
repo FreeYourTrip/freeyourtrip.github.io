@@ -77,6 +77,7 @@
     }
     out.trips = (out.trips || []).map(function (trip) {
       var t = Object.assign({}, trip);
+      /* 不按日期过滤：没写日期的待补地点也会进分享载荷。 */
       t.items = (t.items || []).map(redactItem);
       if (Array.isArray(t.legs)) {
         t.legs = t.legs.map(function (leg) {
@@ -238,6 +239,10 @@
     var clearBtn = document.getElementById("backup-clear");
     if (share) {
       share.addEventListener("click", function () {
+        if (root.ShareLink && ShareLink.ENABLED && typeof ShareLink.openComposer === "function") {
+          ShareLink.openComposer();
+          return;
+        }
         downloadShare();
       });
     }

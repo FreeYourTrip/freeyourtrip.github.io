@@ -73,7 +73,7 @@ check("agenda only when the trip has a hotel / flight / train / boat; range = fi
   assert.ok(/var agenda = selectedDay === "all" && hasAnchorItems\(datedRaw\);/.test(tl), "recomputed on every render → switches by itself");
   assert.ok(/if \(agenda\) groups = fillEmptyDays\(groups, datedRaw\);/.test(tl));
   assert.ok(/var end = it\.type === "hotel" \? it\.checkOut : it\.arriveDate;/.test(tl));
-  assert.ok(/if \(agenda && g\.date === UNDATED_KEY\)/.test(tl) && /if \(showAll\) html \+= undatedBlockHtml\(undatedGroup\);/.test(tl) && /var showAll = agenda;/.test(tl), "plain list: no bands, no 还没定哪天");
+  assert.ok(/if \(g\.date === UNDATED_KEY\)/.test(tl) && /html \+= undatedBlockHtml\(undatedGroup\);/.test(tl) && /var showAll = agenda;/.test(tl), "dateless items always use 还没定哪天; empty day bands only in agenda");
 });
 
 check("「还没定哪天」 at the bottom: same band, 2 px dashed #C9D2DA left border, no pills, hidden when empty except while dragging", function () {
@@ -167,18 +167,24 @@ check("「甜品」 → 「咖啡甜点酒吧」: one label constant, same id (o
 
 const html = read("index.html");
 
-check("「给 AI 的话」: one button opens the full prompt, 「复制」 below it (old 查看提示词 / 复制给 AI 的话 gone)", function () {
-  assert.ok(/<button type="button" class="primary-btn" id="ai-prompt-open"[^>]*>给 AI 的话<\/button>\s*<div class="ai-prompt-box" id="ai-prompt-box" hidden>\s*<pre class="prompt-view" id="ai-prompt-view"><\/pre>\s*<button type="button" class="primary-btn copy-btn" id="ai-copy-btn">复制<\/button>/.test(html));
+check("Step 1 is a single copy button; the prompt is never shown in the DOM", function () {
+  assert.ok(html.indexOf("id=\"ai-prompt-open\"") === -1 && html.indexOf("id=\"ai-prompt-box\"") === -1 && html.indexOf("id=\"ai-prompt-view\"") === -1);
+  assert.ok(tl.indexOf("showAiPrompt") === -1 && tl.indexOf("ai-prompt-open") === -1 && tl.indexOf("ai-prompt-box") === -1 && tl.indexOf("ai-prompt-view") === -1);
+  assert.ok(/<button type="button" class="primary-btn copy-btn" id="ai-copy-btn">复制给 AI 的话<\/button>/.test(html));
+  assert.ok(/step1: "点『复制给 AI 的话』"/.test(tl));
+  assert.ok(/copyBtn: "复制给 AI 的话"/.test(tl));
+  assert.ok(/copied: "✓ 已复制"/.test(tl));
+  assert.ok(/#ai-copy-btn\.primary-btn\s*,\s*#ai-copy-btn\.primary-btn\.is-copied\s*\{[^}]*height:\s*48px;[^}]*border-radius:\s*12px;[^}]*background:\s*#0F9D8A/.test(css), "copy button stays #0F9D8A 48px 12px");
   assert.ok(html.indexOf("ai-preview-toggle") === -1 && tl.indexOf("ai-preview-toggle") === -1);
-  ["查看提示词", "复制给 AI 的话", "收起提示词"].forEach((w) => assert.ok(html.indexOf(w) === -1 && tl.indexOf(w) === -1, w));
-  assert.ok(/if \(on && \$\("ai-prompt-view"\)\) \$\("ai-prompt-view"\)\.textContent = aiPromptText\(\);/.test(tl), "full text");
+  ["查看提示词", "收起提示词", "点开看全文", "看一眼"].forEach((w) => assert.ok(html.indexOf(w) === -1 && tl.indexOf(w) === -1, w));
+  assert.ok(/var text = aiPromptText\(\);/.test(tl), "copy uses the JS prompt string");
   assert.ok(/if \(btn\.id === "ai-copy-btn"\) \{\s*setAiStep\(Math\.max\(aiStep, 2\)\);/.test(tl), "copy still moves on to step 2");
 });
 
-check("「分享给朋友」 restores system share when available; copy fallback toasts 「网址已复制，发给朋友就行」", function () {
+check("「推荐这个工具」 restores system share when available; copy fallback toasts 「网址已复制，发给朋友就行」", function () {
   const R = require("./recommend.js");
   assert.strictEqual(R.COPIED, "网址已复制，发给朋友就行");
-  assert.ok(html.indexOf('id="recommend-btn" data-sub="只发网址，不含你的行程">分享给朋友</button>') !== -1);
+  assert.ok(html.indexOf('id="recommend-btn" data-sub="只发网址，不含你的行程">推荐这个工具</button>') !== -1);
   assert.ok(read("recommend.js").indexOf("nav.share(") !== -1, "system share sheet restored");
 });
 

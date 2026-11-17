@@ -210,7 +210,7 @@ check("trip-store.js only touches the storage it is given; timeline uses it and 
   assert.ok(/TripStore\.load\(localStorage/.test(tl) && /TripStore\.save\(localStorage/.test(tl));
   const sw = fs.readFileSync(__dirname + "/sw.js", "utf8");
   ["./transport.js", "./places.js", "./trip-store.js"].forEach((f) => assert.ok(sw.indexOf('"' + f + '"') !== -1, "precached: " + f));
-  assert.ok(sw.indexOf('"xingcheng-map-shell-v21"') !== -1);
+  assert.ok(sw.indexOf('"xingcheng-map-shell-v22"') !== -1);
   assert.ok(sw.indexOf("fixture-v53") === -1, "test data is not shipped to phones");
   const html = fs.readFileSync(__dirname + "/index.html", "utf8");
   assert.ok(html.indexOf('src="./trip-store.js"') < html.indexOf('src="./timeline.js"') && html.indexOf('src="./places.js"') < html.indexOf('src="./trip-store.js"'));

@@ -31,7 +31,7 @@ check("发好了，下一步 is gone; steps stay in the panel", function () {
 check("no ✓ on step 2 (or any step) after completion", function () {
   assert.ok(!/\.ai-step\.is-done \.ai-step-text::after\s*\{[^}]*content:\s*" ✓"/.test(css));
   assert.ok(tl.indexOf('li.classList.remove("is-done")') !== -1);
-  assert.ok(tl.indexOf("copied: \"已复制\"") !== -1);
+  assert.ok(tl.indexOf("copied: \"✓ 已复制\"") !== -1);
   assert.ok(tl.indexOf("已复制 ✓") === -1);
 });
 
@@ -49,12 +49,9 @@ check("粘贴并导入 is always tappable and the solid primary", function () {
   assert.ok(!/ai-paste-btn[\s\S]{0,200}disabled/.test(tl));
 });
 
-check("after copy, 已复制 is a secondary outline button", function () {
-  const rule = css.slice(css.indexOf(".ai-step .copy-btn.is-copied"), css.indexOf(".ai-step .copy-btn.is-copied") + 280);
-  assert.ok(/background:\s*#fff;/.test(rule));
-  assert.ok(/color:\s*#0F9D8A;/.test(rule));
-  assert.ok(/border:\s*1\.5px solid #0F9D8A;/.test(rule));
-  assert.ok(!/background:\s*#0B6F62;/.test(rule));
+check("after copy, the button stays the same primary style and shows ✓ 已复制", function () {
+  assert.ok(/#ai-copy-btn\.primary-btn\.is-copied\s*\{[^}]*background:\s*#0F9D8A;[^}]*color:\s*#fff/.test(css));
+  assert.ok(tl.indexOf("copied: \"✓ 已复制\"") !== -1);
 });
 
 if (failed) {

@@ -68,23 +68,24 @@ check("copy failing tells the user the URL to copy by hand", async function () {
 check("settings markup: 分享我的行程 / 分享给朋友 (v6) with subtitles; old labels gone; script + precache", function () {
   const html = fs.readFileSync(__dirname + "/index.html", "utf8");
   const sw = fs.readFileSync(__dirname + "/sw.js", "utf8");
-  assert.ok(html.indexOf('id="recommend-btn"') !== -1 && html.indexOf('data-sub="只发网址，不含你的行程">分享给朋友<') !== -1);
-  assert.ok(html.indexOf('id="backup-export-share"') !== -1 && html.indexOf('data-sub="发给同行的人，对方导入就能看到">分享我的行程<') !== -1);
+  assert.ok(html.indexOf('id="recommend-btn"') !== -1 && html.indexOf('data-sub="只发网址，不含你的行程">推荐这个工具<') !== -1);
+  assert.ok(html.indexOf('id="backup-export-share"') !== -1 && html.indexOf('data-sub="发个链接给同行的人，对方点开就能存好">分享我的行程<') !== -1);
   const tl = fs.readFileSync(__dirname + "/timeline.js", "utf8");
   const css = fs.readFileSync(__dirname + "/styles.css", "utf8");
   assert.ok(/\.more-sub \{ font-size: 12px; font-weight: 400; color: #8A9099;/.test(css));
   assert.ok(/#backup-export-share \+ #recommend-btn \{ margin-top: 8px; \}/.test(css));
   const docs = ["index.html", "timeline.js", "README.md", "DESIGN.md", "backup.js", "recommend.js"].map((f) => fs.readFileSync(__dirname + "/" + f, "utf8")).join("\n");
   ["分享行程」", "「分享行程", "推荐给朋友"].forEach((old) => assert.ok(docs.indexOf(old) === -1, "old label gone: " + old));
-  /* v6：「推荐这个工具」改成「分享给朋友」；README 第 3 行是 v5.1 的历史记录，不算 */
-  ["index.html", "timeline.js", "DESIGN.md", "recommend.js"].forEach((f) => assert.ok(fs.readFileSync(__dirname + "/" + f, "utf8").indexOf("推荐这个工具") === -1, "v6 name in " + f));
+  /* v6.1.3：「分享给朋友」改回「推荐这个工具」；小字仍是「只发网址，不含你的行程」。README 历史记录不算 */
+  assert.ok(html.indexOf(">推荐这个工具<") !== -1);
+  assert.ok(html.indexOf(">分享给朋友<") === -1, "settings recommend button uses 推荐这个工具");
   const v = require("./version.js");
   const v51 = v.ANNOUNCEMENT.bullets.concat(v.CHANGELOG[0].lines).join("\n");
   assert.ok(v51.indexOf("推荐给朋友") === -1 && v51.indexOf("「分享行程」") === -1, "v5.1 texts use the final names");
-  assert.ok(tl.indexOf('title: "分享我的行程", text: "发给同行的人，订单号和座位会自动隐藏"') !== -1, "help sheet uses final names");
+  assert.ok(tl.indexOf('title: "分享我的行程", text: "点一下生成链接，发给同行的人，订单号和座位会自动隐藏"') !== -1, "help sheet uses final names");
   assert.ok(html.indexOf('src="./recommend.js"') !== -1);
-  assert.ok(sw.indexOf('"./recommend.js"') !== -1 && sw.indexOf('"xingcheng-map-shell-v21"') !== -1);
-  assert.ok(["v5.1", "v5.2", "v5.3", "v5.4", "v6", "v6.0", "v6.1", "v6.1.1", "v6.1.2"].indexOf(v.APP_VERSION) !== -1);
+  assert.ok(sw.indexOf('"./recommend.js"') !== -1 && sw.indexOf('"xingcheng-map-shell-v22"') !== -1);
+  assert.ok(["v5.1", "v5.2", "v5.3", "v5.4", "v6", "v6.0", "v6.1", "v6.1.1", "v6.1.2", "v6.1.3"].indexOf(v.APP_VERSION) !== -1);
 });
 
 check("narrow top bar CSS: ≤360px brand 16px nowrap, icon-only buttons, 44px; help button keeps aria-label", function () {
