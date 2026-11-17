@@ -180,6 +180,7 @@
     }
 
     if (lib && isFinite(lib.lat) && isFinite(lib.lng)) return ok("library", lib);
+    if (input.amap && isFinite(input.amap.lat) && isFinite(input.amap.lng)) return ok("amap", input.amap);
     if (house && isFinite(house.lat) && isFinite(house.lng)) return ok("geocode", house);
 
     if (streetCity && isFinite(streetCity.lat) && isFinite(streetCity.lng)) {
@@ -282,6 +283,7 @@
     function finish(layers) {
       var out = decide({
         library: layers.library,
+        amap: layers.amap,
         houseHit: layers.houseHit,
         postcode: layers.postcode,
         streetCity: layers.streetCity,
@@ -296,12 +298,39 @@
 
     if (lib) return Promise.resolve(finish({ library: lib, ai: ai }));
 
+    function looksMainlandQuery() {
+      var G = root.Geocode;
+      var blob = [address, name, item && item.city, ctx.city, ctx.country].join(" ");
+      if (G && typeof G.looksMainland === "function") return G.looksMainland(blob);
+      return /[\u3400-\u9fff]/.test(blob) && !/香港|澳门|澳門|台灣|台湾/.test(blob);
+    }
+
+    function tryAmap() {
+      if (ctx.skipAmap) return Promise.resolve(null);
+      var G = root.Geocode;
+      if (!G) return Promise.resolve(null);
+      if (typeof G.amapConfigured === "function" && !G.amapConfigured()) return Promise.resolve(null);
+      if (!looksMainlandQuery()) return Promise.resolve(null);
+      var city = (item && item.city) || ctx.city || "";
+      var run = typeof G.amapLookupItem === "function"
+        ? G.amapLookupItem(item, { city: city })
+        : (typeof G.amapSearch === "function" ? G.amapSearch((item && (item.address || item.nameZh || item.name)) || "", { city: city }) : Promise.resolve(null));
+      return Promise.resolve(run).then(function (res) {
+        if (res && isFinite(res.lat) && isFinite(res.lng)) return res;
+        if (res && res.length && res[0] && isFinite(res[0].lat)) return res[0];
+        return null;
+      }).catch(function () {
+        return null;
+      });
+    }
+
     var houseQuery = parts.street ? structuredSearch({
       street: parts.street,
       city: parts.city,
       postalcode: parts.postalcode
     }, { bias: ctx.bias }) : Promise.resolve([]);
 
+    function runExistingChain() {
     return houseQuery.then(function (list) {
       var houseHit = null;
       var i;
@@ -335,6 +364,14 @@
       return lookupPostcode(parts.ukPostcode, ctx.fetch).then(function (pc) {
         return finish({ postcode: pc, ai: ai });
       });
+    });
+    }
+
+    return tryAmap().then(function (amap) {
+      if (amap && isFinite(amap.lat) && isFinite(amap.lng)) {
+        return finish({ amap: amap, ai: ai });
+      }
+      return runExistingChain();
     });
   }
 

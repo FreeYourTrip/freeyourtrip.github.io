@@ -806,11 +806,81 @@
     return { state: "ok", navHref: links.href, placeHref: place.href, app: links.recommended };
   }
 
+  function isAmapWebHref(href) {
+    return !!(href && String(href).indexOf("uri.amap.com") !== -1);
+  }
+
+  function mapLinkAttrs(cls, href, extra) {
+    href = href || "";
+    extra = extra || "";
+    if (isAmapWebHref(href)) {
+      return 'class="' + cls + ' js-amap-open" href="#" data-amap-web="' + escapeHtml(href) + '"' + extra;
+    }
+    return 'class="' + cls + '" href="' + escapeHtml(href) + '" target="_blank" rel="noopener"' + extra;
+  }
+
+  var amapInstallWebHref = "";
+  var amapInstallStoreTimer = null;
+
+  function closeAmapInstall() {
+    var el = $("amap-install");
+    if (el) el.hidden = true;
+    if (amapInstallStoreTimer) {
+      clearTimeout(amapInstallStoreTimer);
+      amapInstallStoreTimer = null;
+    }
+  }
+
+  function showAmapInstallDialog(webHref) {
+    amapInstallWebHref = webHref || "";
+    var el = $("amap-install");
+    if (el) el.hidden = false;
+  }
+
+  function openAmapWeb(href) {
+    if (!href || typeof window === "undefined") return;
+    window.open(href, "_blank", "noopener");
+  }
+
+  function openAmapFromUi(webHref) {
+    if (!webHref) return;
+    if (!window.GeoUtil || typeof GeoUtil.openAmap !== "function") {
+      openAmapWeb(webHref);
+      return;
+    }
+    GeoUtil.openAmap(webHref, { showInstall: showAmapInstallDialog, openWeb: openAmapWeb });
+  }
+
+  function onAmapInstallGo() {
+    var G = window.GeoUtil;
+    var links = G && G.amapInstallLinks ? G.amapInstallLinks() : null;
+    if (!links) return;
+    if (amapInstallStoreTimer) {
+      clearTimeout(amapInstallStoreTimer);
+      amapInstallStoreTimer = null;
+    }
+    if (links.primary && links.fallback && links.primary !== links.fallback) {
+      try { window.location.href = links.primary; } catch (err) {}
+      amapInstallStoreTimer = setTimeout(function () {
+        amapInstallStoreTimer = null;
+        if (links.fallback) openAmapWeb(links.fallback);
+      }, 1500);
+    } else if (links.primary) {
+      openAmapWeb(links.primary);
+    }
+  }
+
+  function onAmapInstallWeb() {
+    var href = amapInstallWebHref;
+    closeAmapInstall();
+    openAmapWeb(href);
+  }
+
   function navPairHtml(plan, ariaGo, itemId) {
     var go, look, line = "", lineHtml = "";
     if (plan.state === "choose") {
       go = '<a class="nav-look nav-app" href="' + escapeHtml(plan.googleHref) + '" target="_blank" rel="noopener">' + NAV_COPY.google + "</a>";
-      look = '<a class="nav-look nav-app" href="' + escapeHtml(plan.amapHref) + '" target="_blank" rel="noopener">' + NAV_COPY.amap + "</a>";
+      look = '<a ' + mapLinkAttrs("nav-look nav-app", plan.amapHref) + ">" + NAV_COPY.amap + "</a>";
       line = NAV_COPY.noCoords;
     } else if (plan.state === "noaddr") {
       go = '<span class="nav-go is-off" aria-disabled="true">' + NAV_COPY.go + "</span>";
@@ -819,12 +889,12 @@
       if (itemId) lineHtml = '<button type="button" class="nav-fix-link" data-fix="' + escapeHtml(itemId) + '">' + NAV_COPY.fixLink + "</button>";
       else line = NAV_COPY.noAddr;
     } else {
-      look = '<a class="nav-look" href="' + escapeHtml(plan.placeHref) + '" target="_blank" rel="noopener">' + pinSvg() + NAV_COPY.look + "</a>";
+      look = '<a ' + mapLinkAttrs("nav-look", plan.placeHref) + ">" + pinSvg() + NAV_COPY.look + "</a>";
       if (plan.state === "far") {
         go = "";
         line = NAV_COPY.far;
       } else {
-        go = '<a class="nav-go" href="' + escapeHtml(plan.navHref) + '" target="_blank" rel="noopener" aria-label="' + escapeHtml(ariaGo || NAV_COPY.go) + '">' + NAV_COPY.go + "</a>";
+        go = "<a " + mapLinkAttrs("nav-go", plan.navHref, ' aria-label="' + escapeHtml(ariaGo || NAV_COPY.go) + '"') + ">" + NAV_COPY.go + "</a>";
         if (plan.app === "google") line = NAV_COPY.transitTip;
       }
     }
@@ -838,9 +908,9 @@
     return (
       '<div class="conn-slot">' +
       '<span class="dash-seg" aria-hidden="true"></span>' +
-      '<a class="nav-pill" href="' +
-      escapeHtml(href) +
-      '" target="_blank" rel="noopener">' +
+      "<a " +
+      mapLinkAttrs("nav-pill", href) +
+      ">" +
       ico("bus", "ico-sm") +
       "<span>" +
       escapeHtml(label) +
@@ -937,7 +1007,7 @@
     var href = cardGoHref(item);
     if (!href) return "";
     return (
-      '<a class="card-go-btn" href="' + escapeHtml(href) + '" target="_blank" rel="noopener" title="带我去" aria-label="带我去">' +
+      "<a " + mapLinkAttrs("card-go-btn", href, ' title="带我去" aria-label="带我去"') + ">" +
       locArrowSvg() + "<span>带我去</span></a>"
     );
   }
@@ -953,8 +1023,7 @@
     }
     if (!plan.placeHref) return "";
     return (
-      '<div class="card-nav"><a class="nav-look" href="' + escapeHtml(plan.placeHref) +
-      '" target="_blank" rel="noopener">' + pinSvg() + NAV_COPY.look + "</a></div>"
+      '<div class="card-nav"><a ' + mapLinkAttrs("nav-look", plan.placeHref) + ">" + pinSvg() + NAV_COPY.look + "</a></div>"
     );
   }
 
@@ -1021,7 +1090,7 @@
         "</div></div>";
     }
     var tipHtml = item.id && item.id === dragTipItemId
-      ? '<button type="button" class="drag-tip" data-drag-tip="1">长按卡片，拖动换顺序</button>'
+      ? '<button type="button" class="drag-tip" data-drag-tip="1">长按卡片拖动，能换顺序或换日子</button>'
       : "";
     return (
       '<article class="card' +
@@ -1104,7 +1173,7 @@
     }
     return (
       '<div class="conn-slot has-leg-pill">' +
-      '<a class="leg-pill" href="' + escapeHtml(href) + '" target="_blank" rel="noopener">' +
+      "<a " + mapLinkAttrs("leg-pill", href) + ">" +
       escapeHtml(spec.label) +
       "</a></div>"
     );
@@ -1986,8 +2055,14 @@
     }
   }
 
+  function resetAddPasteUi() {
+    if ($("add-text")) $("add-text").value = "";
+    showAddStatus("");
+  }
+
   function openSheet(id) {
     var el = $(id);
+    if (id === "add-sheet") resetAddPasteUi();
     if (el) el.hidden = false;
   }
 
@@ -2010,23 +2085,36 @@
   var HELP_PRIVACY_LINE = "发截图前，把护照号、银行卡、手机号裁掉或涂掉";
   /* 界面不用 emoji（UI 要求）：提醒前面放一个 14px 线条提示图标 */
   var HELP_ALERT_SVG = '<svg class="help-alert-ico" viewBox="0 0 14 14" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 1.6l5.6 10H1.4z"/><path d="M7 5.6v2.8"/><path d="M7 10.2v.1"/></svg>';
+  /* 新手 3 条文案集中在这一处，改字只动这里。插图放到 cards[].svg（规格 160×96，描边 #0F9D8A、2px；UI 正式稿已内联）。 */
+  var HELP_STARTER = {
+    title: "新手先看这 3 条",
+    subtitle: "把要去的地方放进来，按天排好，出门跟着走",
+    cards: [
+      { key: "add", title: "想去的地方，先存进来", text: "点底部『＋ 添加』，输入店名或地址，点一下结果就存好了", svg: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 96" width="160" height="96" fill="none" stroke="#0F9D8A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="6" width="54" height="84" rx="8"/><path d="M16 18h38M16 28h30M16 38h34"/><rect x="14" y="66" width="14" height="16" rx="4"/><rect x="32" y="66" width="24" height="16" rx="5" fill="#0F9D8A"/><path d="M44 70v8M40 74h8" stroke="#fff"/><circle cx="44" cy="74" r="13" stroke-width="1.5" stroke-dasharray="2 3"/><path d="M66 48h10M72 44l4 4-4 4"/><rect x="82" y="6" width="70" height="84" rx="8"/><rect x="88" y="14" width="58" height="14" rx="7"/><circle cx="96" cy="21" r="3"/><path d="M98.5 23.5l2 2M104 21h20"/><rect x="88" y="34" width="58" height="18" rx="5"/><path d="M96 38.5c-2.2 0-3.5 1.6-3.5 3.4 0 2.6 3.5 5.6 3.5 5.6s3.5-3 3.5-5.6c0-1.8-1.3-3.4-3.5-3.4z"/><path d="M104 40h28M104 46h18"/><circle cx="118" cy="43" r="13" stroke-width="1.5" stroke-dasharray="2 3"/><path d="M88 64h58" stroke-dasharray="3 3"/><path d="M88 74h30M88 82h22"/></svg>' },
+      {
+        key: "ai",
+        svg: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 96" width="160" height="96" fill="none" stroke="#0F9D8A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="14" width="40" height="64" rx="7"/><path d="M10 24h24M10 32h28M10 40h18"/><rect x="10" y="48" width="22" height="11" rx="5.5" fill="#0F9D8A"/><path d="M16 53.5h10" stroke="#fff"/><circle cx="21" cy="53.5" r="10" stroke-width="1.5" stroke-dasharray="2 3"/><path d="M47 46h8M51 42l4 4-4 4"/><rect x="58" y="14" width="44" height="64" rx="7"/><path d="M80 20l1.8 4 4 1.8-4 1.8-1.8 4-1.8-4-4-1.8 4-1.8z"/><rect x="74" y="38" width="22" height="9" rx="4.5"/><rect x="84" y="50" width="12" height="15" rx="2"/><rect x="80" y="53" width="12" height="15" rx="2" fill="#fff"/><rect x="63" y="38" width="8" height="8" rx="2" opacity="0"/><rect x="63" y="68" width="22" height="0" opacity="0"/><rect x="63" y="56" width="13" height="8" rx="4"/><path d="M105 46h8M109 42l4 4-4 4"/><rect x="116" y="14" width="40" height="64" rx="7"/><path d="M122 24h24M122 32h18"/><rect x="121" y="58" width="30" height="12" rx="6" fill="#0F9D8A"/><path d="M128 64h16" stroke="#fff"/><circle cx="136" cy="64" r="11" stroke-width="1.5" stroke-dasharray="2 3"/></svg>',
+        title: "各种订单、攻略截图，都能变成行程",
+        lead: "车票机票、酒店订单、小红书、抖音、大众点评都行",
+        steps: [
+          "在这里点『复制』，复制一段给 AI 的话",
+          "打开你手机上的 AI App（豆包、DeepSeek、ChatGPT 都行），先粘贴，再把截图发过去，一张或好几张都行",
+          "把 AI 的回复全部复制，回到这里点『粘贴并导入』"
+        ]
+      },
+      { key: "map", title: "到了当天，一键导航", text: "点卡片上的『带我去』，手机地图会直接带你过去", line: "长按卡片拖动，能换顺序或换日子", svg: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 96" width="160" height="96" fill="none" stroke="#0F9D8A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="12" width="88" height="40" rx="8"/><path d="M14 26h34M14 36h22"/><rect x="58" y="22" width="30" height="20" rx="10" fill="#0F9D8A"/><path d="M67 32h11M75 29l3 3-3 3" stroke="#fff"/><circle cx="73" cy="32" r="15" stroke-width="1.5" stroke-dasharray="2 3"/><path d="M98 34c14 0 10 22 22 22s10-24 20-30" stroke-dasharray="3 4"/><path d="M140 8c-5 0-8 4-8 8 0 6 8 13 8 13s8-7 8-13c0-4-3-8-8-8z"/><circle cx="140" cy="16" r="2.5"/><rect x="6" y="68" width="20" height="20" rx="5"/><path d="M10 74l4-2 4 2 4-2v10l-4 2-4-2-4 2z"/><rect x="32" y="68" width="62" height="20" rx="6" fill="#0F9D8A"/><path d="M63 73v10M58 78h10" stroke="#fff"/></svg>' }
+    ]
+  };
+
   var HELP_TIERS = {
-    starter: {
-      title: "新手先看这 3 条",
-      cards: [
-        /* 第 1 层：广告文案宣传大师定稿 */
-        { key: "add", title: "添加", text: "点『＋ 添加』，选加机票、酒店还是地点，搜到后点一下就加好了" },
-        { key: "ai", title: "截图交给 AI", text: "机票、酒店、小红书和抖音攻略，几张截图一起丢给 AI，粘贴一次全导进来" },
-        { key: "map", title: "带我去", text: "卡片右边的『带我去』，从你现在的位置出发；两站中间的『路线』，从上一站去下一站", line: "长按卡片拖动，能换顺序，也能拖到别的日子" }
-      ]
-    },
-    /* 第 2、3 层：广告文案宣传大师定稿（v5.2）。每条都对过代码：分享会去掉确认号 / 座位；按钮名「完整备份」「导入」「清空本机数据」；地图按钮在顶部、定位按钮在地图右下角；没有账号。 */
+    starter: HELP_STARTER,
+    /* 第 2、3 层：广告文案宣传大师定稿（v5.2）。每条都对过代码：分享会去掉确认号 / 座位；按钮名「完整备份」「导入」「清空本机数据」；地图按钮在底部『添加』左边、定位按钮在地图右下角；没有账号。 */
     common: {
       title: "常用",
       items: [
         { key: "day", icon: "calendar", title: "看行程", text: "顶部日期条左右滑，点哪天就看哪天" },
         { key: "edit", icon: "trash", title: "改和删", text: "点开卡片就能改。删错了，马上点底部的『撤销』就能恢复" },
-        { key: "map", icon: "map", title: "地图", text: "点底部的『地图』，所有地点一眼看全，点『列表』回来。右下角的按钮能定位到你自己" },
+        { key: "map", icon: "map", title: "地图", text: "点『添加』左边的『地图』，所有地点一眼看全，再点『列表』回来。右下角的按钮能定位到你自己" },
         { key: "share", icon: "share", title: "分享我的行程", text: "发给同行的人，订单号和座位会自动隐藏" },
         { key: "install", icon: "device", title: "放到桌面", text: "像 App 一样，点图标就打开" },
         { key: "rename", icon: "pencil", title: "多个行程", text: "点『＋ 新行程』再建一趟；点左上角的行程名，能切换、改名、删除" },
@@ -2039,21 +2127,31 @@
       items: [
         { q: "换手机", a: "在设置里点『完整备份』，到新手机上点『导入』" },
         { q: "更新", a: "看到「有新版本」就点『立即更新』，行程不会丢。还是旧版，就把网页彻底关掉再打开" },
-        { q: "隐私", a: "行程只存在你手机里，没有账号，我们看不到。看地图、找位置和导航时，看的区域、地址和邮编会发给地图和邮编查询服务" },
+        { q: "隐私", a: "行程只存在你手机里，没有账号，我们看不到。看地图、找位置和导航时，看的区域、地址和邮编会发给地图和邮编查询服务。在国内搜地点时，搜的字会发给高德" },
         { q: "清空", a: "在使用说明最下面点『清空本机数据』，会删掉所有行程" }
       ]
     }
   };
 
-  /* 自画占位插图（UI 之后给正式图） */
-  function helpIllu(key) {
-    var body = {
-      add: '<rect x="36" y="14" width="48" height="60" rx="8"/><path d="M60 34v20M50 44h20"/>',
-      day: '<rect x="14" y="26" width="92" height="30" rx="8"/><path d="M34 26v30M54 26v30M74 26v30M94 26v30"/><circle cx="44" cy="68" r="3"/>',
-      ai: '<rect x="22" y="14" width="34" height="56" rx="6"/><path d="M30 26h18M30 34h18M30 42h12"/><path d="M64 42h14"/><path d="M74 36l6 6-6 6"/><path d="M92 26l3 7 7 3-7 3-3 7-3-7-7-3 7-3z"/>',
-      map: '<path d="M16 22l28-8 32 10 28-8v52l-28 8-32-10-28 8z"/><path d="M44 14v52M76 24v52"/><circle cx="62" cy="40" r="5"/>'
-    }[key] || "";
-    return '<svg class="help-card-illu" viewBox="0 0 120 84" fill="none" stroke="#0F9D8A" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="插图占位">' + body + "</svg>";
+  /* 新手 3 条插图：卡片可带完整 inline SVG（UI 定稿规格：160×96，描边 #0F9D8A、2px）。
+     有 c.svg 且是以 <svg 开头的字符串就原样放入（补上 help-card-illu 类名）；否则用同规格占位图。 */
+  var HELP_ILLU_PLACEHOLDER = {
+    add: '<rect x="48" y="16" width="64" height="68" rx="8"/><path d="M80 38v24M68 50h24"/>',
+    ai: '<rect x="30" y="16" width="44" height="64" rx="6"/><path d="M40 30h24M40 40h24M40 50h16"/><path d="M86 48h18"/><path d="M98 40l8 8-8 8"/><path d="M124 28l4 8 8 4-8 4-4 8-4-8-8-4 8-4z"/>',
+    map: '<path d="M20 24l36-10 42 12 38-10v60l-38 10-42-12-36 10z"/><path d="M56 14v60M98 26v60"/><circle cx="82" cy="46" r="6"/>'
+  };
+
+  function helpIllu(card) {
+    var raw = card && typeof card.svg === "string" ? String(card.svg).trim() : "";
+    if (raw && /^<svg[\s>]/i.test(raw) && raw.toLowerCase().indexOf("</svg>") !== -1) {
+      if (raw.indexOf("help-card-illu") === -1) {
+        raw = raw.replace(/<svg\b/i, '<svg class="help-card-illu"');
+      }
+      return raw;
+    }
+    var key = typeof card === "string" ? card : (card && card.key) || "";
+    var body = HELP_ILLU_PLACEHOLDER[key] || "";
+    return '<svg class="help-card-illu" viewBox="0 0 160 96" width="160" height="96" fill="none" stroke="#0F9D8A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" role="img" aria-hidden="true">' + body + "</svg>";
   }
 
   function renderHelpBody() {
@@ -2064,11 +2162,21 @@
     if (danger && danger.parentNode) danger.parentNode.removeChild(danger);
     var T = HELP_TIERS;
     var cards = T.starter.cards.map(function (c, i) {
+      var paras = (c.texts && c.texts.length ? c.texts : (c.text ? [c.text] : [])).map(function (para) {
+        return "<p>" + escapeHtml(para) + "</p>";
+      }).join("");
+      var lead = c.lead ? '<p class="help-card-lead">' + escapeHtml(c.lead) + "</p>" : "";
+      var steps = "";
+      if (c.steps && c.steps.length) {
+        steps = '<ol class="ai-steps">' + c.steps.map(function (s, n) {
+          return '<li class="ai-step" data-step="' + (n + 1) + '"><p class="ai-step-text">' + escapeHtml(s) + "</p></li>";
+        }).join("") + "</ol>";
+      }
       return (
-        '<div class="help-card" data-card="' + c.key + '">' + helpIllu(c.key) +
+        '<div class="help-card" data-card="' + c.key + '">' + helpIllu(c) +
         '<div class="help-card-n">' + (i + 1) + " / " + T.starter.cards.length + "</div>" +
-        "<h4>" + escapeHtml(c.title) + "</h4><p>" + escapeHtml(c.text) + "</p>" +
-        (c.line ? "<p>" + escapeHtml(c.line) + "</p>" : "") + "</div>"
+        "<h4>" + escapeHtml(c.title) + "</h4>" + lead + paras + steps +
+        (c.line ? '<p class="help-card-line">' + escapeHtml(c.line) + "</p>" : "") + "</div>"
       );
     }).join("");
     var dots = T.starter.cards.map(function (c, i) {
@@ -2085,6 +2193,7 @@
     }).join("");
     box.innerHTML =
       '<section class="help-tier help-tier-1"><h3>' + escapeHtml(T.starter.title) + "</h3>" +
+      (T.starter.subtitle ? '<p class="help-tier-sub">' + escapeHtml(T.starter.subtitle) + "</p>" : "") +
       '<p class="help-privacy">' + HELP_ALERT_SVG + "<span>" + escapeHtml(HELP_PRIVACY_LINE) + "</span></p>" +
       '<div class="help-cards" id="help-cards">' + cards + "</div>" +
       '<div class="help-dots" aria-hidden="true">' + dots + "</div>" +
@@ -3584,21 +3693,43 @@
     openSheet("install-sheet");
   }
 
-  function hideToast() {
-    disarmToast();
+  var toastFadeTimer = null;
+
+  function finishToastHide() {
     var el = $("toast");
     if (el) {
       el.hidden = true;
-      el.classList.remove("is-import", "is-tap");
+      el.classList.remove("is-import", "is-tap", "is-out");
       el.onclick = null;
     }
     var ck = $("toast-check");
     if (ck) ck.hidden = true;
+  }
+
+  function hideToast() {
+    disarmToast();
     toastUndo = null;
     if (toastTimer) {
       clearTimeout(toastTimer);
       toastTimer = null;
     }
+    var el = $("toast");
+    if (!el || el.hidden) {
+      if (toastFadeTimer) {
+        clearTimeout(toastFadeTimer);
+        toastFadeTimer = null;
+      }
+      finishToastHide();
+      return;
+    }
+    if (toastFadeTimer) return;
+    el.classList.add("is-out");
+    var reduce = typeof window !== "undefined" && window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    var ms = reduce ? 0 : 150;
+    toastFadeTimer = setTimeout(function () {
+      toastFadeTimer = null;
+      finishToastHide();
+    }, ms);
   }
 
   /* 撤销提示：新的会替换旧的（旧的那次删除就算完成）；✕、点别处、滚动都会提前关掉。没有进度条，也不能按住暂停。 */
@@ -3625,12 +3756,17 @@
     var msg = $("toast-msg");
     if (!el || !msg) return;
     disarmToast();
+    if (toastFadeTimer) {
+      clearTimeout(toastFadeTimer);
+      toastFadeTimer = null;
+    }
+    el.classList.remove("is-out");
     msg.textContent = message;
     toastUndo = onUndo || null;
     var undoBtn = $("toast-undo");
     if (undoBtn) undoBtn.hidden = !toastUndo;
     var closeBtn = $("toast-close");
-    if (closeBtn) closeBtn.hidden = !toastUndo;
+    if (closeBtn) closeBtn.hidden = true;
     el.hidden = false;
     if (toastTimer) clearTimeout(toastTimer);
     toastTimer = setTimeout(hideToast, ms || 5000);
@@ -3642,6 +3778,11 @@
         window.addEventListener("scroll", toastScroll, true);
       }, 350);
     }
+  }
+
+  function onToastSurfaceClick(ev) {
+    if (ev.target && ev.target.closest && ev.target.closest("#toast-undo")) return;
+    hideToast();
   }
 
   /*
@@ -4594,7 +4735,8 @@
     }
     var fab = $("view-fab");
     if (fab) {
-      fab.textContent = isMap ? "列表" : "地图";
+      fab.innerHTML = ico(isMap ? "list" : "map", "view-toggle-ico") +
+        '<span class="view-toggle-label">' + (isMap ? "列表" : "地图") + "</span>";
       fab.setAttribute("aria-label", isMap ? "回到列表" : "查看地图");
     }
     if (settings) {
@@ -5158,17 +5300,7 @@
     var el = $("toast");
     var ck = $("toast-check");
     if (ck) ck.hidden = false;
-    if (el) {
-      el.classList.add("is-import");
-      if (y) {
-        el.classList.add("is-tap");
-        el.onclick = function (ev) {
-          if (ev.target && ev.target.closest && ev.target.closest("#toast-undo, #toast-close")) return;
-          hideToast();
-          goToPendingOrFix();
-        };
-      }
-    }
+    if (el) el.classList.add("is-import");
   }
 
   function goToPendingOrFix() {
@@ -5209,6 +5341,7 @@
     if (items.length) added = appendItems(items, { keepDay: true }) || items;
     seedCandidates(items, resolutions || []);
     if (items.length) queueNameSuggest(items.length);
+    resetAddPasteUi();
     closeSheet("add-sheet");
     closeSheet("add-menu");
     closeSheet("settings-sheet");
@@ -5312,6 +5445,18 @@
       finishStructuredImport(items, resolutions, errors, notes);
       return;
     }
+    if (opts.paste && items.length) {
+      applyResolutions(items, resolutions || []);
+      if (items.length) appendItems(items);
+      seedCandidates(items, resolutions || []);
+      if (items.length) queueNameSuggest(items.length);
+      resetAddPasteUi();
+      closeSheet("add-sheet");
+      closeSheet("add-menu");
+      setView("list");
+      showImportToast(items.length, itemsNeedingFix(items).length);
+      return;
+    }
     applyResolutions(items, resolutions || []);
     if (items.length) appendItems(items);
     seedCandidates(items, resolutions || []);
@@ -5386,13 +5531,15 @@
     showManualStatus('<p class="ok">正在查找位置…</p>');
     Geocode.resolveItem(item, dayArgsFor(item))
       .then(function (res) {
-        finishImport([item], [res], []);
+        finishImport([item], [res], [], [], { paste: true });
       })
       .catch(function () {
         finishImport(
           [item],
           [{ item: item, status: "none", message: Geocode.FRIENDLY_NOT_FOUND, candidates: [], chosen: null }],
-          []
+          [],
+          [],
+          { paste: true }
         );
       });
   }
@@ -6053,7 +6200,23 @@
       });
     });
     if ($("ig-done")) $("ig-done").addEventListener("click", guideDone);
-    if ($("toast-close")) $("toast-close").addEventListener("click", hideToast);
+    if ($("toast-close")) $("toast-close").hidden = true;
+    if ($("toast")) $("toast").addEventListener("click", onToastSurfaceClick);
+    if ($("amap-install")) {
+      $("amap-install").addEventListener("click", function (ev) {
+        if (ev.target === $("amap-install")) closeAmapInstall();
+      });
+    }
+    if ($("amap-install-go")) $("amap-install-go").addEventListener("click", onAmapInstallGo);
+    if ($("amap-install-web")) $("amap-install-web").addEventListener("click", onAmapInstallWeb);
+    document.addEventListener("click", function (ev) {
+      var a = ev.target && ev.target.closest ? ev.target.closest("a.js-amap-open") : null;
+      if (!a) return;
+      var href = a.getAttribute("data-amap-web");
+      if (!href) return;
+      ev.preventDefault();
+      openAmapFromUi(href);
+    });
     if ($("ig-later")) $("ig-later").addEventListener("click", guideLater);
     renderVersionInfo();
     renderHelpBody();

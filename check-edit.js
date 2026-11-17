@@ -186,16 +186,16 @@ check("UI wiring: help text, undo 10s, no 无法恢复, sw v15 caches item-edit.
   assert.ok(/showToast\("已删除", [\s\S]*?\}, UNDO_MS\);/.test(tl), "single delete uses 5 s");
   assert.ok(/showToast\("已清空", [\s\S]*?\}, CLEAR_UNDO_MS\);/.test(tl), "clear-all uses 10 s");
   assert.ok(tl.indexOf("删除后 5 秒内可以撤销。") !== -1 && tl.indexOf('title: "清空『" + (trip.nameZh || "我的行程") + "』里的所有内容吗？",\n      sub: "其他行程不受影响",\n      okText: "清空这趟",') !== -1 /* v6：只清这一趟 */);
-  assert.ok(/<button type="button" class="toast-close" id="toast-close" aria-label="关闭"/.test(html), "toast ✕");
+  assert.ok(/<button type="button" class="toast-close" id="toast-close" aria-label="关闭"/.test(html), "toast ✕ markup kept hidden");
   const css = fs.readFileSync(__dirname + "/styles.css", "utf8");
-  assert.ok(/\.toast-close \{[^}]*width: 44px;[^}]*height: 44px;/.test(css), "✕ tap target 44px");
+  assert.ok(tl.indexOf("if (closeBtn) closeBtn.hidden = true") !== -1, "toast ✕ stays hidden; tap toast to dismiss");
   assert.ok(tl.indexOf('document.addEventListener("pointerdown", toastOutside, true)') !== -1 && tl.indexOf('window.addEventListener("scroll", toastScroll, true)') !== -1, "tap elsewhere / scroll closes early");
   assert.ok(!/progress|hold to pause|长按暂停/.test(tl.slice(tl.indexOf("function showToast"), tl.indexOf("function showToast") + 1500)), "no progress bar / no hold-to-pause");
   assert.ok(tl.indexOf("function deleteConfirmTitle") !== -1 && tl.indexOf("删除“") !== -1, "item delete title is 删除“名字”吗？");
   assert.ok(tl.indexOf("确定删除这一项吗？") === -1);
   assert.ok(tl.indexOf("window.confirm") === -1);
   assert.ok((tl + html).indexOf("无法恢复") === -1);
-  assert.ok(sw.indexOf('"xingcheng-map-shell-v19"') !== -1);
+  assert.ok(sw.indexOf('"xingcheng-map-shell-v20"') !== -1);
   assert.ok(sw.indexOf("./item-edit.js") !== -1);
   assert.ok(html.indexOf('src="./item-edit.js"') !== -1);
   assert.ok(html.indexOf('id="clear-all-btn"') !== -1);
@@ -210,7 +210,7 @@ check("清空本机数据 uses the in-app confirm; toast sits above the add bar"
   assert.ok(bk.indexOf('var CLEAR_LOCAL_COPY = { title: "手机上所有行程和地点都会删掉，删了找不回来", ok: "全部删掉", cancel: "取消" };') !== -1);
   assert.ok(/title: CLEAR_LOCAL_COPY\.title,\s*okText: CLEAR_LOCAL_COPY\.ok,\s*cancelText: CLEAR_LOCAL_COPY\.cancel,/.test(bk));
   assert.ok(/confirm:\s*openConfirm/.test(tl));
-  assert.ok(css.indexOf("bottom: calc(134px + env(safe-area-inset-bottom, 0px));") !== -1, "toast sits above the map/list capsule");
+  assert.ok(css.indexOf("bottom: calc(84px + env(safe-area-inset-bottom, 0px));") !== -1, "toast sits above the new bottom bar");
 });
 
 check("legRole is kept on date edit and can be set or cleared from the form", function () {

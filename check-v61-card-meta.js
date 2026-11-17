@@ -81,7 +81,7 @@ check("time is nowrap + flex-shrink:0; sub-labels (当地时间, · 共 N 晚) h
 });
 
 check("copy: settings privacy matches the usage guide; import and empty-field errors are friendly", function () {
-  const privacy = "行程只存在你手机里，没有账号，我们看不到。看地图、找位置和导航时，看的区域、地址和邮编会发给地图和邮编查询服务";
+  const privacy = "行程只存在你手机里，没有账号，我们看不到。看地图、找位置和导航时，看的区域、地址和邮编会发给地图和邮编查询服务。在国内搜地点时，搜的字会发给高德";
   assert.ok(html.indexOf('class="settings-note">' + privacy + "</p>") !== -1);
   assert.ok(html.indexOf("也没有服务器") === -1);
   assert.ok(imp.indexOf("JSON 无法解析") === -1);

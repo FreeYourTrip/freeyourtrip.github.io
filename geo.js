@@ -399,6 +399,197 @@
     return 2 * R * Math.asin(Math.min(1, Math.sqrt(s)));
   }
 
+  var AMAP_SOURCE = "FreeYourTrip";
+  var AMAP_INSTALL = {
+    iosAppStore: "https://apps.apple.com/cn/app/id461703208",
+    androidMarket: "market://details?id=com.autonavi.minimap",
+    androidWeb: "https://mobile.amap.com/cn/"
+  };
+
+  function isAndroidUA(ua) {
+    ua = String(ua == null ? (typeof navigator !== "undefined" ? navigator.userAgent : "") : ua);
+    return /Android/i.test(ua) && !/Windows Phone/i.test(ua);
+  }
+
+  function isIOSUA(ua) {
+    ua = String(ua == null ? (typeof navigator !== "undefined" ? navigator.userAgent : "") : ua);
+    return /iPhone|iPad|iPod/i.test(ua);
+  }
+
+  function shouldLaunchAmapApp(ua) {
+    return isAndroidUA(ua) || isIOSUA(ua);
+  }
+
+  function amapInstallLinks(ua) {
+    if (isIOSUA(ua)) {
+      return { primary: AMAP_INSTALL.iosAppStore, fallback: AMAP_INSTALL.iosAppStore };
+    }
+    return { primary: AMAP_INSTALL.androidMarket, fallback: AMAP_INSTALL.androidWeb };
+  }
+
+  function parseQueryMap(qs) {
+    var out = {};
+    String(qs || "").replace(/^\?/, "").split("&").forEach(function (pair) {
+      if (!pair) return;
+      var i = pair.indexOf("=");
+      var k = i < 0 ? pair : pair.slice(0, i);
+      var v = i < 0 ? "" : pair.slice(i + 1);
+      try {
+        out[decodeURIComponent(k)] = decodeURIComponent(v.replace(/\+/g, " "));
+      } catch (err) {
+        out[k] = v;
+      }
+    });
+    return out;
+  }
+
+  function parseLngLatName(s) {
+    var parts = String(s || "").split(",");
+    if (parts.length < 2) return null;
+    var lng = parts[0];
+    var lat = parts[1];
+    var name = parts.slice(2).join(",");
+    if (!isFinite(Number(lng)) || !isFinite(Number(lat))) return null;
+    return { lng: lng, lat: lat, name: name };
+  }
+
+  function amapModeToT(mode) {
+    if (mode === "car") return "0";
+    if (mode === "walk") return "2";
+    return "1";
+  }
+
+  /**
+   * 把现有 uri.amap.com 网页链接转成官方 App scheme。携带的名字/坐标与网页链接一致。
+   * 大陆点在网页链接里已是 GCJ-02，scheme 的 dev=0（已经加密，不再转）。
+   * iOS：iosamap:// ；Android：androidamap://（官方手机版文档）。
+   */
+  function amapSchemeFromWeb(href, ua) {
+    href = String(href || "");
+    if (href.indexOf("uri.amap.com") === -1) return "";
+    var ios = isIOSUA(ua);
+    if (!ios && !isAndroidUA(ua)) {
+      /* 测试或未识别 UA 时，仍按 Android 官方 scheme 生成，方便对照；真正打开由 shouldLaunchAmapApp 决定 */
+      ios = false;
+    }
+    var qs = href.split("?")[1] || "";
+    var q = parseQueryMap(qs);
+    var src = encodeURIComponent(AMAP_SOURCE);
+    if (/uri\.amap\.com\/search(?:\?|$)/.test(href)) {
+      var kw = q.keyword || "";
+      if (ios) return "iosamap://poi?sourceApplication=" + src + "&name=" + encodeURIComponent(kw);
+      return "androidamap://poi?sourceApplication=" + src + "&keywords=" + encodeURIComponent(kw);
+    }
+    if (/uri\.amap\.com\/marker(?:\?|$)/.test(href)) {
+      var pos = String(q.position || "").split(",");
+      var lng = pos[0] || "";
+      var lat = pos[1] || "";
+      var nm = q.name || "";
+      var view = ios ? "iosamap://viewMap" : "androidamap://viewMap";
+      return view + "?sourceApplication=" + src + "&poiname=" + encodeURIComponent(nm) + "&lat=" + lat + "&lon=" + lng + "&dev=0";
+    }
+    if (/uri\.amap\.com\/navigation(?:\?|$)/.test(href)) {
+      var to = parseLngLatName(q.to);
+      if (!to) return "";
+      var from = q.from ? parseLngLatName(q.from) : null;
+      var t = amapModeToT(q.mode);
+      var path = ios ? "iosamap://path?sourceApplication=" + src : "androidamap://route/plan/?sourceApplication=" + src;
+      if (from) {
+        path += "&slat=" + from.lat + "&slon=" + from.lng + "&sname=" + encodeURIComponent(from.name || "");
+      }
+      path += "&dlat=" + to.lat + "&dlon=" + to.lng + "&dname=" + encodeURIComponent(to.name || "") + "&dev=0&t=" + t;
+      return path;
+    }
+    return "";
+  }
+
+  function defaultOpenAmapWeb(href) {
+    if (!href || typeof window === "undefined") return;
+    window.open(href, "_blank", "noopener");
+  }
+
+  function defaultLaunchAmapScheme(scheme) {
+    if (!scheme || typeof window === "undefined") return;
+    try {
+      var iframe = document.createElement("iframe");
+      iframe.setAttribute("aria-hidden", "true");
+      iframe.style.cssText = "display:none;width:0;height:0;border:0;position:absolute";
+      iframe.src = scheme;
+      document.body.appendChild(iframe);
+      setTimeout(function () {
+        if (iframe.parentNode) iframe.parentNode.removeChild(iframe);
+      }, 2000);
+    } catch (err) {}
+    try {
+      window.location.href = scheme;
+    } catch (err2) {}
+  }
+
+  function defaultAttachHide(onHide) {
+    if (typeof document === "undefined") return function () {};
+    function onVis() {
+      if (document.hidden || document.visibilityState === "hidden") onHide();
+    }
+    function onPageHide() {
+      onHide();
+    }
+    document.addEventListener("visibilitychange", onVis);
+    if (typeof window !== "undefined") window.addEventListener("pagehide", onPageHide);
+    return function () {
+      document.removeEventListener("visibilitychange", onVis);
+      if (typeof window !== "undefined") window.removeEventListener("pagehide", onPageHide);
+    };
+  }
+
+  /**
+   * 统一打开高德：手机先跳 App scheme；1.5 秒内页面变为 hidden 则取消，不弹框；
+   * 仍在前台则弹出「还没装高德」小框（先用网页版才打开 uri.amap.com）。
+   * 桌面 / 非移动端直接打开网页，不弹框。
+   * 不用 blur：iPhone「地址无效」系统框可能触发 blur，但仍应弹出我们的小框。
+   */
+  function openAmap(webHref, env) {
+    env = env || {};
+    var ua = env.ua != null ? env.ua : (typeof navigator !== "undefined" ? navigator.userAgent : "");
+    var openWeb = env.openWeb || defaultOpenAmapWeb;
+    var launchScheme = env.launchScheme || defaultLaunchAmapScheme;
+    var showInstall = env.showInstall;
+    var wait = env.waitMs != null ? env.waitMs : 1500;
+    var schedule = env.setTimeout || setTimeout;
+    var clear = env.clearTimeout || clearTimeout;
+    var attach = env.attachHide || defaultAttachHide;
+    webHref = String(webHref || "");
+    if (!webHref) return { opened: "none" };
+    if (!shouldLaunchAmapApp(ua)) {
+      openWeb(webHref);
+      return { opened: "web" };
+    }
+    var scheme = amapSchemeFromWeb(webHref, ua);
+    if (!scheme) {
+      openWeb(webHref);
+      return { opened: "web" };
+    }
+    var done = false;
+    var timer = null;
+    var detach = function () {};
+    function finish() {
+      if (done) return;
+      done = true;
+      if (timer != null) clear(timer);
+      timer = null;
+      detach();
+    }
+    detach = attach(finish) || function () {};
+    launchScheme(scheme);
+    timer = schedule(function () {
+      timer = null;
+      if (done) return;
+      done = true;
+      detach();
+      if (typeof showInstall === "function") showInstall(webHref, ua);
+    }, wait);
+    return { opened: "scheme", scheme: scheme, cancel: finish };
+  }
+
   var api = {
     MODES: MODES,
     modeInfo: modeInfo,
@@ -421,7 +612,16 @@
     pointQuery: pointQuery,
     isUnitLikeName: isUnitLikeName,
     pointUsable: pointUsable,
-    buildPlaceLink: buildPlaceLink
+    buildPlaceLink: buildPlaceLink,
+    AMAP_SOURCE: AMAP_SOURCE,
+    AMAP_INSTALL: AMAP_INSTALL,
+    isAndroidUA: isAndroidUA,
+    isIOSUA: isIOSUA,
+    shouldLaunchAmapApp: shouldLaunchAmapApp,
+    amapInstallLinks: amapInstallLinks,
+    amapSchemeFromWeb: amapSchemeFromWeb,
+    amapModeToT: amapModeToT,
+    openAmap: openAmap
   };
 
   root.GeoUtil = api;

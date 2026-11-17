@@ -40,6 +40,11 @@ button, input, textarea, select {
   font: inherit;
   color: inherit;
 }
+button, .card, .card * {
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
 
 a { color: var(--brand); }
 
@@ -47,7 +52,7 @@ a { color: var(--brand); }
   min-height: 100%;
   display: flex;
   flex-direction: column;
-  padding-bottom: calc(144px + env(safe-area-inset-bottom, 0px));
+  padding-bottom: 0;
 }
 
 .topbar {
@@ -222,7 +227,7 @@ a { color: var(--brand); }
 }
 
 .panel { padding: 4px 16px 20px; }
-#list-view.panel { padding-bottom: 120px; }
+#list-view.panel { padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px)); }
 
 
 .panel-map {
@@ -461,12 +466,53 @@ a { color: var(--brand); }
   right: 0;
   bottom: 0;
   z-index: 30;
-  padding: 10px 16px calc(10px + env(safe-area-inset-bottom, 0px));
+  display: flex;
+  align-items: stretch;
+  gap: 12px;
+  padding: 0 calc(16px + env(safe-area-inset-right, 0px)) calc(16px + env(safe-area-inset-bottom, 0px)) calc(16px + env(safe-area-inset-left, 0px));
   background: var(--bg);
 }
 
+/* v6.1.1：地图/列表并入底栏，56×56 方钮 */
+.view-toggle {
+  flex: 0 0 56px;
+  width: 56px;
+  height: 56px;
+  margin: 0;
+  padding: 4px 0 3px;
+  border: 1px solid #E3E7EC;
+  border-radius: 16px;
+  background: #fff;
+  color: #1F2A37;
+  box-shadow: 0 2px 8px rgba(22, 51, 47, 0.12);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  cursor: pointer;
+}
+.view-toggle .ico,
+.view-toggle svg {
+  width: 22px;
+  height: 22px;
+  display: block;
+  flex: 0 0 22px;
+}
+.view-toggle .view-toggle-label {
+  font-size: 11px;
+  line-height: 1;
+  font-weight: 600;
+  color: #1F2A37;
+}
+.view-toggle:focus-visible { outline: 3px solid #0F9D8A; outline-offset: 2px; }
+body.ig-open .view-toggle { visibility: hidden; }
+
 .add-bar {
-  width: 100%;
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 0;
+  height: 56px;
   min-height: 56px;
   border: 0;
   border-radius: 16px;
@@ -480,29 +526,6 @@ a { color: var(--brand); }
   justify-content: center;
   gap: 8px;
 }
-
-/* v6.1 item 10：底部白色胶囊「地图」/「列表」，居中，在『添加』上方 16px；列表和地图都显示 */
-.view-fab {
-  position: fixed;
-  left: 50%;
-  transform: translateX(-50%);
-  bottom: calc(82px + env(safe-area-inset-bottom, 0px));
-  z-index: 31;
-  height: 40px;
-  padding: 0 20px;
-  border: 0;
-  border-radius: 20px;
-  background: #fff;
-  color: #1F2A37;
-  font-size: 14px;
-  font-weight: 700;
-  line-height: 40px;
-  white-space: nowrap;
-  box-shadow: 0 2px 8px rgba(22, 51, 47, 0.16);
-  cursor: pointer;
-}
-.view-fab:focus-visible { outline: 3px solid #0F9D8A; outline-offset: 2px; }
-body.ig-open .view-fab { visibility: hidden; }
 
 .sheet {
   position: fixed;
@@ -937,7 +960,7 @@ body.ig-open .view-fab { visibility: hidden; }
   position: fixed;
   left: 16px;
   right: 16px;
-  bottom: calc(88px + env(safe-area-inset-bottom, 0px));
+  bottom: calc(84px + env(safe-area-inset-bottom, 0px));
   z-index: 60;
   display: flex;
   align-items: center;
@@ -950,6 +973,12 @@ body.ig-open .view-fab { visibility: hidden; }
   color: #fff;
   box-shadow: 0 8px 24px rgba(22, 51, 47, 0.25);
   font-weight: 600;
+  pointer-events: auto;
+  transition: opacity 150ms ease;
+}
+.toast.is-out { opacity: 0; pointer-events: none; }
+@media (prefers-reduced-motion: reduce) {
+  .toast { transition: none; }
 }
 .toast[hidden] { display: none !important; }
 #toast-undo {
@@ -1234,9 +1263,9 @@ body.ig-open .view-fab { visibility: hidden; }
 }
 
 /* 统一的底部提示条（v5 规格） */
-/* 提示条放在「＋ 添加」上方 12px：底栏 10px 内边距 + 56px 按钮 + 12px 间距 = 78px，再加安全区 */
+/* 提示条放在底栏上方 12px：16px 底边距 + 56px 按钮 + 12px 间距 = 84px，再加安全区 */
 .toast {
-  bottom: calc(134px + env(safe-area-inset-bottom, 0px));
+  bottom: calc(84px + env(safe-area-inset-bottom, 0px));
   background: #1F2329;
   border-radius: 12px;
   color: #fff;
@@ -1296,6 +1325,35 @@ body.ig-open .view-fab { visibility: hidden; }
   cursor: pointer;
 }
 .update-now:active { background: #0C8574; }
+#amap-install { z-index: 91; }
+.amap-install-card .update-title { margin: 0 0 20px; font-size: 17px; font-weight: 700; color: #1F2A37; line-height: 1.4; }
+.amap-install-go {
+  display: block;
+  width: 100%;
+  height: 48px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 12px;
+  background: #0F9D8A;
+  color: #fff;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.amap-install-go:active { background: #0C8574; }
+.amap-install-web {
+  display: block;
+  width: 100%;
+  margin: 4px 0 0;
+  padding: 12px 0;
+  border: 0;
+  background: transparent;
+  color: #6B7A8F;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+}
 .update-later {
   display: block;
   width: 100%;
@@ -1677,7 +1735,7 @@ body.ig-open .view-fab { visibility: hidden; }
 .locate-btn {
   position: fixed;
   right: 16px;
-  bottom: calc(82px + env(safe-area-inset-bottom, 0px));
+  bottom: calc(88px + env(safe-area-inset-bottom, 0px));
   z-index: 25;
   width: 44px;
   height: 44px;
@@ -1714,8 +1772,8 @@ body.ig-open .view-fab { visibility: hidden; }
   box-sizing: content-box;
   box-shadow: 0 1px 4px rgba(22, 51, 47, 0.3);
 }
-.leaflet-bottom { margin-bottom: calc(122px + env(safe-area-inset-bottom, 0px)); }
-.leaflet-bottom.leaflet-right { margin-bottom: calc(122px + env(safe-area-inset-bottom, 0px)); }
+.leaflet-bottom { margin-bottom: calc(80px + env(safe-area-inset-bottom, 0px)); }
+.leaflet-bottom.leaflet-right { margin-bottom: calc(80px + env(safe-area-inset-bottom, 0px)); }
 
 /* v5.1 设置里「分享我的行程」「推荐这个工具」带一行灰色说明，点击区仍 ≥44px */
 .more-btn-sub { padding-top: 6px; padding-bottom: 6px; }
@@ -1753,7 +1811,7 @@ body.ig-open .view-fab { visibility: hidden; }
   .inapp-overlay { right: auto; width: var(--seg0-w); }
   #map-view .locate-btn { right: 16px; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); }
   .leaflet-bottom.leaflet-right { margin-bottom: 0; }
-  .view-fab { display: none; }
+  .view-toggle { display: none; }
 }
 
 /* 宽屏（≥800px）内容列 720px 居中：定位按钮跟着地图右边缘，不要飘到地图外 */
@@ -1899,6 +1957,8 @@ body.ig-open .add-dock, body.ig-open .locate-btn { visibility: hidden; }
 /* ---------- v5.2 使用说明三层 ---------- */
 .help-tier { margin: 0 0 20px; }
 .help-tier h3 { margin: 14px 0 10px; font-size: 18px; font-weight: 800; color: #16332F; }
+.help-tier-sub { margin: -4px 0 12px; font-size: 15px; font-weight: 400; line-height: 1.5; color: #6B7A8F; }
+.help-card-line { margin-top: 8px; font-size: 13px; line-height: 1.45; color: #6B7A8F; }
 .help-privacy {
   margin: 0 0 12px;
   padding: 10px 12px;
@@ -1911,6 +1971,7 @@ body.ig-open .add-dock, body.ig-open .locate-btn { visibility: hidden; }
 }
 .help-cards {
   display: flex;
+  align-items: flex-start;
   gap: 12px;
   overflow-x: auto;
   scroll-snap-type: x mandatory;
@@ -1924,15 +1985,39 @@ body.ig-open .add-dock, body.ig-open .locate-btn { visibility: hidden; }
 .help-card {
   flex: 0 0 82%;
   scroll-snap-align: start;
+  box-sizing: border-box;
+  min-width: 0;
+  overflow: visible;
   border-radius: 16px;
   background: #F3FAF8;
   border: 1px solid #D7F3EE;
   padding: 14px 16px 16px;
 }
-.help-card-illu { display: block; width: 100%; height: 96px; background: #fff; border: 1.5px dashed #B9DCD5; border-radius: 12px; }
+.help-card-illu { display: block; width: 160px; height: 96px; flex: 0 0 96px; margin: 0 auto; background: #fff; border: 1.5px dashed #B9DCD5; border-radius: 12px; }
 .help-card-n { margin: 10px 0 2px; font-size: 12px; color: #8A9099; }
-.help-card h4 { margin: 0 0 4px; font-size: 18px; font-weight: 800; color: #16332F; }
-.help-card p { margin: 0; font-size: 16px; line-height: 1.5; color: #1F2329; }
+.help-card h4 { margin: 0 0 4px; font-size: 18px; font-weight: 800; color: #16332F; overflow-wrap: anywhere; }
+.help-card p { margin: 0; font-size: 16px; line-height: 1.5; color: #1F2329; overflow-wrap: anywhere; }
+.help-card p + p { margin-top: 8px; }
+.help-card-lead { margin: 0 0 8px; font-size: 13px; font-weight: 400; line-height: 1.45; color: #6B7A8F; overflow-wrap: anywhere; }
+.help-card .ai-steps { margin: 0; padding: 0; }
+.help-card .ai-step { display: flex; gap: 8px; align-items: flex-start; padding: 8px 0; }
+.help-card .ai-step:first-child { padding-top: 0; }
+.help-card .ai-step-text { margin: 0; flex: 1; min-width: 0; font-weight: 700; overflow-wrap: anywhere; }
+.help-card .ai-step::before {
+  counter-increment: none;
+  content: attr(data-step);
+  flex: 0 0 22px;
+  width: 22px;
+  height: 22px;
+  margin-top: 2px;
+  border-radius: 50%;
+  background: #0F9D8A;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 22px;
+  text-align: center;
+}
 .help-dots { display: flex; justify-content: center; gap: 6px; margin: 10px 0 4px; }
 .help-dot { width: 7px; height: 7px; border-radius: 50%; background: #D5D9DE; }
 .help-dot.is-on { background: #0F9D8A; }
@@ -3143,7 +3228,7 @@ button.leg-pill { font-family: inherit; }
 .map-miss {
   position: absolute;
   left: 12px;
-  bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  bottom: calc(88px + env(safe-area-inset-bottom, 0px));
   z-index: 4;
   height: 32px;
   padding: 0 12px;

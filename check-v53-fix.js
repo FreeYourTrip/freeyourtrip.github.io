@@ -261,7 +261,7 @@ check("「直接添加」 items (IT老板 c) get the background candidate search
 });
 
 check("no new external hosts (same set as v5.2)", function () {
-  const allowed = new Set(["freeyourtrip.github.io", "www.google.com", "uri.amap.com", "www.w3.org", "{s}.tile.openstreetmap.org", "www.openstreetmap.org", "webapi.amap.com", "restapi.amap.com", "nominatim.openstreetmap.org", "api.postcodes.io", "webrd0{s}.is.autonavi.com", "webrd0", "a.tile.openstreetmap.org"]);
+  const allowed = new Set(["freeyourtrip.github.io", "www.google.com", "uri.amap.com", "www.w3.org", "{s}.tile.openstreetmap.org", "www.openstreetmap.org", "webapi.amap.com", "restapi.amap.com", "nominatim.openstreetmap.org", "api.postcodes.io", "webrd0{s}.is.autonavi.com", "webrd0", "a.tile.openstreetmap.org", "apps.apple.com", "mobile.amap.com"]);
   const files = fs.readdirSync(__dirname).filter((f) => /\.(js|html|webmanifest|css)$/.test(f) && !/^check/.test(f));
   files.forEach((f) => {
     (read(f).match(/https?:\/\/[a-zA-Z0-9.{}-]+/g) || []).forEach((u) => {
@@ -280,7 +280,7 @@ check("location never persisted: candidates and map-pick state live in memory; n
   const days = tl.slice(tl.indexOf("function dayArgsFor"), tl.indexOf("function locPinSvg"));
   assert.ok(/TripName\.dayArea\(items, day, opts\)/.test(days), "area comes from trip items only");
   const sw = read("sw.js");
-  assert.ok(sw.indexOf('"./fix-cand.js"') !== -1 && sw.indexOf('"xingcheng-map-shell-v19"') !== -1);
+  assert.ok(sw.indexOf('"./fix-cand.js"') !== -1 && sw.indexOf('"xingcheng-map-shell-v20"') !== -1);
   assert.ok(/<script src="\.\/fix-cand\.js"><\/script>\s*/.test(html) && html.indexOf("fix-cand.js") < html.indexOf("<script src=\"./timeline.js\""));
 });
 

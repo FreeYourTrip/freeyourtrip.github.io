@@ -140,7 +140,13 @@ check("locate: position stays in memory only — never stored, sent, or exported
   const here = { lat: 31.234567, lng: 121.476543 };
   const l = G.buildFlexibleNavLinks(null, { name: "示例", address: "上海市示例路 1 号" }, "公共交通", here);
   const p = G.buildPlaceLink({ name: "示例", address: "上海市示例路 1 号" }, here);
-  [l.href, l.google, l.amap, p.href].forEach((u) => assert.ok(u.indexOf("31.234567") === -1 && u.indexOf("121.476543") === -1, "your position never goes into a link: " + u));
+  const iosUA = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)";
+  const andUA = "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 Chrome/120.0.0.0 Mobile Safari/537.36";
+  const schemes = [];
+  if (G.amapSchemeFromWeb) {
+    schemes.push(G.amapSchemeFromWeb(l.amap, iosUA), G.amapSchemeFromWeb(l.amap, andUA), G.amapSchemeFromWeb(p.href, iosUA), G.amapSchemeFromWeb(p.href, andUA));
+  }
+  [l.href, l.google, l.amap, p.href].concat(schemes).forEach((u) => assert.ok(String(u).indexOf("31.234567") === -1 && String(u).indexOf("121.476543") === -1, "your position never goes into a link: " + u));
   assert.ok(bk.indexOf("LocateMe") === -1 && bk.indexOf("geolocation") === -1, "backup/share never include the position");
   const ex = fs.readFileSync(__dirname + "/timeline.js", "utf8").match(/function exportState\(\)[\s\S]*?\n  \}/);
   assert.ok(ex && !/position|coords|locate/i.test(ex[0]), "exportState has no position fields");

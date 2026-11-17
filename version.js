@@ -10,25 +10,36 @@
   "use strict";
 
   /* 版本规则（用户定）：大版本 v5、v6…；小更新只变小数点 v5.1、v5.2… 公告按这个号判断是否弹出。 */
-  var APP_VERSION = "v6.1";
-  var SHELL_CACHE = "xingcheng-map-shell-v19";
+  var APP_VERSION = "v6.1.1";
+  var SHELL_CACHE = "xingcheng-map-shell-v20";
   var APP_DATE = "2026-11-16";
   var LAST_SEEN_KEY = "wishlist-map-last-seen-version-v1";
 
   var ANNOUNCEMENT = {
-    /* v6.1 公告：广告文案宣传大师定稿 */
+    /* v6.1.1 公告：定稿 */
     title: APP_VERSION + " 更新",
     bullets: [
-      "好几张截图一起丢给 AI，导入时按地址自动放上地图，基本不用再确认",
-      "没定时间的安排排在当天最后，地图上也看得到",
-      "底部按钮点一下，地图和列表来回切换",
-      "机票、火车卡片上也有『带我去』，直接导航到机场或车站",
-      "点『＋ 新行程』再建一趟，添加和导入都进正在看的这趟"
+      "国内的店名和地址，现在用高德搜，搜得更准",
+      "『地图』按钮挪到『添加』旁边，看底部就能找到",
+      "国内地点点『带我去』，直接打开高德 App"
     ],
     tip: "看到的还是旧版，就把网页彻底关掉再打开"
   };
 
   var CHANGELOG = [
+    {
+      /* v6.1.1 更新记录：定稿 */
+      version: "v6.1.1",
+      date: "2026-11-16",
+      lines: [
+        "新增：搜国内地点改用高德，搜得更准",
+        "调整：『地图』按钮挪到『添加』左边",
+        "修复：导入成功后，输入框会自动清空",
+        "修复：长按卡片和按钮不会再选中文字",
+        "优化：屏幕下方的提示，点一下就能关掉",
+        "优化：国内地点打开地图，直接跳到高德 App，不再卡在网页"
+      ]
+    },
     {
       /* v6.1 更新记录：广告文案宣传大师定稿 */
       version: "v6.1",
@@ -150,9 +161,9 @@
   ];
 
   function versionNumber(v) {
-    var m = /^v?(\d+)(?:\.(\d+))?/.exec(String(v == null ? "" : v).trim());
+    var m = /^v?(\d+)(?:\.(\d+))?(?:\.(\d+))?/.exec(String(v == null ? "" : v).trim());
     if (!m) return -1;
-    return Number(m[1]) + (m[2] ? Number(m[2]) / 1000 : 0);
+    return Number(m[1]) + (m[2] ? Number(m[2]) / 1000 : 0) + (m[3] ? Number(m[3]) / 1000000 : 0);
   }
 
   /** 'v4' < 'v5' → -1；相等 → 0；大于 → 1。认不出来的当作最旧。 */

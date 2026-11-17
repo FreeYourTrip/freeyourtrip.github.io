@@ -1,8 +1,10 @@
 /**
  * 地理编码：默认使用 OpenStreetMap Nominatim（无需 API Key）。
- * 若 config.js 同时填写了 AMAP_JS_KEY 与 AMAP_SECURITY_CODE，且查询词像中国大陆
- * 地址，则按需懒加载高德 Web 端 JS API（PlaceSearch / AutoComplete），把返回的
- * GCJ-02 只转换一次成 WGS-84 再入库。两个配置都为空时不会加载任何高德脚本。
+ * 若 config.js 填写了 AMAP_JS_KEY 和 AMAP_SECURITY_CODE，且查询词像中国大陆地址，
+ * 则按需加载高德 JS API（webapi.amap.com：AMap.PlaceSearch / AMap.AutoComplete），
+ * 返回的 GCJ-02 只转换一次成 WGS-84 再入库。两项都为空时不会请求高德、也不会加载脚本。
+ * 脚本加载失败、超时或没有结果时，静默退回现有查找链（Nominatim）。不会发送用户自己的位置。
+ * 应用打开时不加载高德脚本，只在用户实际搜国内地点时才加载。
  * 限制：Nominatim 每秒最多 1 次；超时 8 秒；结果缓存在 localStorage。
  * 机票优先查本地机场表，找不到再搜「<IATA> airport」。
  * 请求中只包含名称、地址或 IATA，不会发送确认号、座位或备注。
@@ -40,6 +42,226 @@
   function amapConfigured() {
     return !!(amapJsKey() && amapSecurityCode());
   }
+
+  function amapRestKey() {
+    var cfg = root.AppConfig || {};
+    return String(cfg.AMAP_REST_KEY || "").trim();
+  }
+
+  function amapRestConfigured() {
+    return !!amapRestKey();
+  }
+
+  var AMAP_REST = "https://restapi.amap.com/v3";
+
+  function chineseCityHint(text) {
+    var t = String(text || "");
+    var m = t.match(/(北京|天津|上海|重庆)/) || t.match(/([\u3400-\u9fff]{1,8}?(?:省|市|自治区|自治州|地区|盟))/);
+    if (!m) return "";
+    var city = m[1] || m[0];
+    if (/香港|澳门|澳門/.test(city)) return "";
+    return city;
+  }
+
+  function parseAmapLocation(loc) {
+    if (loc == null || loc === "" || loc === "[]") return null;
+    if (Array.isArray(loc)) {
+      if (loc.length < 2) return null;
+      return gcjResultToWgs(Number(loc[1]), Number(loc[0]));
+    }
+    var s = String(loc).trim();
+    var parts = s.split(",");
+    if (parts.length < 2) return null;
+    var lng = parseFloat(parts[0]);
+    var lat = parseFloat(parts[1]);
+    return gcjResultToWgs(lat, lng);
+  }
+
+  function mapAmapRestPois(pois, q) {
+    var list = [];
+    (pois || []).forEach(function (poi) {
+      if (!poi) return;
+      var pt = parseAmapLocation(poi.location);
+      if (!pt) return;
+      var name = String(poi.name || "").trim();
+      var addr = String(poi.address || poi.district || "").trim();
+      list.push({
+        lat: pt.lat,
+        lng: pt.lng,
+        displayName: (name && addr ? name + ", " + addr : name || addr || q || "").trim(),
+        name: name,
+        class: "",
+        type: poi.type || poi.typecode || "",
+        city: String(poi.cityname || poi.city || "").trim(),
+        source: "amap",
+        coordSystem: "wgs84"
+      });
+    });
+    return list;
+  }
+
+  function mapAmapRestTips(tips, q) {
+    var list = [];
+    (tips || []).forEach(function (tip) {
+      if (!tip) return;
+      var pt = parseAmapLocation(tip.location);
+      if (!pt) return;
+      var name = String(tip.name || "").trim();
+      var addr = String(tip.address || tip.district || "").trim();
+      list.push({
+        lat: pt.lat,
+        lng: pt.lng,
+        displayName: (name && addr ? name + ", " + addr : name || addr || q || "").trim(),
+        name: name,
+        class: "",
+        type: tip.type || tip.typecode || "",
+        city: String(tip.cityname || tip.adname || "").trim(),
+        source: "amap",
+        coordSystem: "wgs84"
+      });
+    });
+    return list;
+  }
+
+  function mapAmapRestGeocodes(geocodes, q) {
+    var list = [];
+    (geocodes || []).forEach(function (g) {
+      if (!g) return;
+      var pt = parseAmapLocation(g.location);
+      if (!pt) return;
+      var addr = String(g.formatted_address || g.address || q || "").trim();
+      list.push({
+        lat: pt.lat,
+        lng: pt.lng,
+        displayName: addr,
+        name: addr,
+        class: "",
+        type: g.level || "",
+        city: String(g.city || g.province || "").trim(),
+        source: "amap",
+        coordSystem: "wgs84"
+      });
+    });
+    return list;
+  }
+
+  /* 请求失败、超时、空 Key、空结果一律返回 []，不把 Key 放进错误信息。不发送用户位置。 */
+  function amapRestGet(path, params) {
+    if (!amapRestConfigured()) return Promise.resolve([]);
+    var key;
+    var qs = [];
+    params = params || {};
+    for (key in params) {
+      if (Object.prototype.hasOwnProperty.call(params, key) && params[key]) {
+        qs.push(encodeURIComponent(key) + "=" + encodeURIComponent(String(params[key])));
+      }
+    }
+    qs.push("key=" + encodeURIComponent(amapRestKey()));
+    qs.push("output=json");
+    var url = AMAP_REST + path + "?" + qs.join("&");
+    return fetchWithTimeout(url, { headers: { Accept: "application/json" } })
+      .then(function (res) {
+        if (!res || !res.ok) return null;
+        return typeof res.json === "function" ? res.json() : res;
+      })
+      .catch(function () {
+        return null;
+      });
+  }
+
+  function amapRestPlaceText(keywords, city) {
+    var q = sanitizeGeocodeQuery(keywords);
+    if (!q) return Promise.resolve([]);
+    var params = { keywords: q, offset: "5", page: "1", extensions: "base" };
+    if (city) params.city = city;
+    return amapRestGet("/place/text", params).then(function (data) {
+      if (!data || String(data.status) !== "1") return [];
+      return mapAmapRestPois(data.pois, q);
+    });
+  }
+
+  function amapRestInputTips(keywords, city) {
+    var q = sanitizeGeocodeQuery(keywords);
+    if (!q) return Promise.resolve([]);
+    var params = { keywords: q };
+    if (city) params.city = city;
+    return amapRestGet("/assistant/inputtips", params).then(function (data) {
+      if (!data || String(data.status) !== "1") return [];
+      return mapAmapRestTips(data.tips, q);
+    });
+  }
+
+  function amapRestGeocode(address, city) {
+    var q = sanitizeGeocodeQuery(address);
+    if (!q) return Promise.resolve([]);
+    var params = { address: q };
+    if (city) params.city = city;
+    return amapRestGet("/geocode/geo", params).then(function (data) {
+      if (!data || String(data.status) !== "1") return [];
+      return mapAmapRestGeocodes(data.geocodes, q);
+    });
+  }
+
+  function firstAmapHit(list) {
+    if (!list || !list.length) return null;
+    var x = list[0];
+    if (!x || !isFinite(x.lat) || !isFinite(x.lng)) return null;
+    return x;
+  }
+
+  /**
+   * 国内手动搜索：地点文本 → 输入提示 → 地理编码。不带 location / 用户坐标。
+   * 失败或空结果返回 []，由调用方退回现有链。
+   */
+  function amapRestSearch(query, opts) {
+    var q = sanitizeGeocodeQuery(query);
+    if (!amapRestConfigured() || !q) return Promise.resolve([]);
+    var city = "";
+    if (opts && opts.city && typeof opts.city === "string") city = chineseCityHint(opts.city);
+    if (!city) city = chineseCityHint(q);
+    return amapRestPlaceText(q, city)
+      .then(function (list) {
+        if (list && list.length) return list;
+        return amapRestInputTips(q, city).then(function (tips) {
+          if (tips && tips.length) return tips;
+          return amapRestGeocode(q, city);
+        });
+      })
+      .catch(function () {
+        return [];
+      });
+  }
+
+  /**
+   * 导入查找：先按地址地理编码，再按店名或地址做地点搜索 / 输入提示。
+   * 不发送用户位置。没有点则返回 null，继续原来的查找链。
+   */
+  function amapRestLookupItem(item, ctx) {
+    if (!amapRestConfigured() || !item) return Promise.resolve(null);
+    var name = String(item.nameZh || item.nameEn || item.name || "").trim();
+    var addr = String(item.address || "").trim();
+    var blob = (addr + " " + name).trim();
+    if (!looksMainland(blob)) return Promise.resolve(null);
+    var city = "";
+    if (ctx && ctx.city && typeof ctx.city === "string") city = chineseCityHint(ctx.city);
+    if (!city) city = chineseCityHint(addr) || chineseCityHint(name);
+    var steps = [];
+    if (addr) steps.push(function () { return amapRestGeocode(addr, city); });
+    if (name || addr) steps.push(function () { return amapRestPlaceText(name || addr, city); });
+    if (name) steps.push(function () { return amapRestInputTips(name, city); });
+    function next(i) {
+      if (i >= steps.length) return Promise.resolve(null);
+      return steps[i]().then(function (list) {
+        var hit = firstAmapHit(list);
+        if (hit) return hit;
+        return next(i + 1);
+      }).catch(function () {
+        return next(i + 1);
+      });
+    }
+    return next(0);
+  }
+
 
   function looksMainland(text) {
     if (root.GeoUtil && typeof root.GeoUtil.looksChineseMainlandQuery === "function") {
@@ -364,10 +586,10 @@
 
   function ensureAmapJs() {
     if (!amapConfigured()) return Promise.reject(new Error("amap-not-configured"));
-    if (typeof document === "undefined") return Promise.reject(new Error("amap-no-document"));
     if (root.AMap && (root.AMap.PlaceSearch || root.AMap.plugin)) {
       return Promise.resolve(root.AMap);
     }
+    if (typeof document === "undefined") return Promise.reject(new Error("amap-no-document"));
     if (amapLoader) return amapLoader;
     try {
       root._AMapSecurityConfig = { securityJsCode: amapSecurityCode() };
@@ -511,6 +733,34 @@
    * 两个配置都为空时只使用 Nominatim，不会加载 webapi.amap.com。
    */
   /** opts.bias = { lat, lng }：只来自行程里的条目（酒店 / 同一天的地点），由 biasArea 先四舍五入 */
+  /**
+   * 导入查找：先按地址搜，再按店名搜。走 JS API（PlaceSearch / AutoComplete）。
+   * 不发送用户位置。没有点则返回 null，继续原来的查找链。
+   */
+  function amapLookupItem(item, ctx) {
+    if (!amapConfigured() || !item) return Promise.resolve(null);
+    var name = String(item.nameZh || item.nameEn || item.name || "").trim();
+    var addr = String(item.address || "").trim();
+    var blob = (addr + " " + name).trim();
+    if (!looksMainland(blob)) return Promise.resolve(null);
+    var queries = [];
+    if (addr) queries.push(addr);
+    if (name && name !== addr) queries.push(name);
+    if (!queries.length) return Promise.resolve(null);
+    var opts = ctx && ctx.city ? { city: ctx.city } : {};
+    function next(i) {
+      if (i >= queries.length) return Promise.resolve(null);
+      return amapSearch(queries[i], opts).then(function (list) {
+        var hit = firstAmapHit(list);
+        if (hit) return hit;
+        return next(i + 1);
+      }).catch(function () {
+        return next(i + 1);
+      });
+    }
+    return next(0);
+  }
+
   function searchAddress(query, opts) {
     var q = sanitizeGeocodeQuery(query);
     if (!q) return Promise.resolve([]);
@@ -1031,6 +1281,16 @@
     searchAddress: searchAddress,
     amapSearch: amapSearch,
     amapConfigured: amapConfigured,
+    looksMainland: looksMainland,
+    amapLookupItem: amapLookupItem,
+    amapRestConfigured: amapRestConfigured,
+    amapRestSearch: amapRestSearch,
+    amapRestLookupItem: amapRestLookupItem,
+    amapRestPlaceText: amapRestPlaceText,
+    amapRestInputTips: amapRestInputTips,
+    amapRestGeocode: amapRestGeocode,
+    parseAmapLocation: parseAmapLocation,
+    chineseCityHint: chineseCityHint,
     gcjResultToWgs: gcjResultToWgs,
     mapAmapJsPois: mapAmapJsPois,
     FRIENDLY_NOT_FOUND: FRIENDLY_NOT_FOUND,

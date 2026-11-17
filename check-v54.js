@@ -32,8 +32,8 @@ function check(name, fn) {
 
 check("version is v5.4 (or v6, which carries v5.4) and sw cache is v18", function () {
   /* v6 合并 v5.4：版本号往前走，v5.4 的行为都还在 */
-  assert.ok(["v5.4", "v6", "v6.0", "v6.1"].indexOf(V.APP_VERSION) !== -1);
-  assert.ok(sw.indexOf('"xingcheng-map-shell-v19"') !== -1);
+  assert.ok(["v5.4", "v6", "v6.0", "v6.1", "v6.1.1"].indexOf(V.APP_VERSION) !== -1);
+  assert.ok(sw.indexOf('"xingcheng-map-shell-v20"') !== -1);
   assert.ok(sw.indexOf("xingcheng-map-shell-v16") === -1);
 });
 
@@ -96,7 +96,7 @@ check("drag order persistence, flight lock, long-press, undo toast 5s", function
   assert.ok(tl.indexOf("要把时间改成 ") !== -1 && tl.indexOf('okText: "改"') !== -1 && tl.indexOf('cancelText: "不改"') !== -1);
   assert.ok(css.indexOf("0 8px 24px rgba(0, 0, 0, 0.15)") !== -1 && css.indexOf("scale(1.02)") !== -1);
   assert.ok(/background: #0F9D8A/.test(css) && /drop-line/.test(css));
-  assert.ok(tl.indexOf("长按卡片，拖动换顺序") !== -1 && tl.indexOf("wishlist-map-drag-tip-v1") !== -1);
+  assert.ok(tl.indexOf("长按卡片拖动，能换顺序或换日子") !== -1 && tl.indexOf("wishlist-map-drag-tip-v1") !== -1);
 });
 
 check("pill text formatting, 300km cutoff, flight gap, missing coords, last-stop-to-hotel", function () {
@@ -180,7 +180,7 @@ check("nav URLs: card button omits origin (current location); between-stop pills
   assert.ok(tl.indexOf("legPillHtml(Legs.firstOfDayPill") === -1, "list render does not draw a pill before the first stop");
   assert.ok(tl.indexOf("从我的位置出发") === -1, "timeline copy does not mention the removed first-stop pill");
   assert.ok(tl.indexOf("geolocation") === -1, "never calls geolocation");
-  assert.ok(/class="card-go-btn"/.test(tl) && /card-go-btn \{[^}]*background: #E8F5F2;/.test(css));
+  assert.ok((/class="card-go-btn"/.test(tl) || tl.indexOf('mapLinkAttrs("card-go-btn"') !== -1) && /card-go-btn \{[^}]*background: #E8F5F2;/.test(css));
   assert.ok(tl.indexOf("function cardNavHtml") === -1, "old in-card 带我去 removed");
 });
 
@@ -201,8 +201,8 @@ check("flight import: landing earlier than departure goes to 待补 with 对的 
 });
 
 check("help and announcement mention long-press drag, 带我去 button, and pills", function () {
-  assert.ok(tl.indexOf("卡片右边的『带我去』，从你现在的位置出发；两站中间的『路线』，从上一站去下一站") !== -1);
-  assert.ok(tl.indexOf("长按卡片，拖动换顺序") !== -1);
+  assert.ok(tl.indexOf("点卡片上的『带我去』，手机地图会直接带你过去") !== -1);
+  assert.ok(tl.indexOf("长按卡片拖动，能换顺序或换日子") !== -1);
   const v54 = V.CHANGELOG.find((e) => e.version === "v5.4");
   if (V.APP_VERSION === "v5.4") {
     assert.deepStrictEqual(V.ANNOUNCEMENT.bullets, [

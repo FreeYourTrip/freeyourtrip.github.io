@@ -1078,4 +1078,56 @@ git revert <出错的提交哈希>   # 优先用 revert，便于保留历史
 - 没做：没有推送到仓库。没有实现第 1 / 2 / 3 / 5 项（开关关掉）。没有实现选行程分享、放到哪天、导入去重。
 
 - 怎么测试：`node check*.js` 共 39 个检查文件、0 失败；打印出的通过项 404 条，另有 `check-size.js`、`check-v61-release-clean.js` 以整份通过（不逐条打印）。含 `check-v61-loc-confirm.js`（针尖/中心 10 米、关闭重开只留一张地图、底图失败时按钮仍可用）。无头 Chrome 390×844 和 360×844、假数据截图在 `/workspace/ui-v61/`（含公告 5 条、导入向导第 2 步、顶栏「共 N 趟」和『＋ 新行程』、更新弹窗、机票卡『带我去』和『↓ 怎么去』、位置待确认卡 390/360，署名在地图右下角）。发布包 `/workspace/trip-map-release-v61.tar.gz`（顶层文件夹 `wishlist-map/`，不含 `screenshot*.png`）。SHA256 以打包后命令行输出为准。没有推送。
-- 已上线（23:20 Europe/London）：v6.1 已推到 main，提交 `762bc09`，GitHub Pages 构建完成。线上关键文件 sha256 与发布包一致；缓存 xingcheng-map-shell-v19，APP_VERSION v6.1，高德两个密钥为空。
+
+
+### 2026-11-16 23:55（Europe/London）— v6.1.1：国内地点改用高德 REST 搜索、底部栏合并、『带我去』拉起高德 App（只做了模拟测试，没上真机；未推送）
+
+- 做了什么：在已上线的 v6.1（提交 `762bc09`，缓存 `xingcheng-map-shell-v19`）之上做 v6.1.1。`APP_VERSION` 为 v6.1.1，service worker 缓存为 `xingcheng-map-shell-v20`。`versionNumber` 增加可选的第三位（`/ 1000000`），否则 v6.1.1 会被当成和 v6.1 一样大，更新弹窗不会出现。
+- 国内搜索：手动搜地点和导入找位置，国内地址/店名优先走高德 Web 服务 REST（`restapi.amap.com` 的 place/text、inputtips、geocode/geo）。坐标按 v6.1 底图同一套 GCJ-02→WGS-84 转一次。国外仍走原来的链。仓库里 `config.js` 的 `AMAP_REST_KEY` 保持空字符串；打包时才把环境变量 `AMAP_KEY` 写进发布包里的这一项（日志、测试输出、DEVLOG、截图都不写 Key 的值）。空 Key、接口报错、没有结果时静默退回原有查找链，不会卡住，也不会因为空 Key 弹错。不把用户位置发给高德。CSP 的 `connect-src` 只补了 `https://restapi.amap.com`。用环境里的 Key 做实机 REST 探测时，接口返回 `USERKEY_PLAT_NOMATCH`（这个 Key 不是 Web 服务平台的），现场测试改为跳过而不是失败；mock 路径已通过。
+- 隐私：设置页底部说明和使用说明 FAQ 末尾都加了「在国内搜地点时，搜的字会发给高德」。
+- 公告（两句，已定稿）：「国内的店名和地址，现在用高德搜，搜得更准」；「『地图』按钮挪到『添加』旁边，看底部就能找到」。
+- 更新记录（六条，已定稿）：「新增：搜国内地点改用高德，搜得更准」；「调整：『地图』按钮挪到『添加』左边」；「修复：导入成功后，输入框会自动清空」；「修复：长按卡片和按钮不会再选中文字」；「优化：屏幕下方的提示，点一下就能关掉」；「优化：国内地点打开地图，直接跳到高德 App，不再卡在网页」。去重仍留到 v6.2，本版更新记录不用「不会再重复导入」。
+- 导入：AI 粘贴导入成功后清空 `#add-text` 和 `#add-status`、收起添加面板，并提示「已导入 N 项」。失败则保留原文、面板不关。手工保存地点不会走这套清空。`#add-go` 改成次要描边按钮。
+- 底部栏：不再用悬浮的「地图」胶囊。左边 56×56 白色方按钮（描边 `#E3E7EC`、圆角 16、浅阴影，22px 图标 + 11px「地图」/「列表」），右边「添加」高 56、吃掉剩余宽度；中间 12px 缝，左右 16px + 安全区。列表底部留白 `96px + env(safe-area-inset-bottom)`。卡片和所有按钮加了 `user-select: none` 与 `-webkit-touch-callout: none`。定位按钮和「地图没加载出来」提到 `bottom: calc(88px + safe-area)`，Leaflet 署名也抬到底栏之上，避免被挡住。
+- 拖动提示（定稿）：「长按卡片拖动，能换顺序或换日子」。
+- 新手 3 条：文案集中在 `HELP_STARTER`。标题仍是「新手先看这 3 条」，副标题「把要去的地方放进来，按天排好，出门跟着走」。第 2 条在使用说明里（不在导入向导里），标题「各种订单、攻略截图，都能变成行程」，导语「车票机票、酒店订单、小红书、抖音、大众点评都行」，下面三条和导入页一致的 `<ol class="ai-steps">`，其中「在这里」按要求保留。插画仍是 160×96、`#12A386` 的占位图（等正式 SVG）。360 宽下正文没有省略号裁切，卡片过高时可在使用说明正文区滚动，第 3 步能完整看到。
+- 「常用」里地图入口：「点『添加』左边的『地图』，所有地点一眼看全，再点『列表』回来。右下角的按钮能定位到你自己」。
+- 底部提示：时长不变；点提示本身（不是撤销按钮）会在 150ms 后淡出关掉，不画关闭叉。撤销按钮仍负责撤销。没有全屏挡板，底栏不会被挡住（`bottom: calc(84px + safe-area)`）。减少动效时不淡出。不会在 `blur` 时取消隐藏（避免和别的功能打架）。
+- 打开高德（第 9 项，IT 定稿）：所有打开高德的入口（『带我去』、『看位置』、两站路线/「怎么去」、Google/高德二选一时的高德链接；`timeline.js` 约 408/801/931/1102 等处及其它文件）统一走 `Geo.openAmap`。手机先用官方 scheme 拉起 App（iPhone `iosamap://`，Android `androidamap://`，内容与原来的 `uri.amap.com` 网页链接一致，`dev=0`，不改店名或坐标逻辑）。1.5 秒内页面没有变成 `hidden`（只认 `visibilitychange` / `pagehide`，不认 `blur`，以免 iPhone「地址无效」误判）则弹出安装小框，不再自动打开网页。小框样式和更新弹窗同款：居中，标题「这台手机还没装高德地图」17px 粗体，无说明文字；主按钮「去装高德」`#0F9D8A`、高 48、圆角 12；下面灰色文字按钮「先用网页版」；点外面关闭。「去装高德」：iPhone 为 App Store `id461703208`，Android 先 `market://details?id=com.autonavi.minimap`，再回退到官方页 `https://mobile.amap.com/cn/`。除本函数里桌面直接打开网页、以及小框上「先用网页版」外，代码里不再把 `uri.amap.com` 当作 href 或直接打开。国外/Google 不变。桌面/非手机在 `openAmap` 里直接打开网页，不弹安装框。iPhone 系统「地址无效」挡不住，本版接受；关掉系统提示后应能看到我们的小框（未在真机上复核，不假装测过）。
+- 已知限制（如实记录，不是本版能修的）：环境里的高德 Key 不是 Web 服务平台 Key，现场 REST 无法用这把钥匙验收；新手第 2 条插画仍是占位图；第 2 条卡片在使用说明里而不是导入区。
+- 没做：没有推送到仓库。导入去重仍留 v6.2。没有地图选点，也没有接入百度或 Apple 地图。
+
+- 怎么测试：工作目录（仓库 Key 为空）跑 `node check*.js`，共 40 个检查文件、0 失败，打印出的通过项 418 条（含新建的 `check-v611.js`：scheme 与网页链接内容一致、iPhone/Android/桌面分支、1.5 秒仍可见则出安装框、页面 hidden 则不出框、商店链接、隐私「位置不进链接」覆盖新 scheme、toast 点按关闭、国内搜索 mock）。现场 REST 因平台不匹配而跳过。发布包会写入 REST Key，所以不能拿发布包再跑「仓库 config 必须为空」那条（以免断言失败时把 Key 打到日志里）。无头 Chrome 390×844（及 360 宽的第 2 条说明）假数据截图在 `/workspace/share-v611/`（国内搜索结果、导入成功后的列表和「已导入 2 项」提示、设置页隐私句、更新弹窗、更新记录 6 条、列表/地图底栏、新手第 2 条、高德安装小框）。发布包 `/workspace/trip-map-release-v611.tar.gz`（顶层文件夹 `wishlist-map/`，不含 `screenshot*.png`；打包时注入 REST Key，仓库 `config.js` 仍为空）。SHA256 以打包后命令行输出为准。没有推送。
+
+（本节是当晚第一轮：国内搜索当时按 Web 服务 REST 实现，并打过上述包。随后确认环境里的 Key 是 Web 端 JS API，不是 Web 服务 Key，已改走 JS API 并换上正式插画，见下条。这一轮的发布包不要再用来上线。）
+
+### 2026-11-17 00:08（Europe/London）— v6.1.1 续：国内搜索改走高德 JS API、正式插画、现场 5 地验收；CSP 增补待 IT 批准（未推送，未重新打包）
+
+- 做了什么：接上一条。IT 确认环境里的 `AMAP_KEY` 是 Web 端（JS API）Key，不是 Web 服务 Key（用它打 REST 会得到 `USERKEY_PLAT_NOMATCH`）。国内搜索改回并落实已有的 JS API 路径：复用 `geocode.js` 里的 `webapi.amap.com` 加载器（`ensureAmapJs` + `AMap.PlaceSearch`，空结果再试 `AMap.AutoComplete`），只在用户实际搜国内地点时才懒加载，应用打开时不加载。两项配置都为空时零次高德请求，失败或脚本加载失败则静默退回原来的 Nominatim 链，不弹错。坐标仍是 GCJ-02→WGS-84 只转一次。导入查找同样改走 `amapLookupItem` / JS API，不再把 REST 当作主路径。`AMAP_REST_KEY` 仓库里保持为空，本版不注入、不作为搜索入口。隐私那句不变：「在国内搜地点时，搜的字会发给高德」。
+- 配置与打包约定（尚未重新打包）：仓库 `config.js` 里 `AMAP_JS_KEY`、`AMAP_SECURITY_CODE`、`AMAP_REST_KEY` 都是空字符串。以后打包只把环境变量 `AMAP_KEY` 写入发布包的 `AMAP_JS_KEY`，并把 `AMAP_SECURITY_CODE` 写入发布包的安全密钥；都不写入仓库、日志、DEVLOG 或截图，也不打印值。上一轮发布包 `/workspace/trip-map-release-v611.tar.gz` 仍是按 REST Key 注入的，已经过时，等 IT 批准 CSP 后再重新打包。本轮没有推送。
+- CSP（当前已写入产品的）：`script-src` 现为 `'self' https://webapi.amap.com`；`connect-src` 仍保留 `https://webapi.amap.com` 和 `https://restapi.amap.com`。没有使用 `*.amap.com` 通配。
+- CSP 现场探测（**待 IT 批准，尚未改产品 CSP**）：在域名白名单 `freeyourtrip.github.io` 下用无头浏览器跑 PlaceSearch。成功搜索只会打到两个主机，而且都是以脚本（JSONP）加载，不是 XHR：
+  - `https://webapi.amap.com/maps`（`script-src`，已放行）
+  - `https://restapi.amap.com/v3/log/init` 和 `https://restapi.amap.com/v3/place/text`（也是 `script-src`；`connect-src` 里已有该主机，但不够，因为是脚本）
+  只把 `https://restapi.amap.com` 加进 `script-src` 还不够：现有 CSP 下会看到 `eval` 和 `wasm-eval` 违规，`AMap.PlaceSearch` 装不上，搜索会静默退回 Nominatim。对照试验：`script-src` 再加上 `'unsafe-eval'` 后，PlaceSearch 可正常工作，且不再出现 `wasm-eval` 违规。只加 `'wasm-unsafe-eval'`、不加 `'unsafe-eval'`，PlaceSearch 仍然失败。因此需要 IT 批准的增补是：`script-src` 增加 `https://restapi.amap.com` 和 `'unsafe-eval'`；`'wasm-unsafe-eval'` 不必加。未发现其它高德主机，PlaceSearch / AutoComplete 也不需要额外的 `img-src` 或 `connect-src`。上述两项在批准前都没有写入 `index.html`。
+- 现场 5 个国内地点（JS API，结果名称如下；坐标已转成 WGS-84，与 GCJ-02 的偏移约 540–710 米，方向合理。不记录 Key）。查询 → 高德返回的名称：
+  - 商场：「上海环球港」→「上海月星环球港」
+  - 餐馆：「全聚德前门店」→「全聚德(前门店)」
+  - 景点：「故宫博物院」→「故宫博物院」
+  - 酒店：「北京饭店」→「北京饭店」
+  - 仅地址：「上海市黄浦区南京东路399号」→「南京东路」
+  空 Key：打开页面和搜国内地点都不会请求高德，会走到 Nominatim。现行产品 CSP 下（未加上述两项），主脚本能加载，但 PlaceSearch 不可用，同样静默回退。本机用 `127.0.0.1` / `localhost` 会被高德判为 `INVALID_USER_DOMAIN`（Key 的域名白名单是 `freeyourtrip.github.io`）；现场验收是把页面源设成该域名再测的，不是真机、也不是中国大陆网络。
+- 新手 3 条插画：已用 UI 正式稿替换占位图，来源 `/workspace/help-ill/add.svg`、`ai.svg`、`go.svg`（160×96 线稿，描边 `#0F9D8A`，无外部引用、无脚本），按原文内联进 `HELP_STARTER` 的 `cards[].svg`。在 390 和 360 宽下插图盒子都是 160×96。截图已重拍：`/workspace/share-v611/v611-7a-onboarding-card1-390.png`、`v611-7-onboarding-card2-390.png`、`v611-7c-onboarding-card3-390.png`、`v611-7b-onboarding-card2-360.png`（360 下第 2 条第 3 步完整可见）。第 2 条仍在使用说明里，不在导入向导里。
+- 测试：`check-v611.js`、`check-v52-ui.js`、`check-v61-release-clean.js`、`check-privacy.js`、`check-version.js`、`check-v61-lookup.js` 已按 JS API / 正式插画改过并在工作目录通过（空 Key、mock 的 5 地坐标转换、脚本加载失败回退、CSP 只声明已写入的 `webapi` + 保留的 `restapi` connect-src）。全套 `node check*.js` 在改完后曾被中断，待有空再跑一遍。没有重新打包，没有推送。
+
+### 2026-11-17 00:10（Europe/London）— v6.1.1 续：IT 已批准并写入 CSP；说明 'unsafe-eval' 作用于整页（未推送）
+
+- 做了什么：IT 批准了现场探测得出的两项 CSP 增补，并附 3 个条件，已按条件写入 `index.html`。`script-src` 现为恰好：`'self' 'unsafe-eval' https://webapi.amap.com https://restapi.amap.com`。没有加入 `'unsafe-inline'`，也没有加入 `'wasm-unsafe-eval'`，没有使用 `*.amap.com` 通配。`connect-src` 未改（仍含 `https://webapi.amap.com` 和 `https://restapi.amap.com`）。`style-src` 里原有的 `'unsafe-inline'` 是样式用的，不是脚本。
+- 必须写明的风险：`'unsafe-eval'` 一旦写进页面的 `script-src`，对**整页、自始至终**都生效，并不是只在搜国内地点、高德脚本加载的那几秒才放开。任何时候页面上的脚本（包括我们自己的代码、以后误加的代码、以及第三方脚本）都可以使用 `eval` / `new Function` 一类接口。本版没有把 `'unsafe-inline'` 加进 `script-src`，内联事件处理或内联 `<script>` 仍会被挡住。测试里增加了一条：对我们自己的 JS（排除 `vendor/` 里的 Leaflet 等第三方库，以及 `check-*.js` 测试脚本）扫描，不得出现 `eval(`、`new Function`、以及把字符串传给 `setTimeout` / `setInterval`；同时断言 `script-src` 与上面的批准列表完全一致。
+- 打包约定不变：仓库 `config.js` 三个 Key 都为空。发布包只注入 `AMAP_KEY` → `AMAP_JS_KEY` 和 `AMAP_SECURITY_CODE`（运行时由 `ensureAmapJs` 写成 `window._AMapSecurityConfig`）；不注入 `AMAP_REST_KEY`。不在日志、DEVLOG、截图或命令输出里打印这些值。打包并现场验收后，结果写在本条之后的测试记录里（见打包当时的续记或验收报告）。没有推送。
+
+- 打包与验收（2026-11-17 00:11 Europe/London）：工作目录空 Key 浏览器探测，打开页面和搜「故宫博物院」都是 0 次高德/autonavi 请求，搜索退回 Nominatim。全套 `node check*.js` 40 个文件、0 失败。发布包 `/workspace/trip-map-release-v611.tar.gz`（顶层 `wishlist-map/`，不含 `screenshot*.png`）SHA256 `ef5bdce7d74cb33a3434a3eb410cf45f2d6ea3710c498da22cff38301ef1500c`，818261 字节；只注入了 JS Key 和安全密钥，`AMAP_REST_KEY` 仍为空，仓库三项都空。用该发布包在已批准的 CSP 下现场搜 5 地（名称如下，皆 `source=amap`，WGS-84，无 CSP 违规）：「上海环球港」→「上海月星环球港」；「全聚德前门店」→「全聚德(前门店)」；「故宫博物院」→「故宫博物院」；「北京饭店」→「北京建国饭店」；「上海市黄浦区南京东路399号」→「南京东路」。没有推送。
+
+- 2026-11-17 00:14（Europe/London）：广告文案宣传大师核定新手第 1、3 条。第 1 条改为标题「想去的地方，先存进来」，正文「点底部『＋ 添加』，输入店名或地址，点一下结果就存好了」。第 3 条改为标题「到了当天，一键导航」，正文「点卡片上的『带我去』，手机地图会直接带你过去」，下面那行「长按卡片拖动，能换顺序或换日子」不动。第 2 条和其它文案、公告都没改。已重拍 390 宽第 1、3 条截图并重新打包。没有推送。
+
+- 2026-11-17 00:16（Europe/London）：IT 批准 v6.1.1 更新公告增加第 3 条「国内地点点『带我去』，直接打开高德 App」（接在原有 2 条后面）。更新记录未改。已重拍更新弹窗截图并重新打包。没有推送。

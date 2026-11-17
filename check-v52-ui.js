@@ -27,9 +27,14 @@ check("help: 3 tiers as cards; only tier 1 on first open; privacy line; 常用 g
   const uiSrc = (tl + fs.readFileSync(__dirname + "/index.html", "utf8") + fs.readFileSync(__dirname + "/install-guide.js", "utf8") + fs.readFileSync(__dirname + "/trip-name.js", "utf8")).replace(/✓|✕/g, "");
   assert.ok(!EMOJI.test(uiSrc), "emoji left in UI: " + (uiSrc.match(EMOJI) || [""])[0]);
   [
-    '{ key: "add", title: "添加", text: "点『＋ 添加』，选加机票、酒店还是地点，搜到后点一下就加好了" }',
-    '{ key: "ai", title: "截图交给 AI", text: "机票、酒店、小红书和抖音攻略，几张截图一起丢给 AI，粘贴一次全导进来" }',
-    '{ key: "map", title: "带我去", text: "卡片右边的『带我去』，从你现在的位置出发；两站中间的『路线』，从上一站去下一站", line: "长按卡片拖动，能换顺序，也能拖到别的日子" }'
+    'title: "想去的地方，先存进来"',
+    'text: "点底部『＋ 添加』，输入店名或地址，点一下结果就存好了"',
+    'title: "各种订单、攻略截图，都能变成行程"',
+    'lead: "车票机票、酒店订单、小红书、抖音、大众点评都行"',
+    "在这里点『复制』，复制一段给 AI 的话",
+    'title: "到了当天，一键导航"',
+    'text: "点卡片上的『带我去』，手机地图会直接带你过去"',
+    'line: "长按卡片拖动，能换顺序或换日子"'
   ].forEach((l) => assert.ok(tl.indexOf(l) !== -1, l));
   assert.ok(fs.readFileSync(__dirname + "/index.html", "utf8").indexOf('id="add-fab" aria-haspopup="dialog" aria-controls="add-sheet">＋ 添加<') !== -1, "the help names the real button label");
   ["看行程", "改和删", "地图", "分享我的行程", "放到桌面", "多个行程"].forEach((t) => assert.ok(tl.indexOf('title: "' + t + '"') !== -1, t));
@@ -37,7 +42,7 @@ check("help: 3 tiers as cards; only tier 1 on first open; privacy line; 常用 g
   [
     '{ q: "换手机", a: "在设置里点『完整备份』，到新手机上点『导入』" }',
     '{ q: "更新", a: "看到「有新版本」就点『立即更新』，行程不会丢。还是旧版，就把网页彻底关掉再打开" }',
-    '{ q: "隐私", a: "行程只存在你手机里，没有账号，我们看不到。看地图、找位置和导航时，看的区域、地址和邮编会发给地图和邮编查询服务" }',
+    '{ q: "隐私", a: "行程只存在你手机里，没有账号，我们看不到。看地图、找位置和导航时，看的区域、地址和邮编会发给地图和邮编查询服务。在国内搜地点时，搜的字会发给高德" }',
     '{ q: "清空", a: "在使用说明最下面点『清空本机数据』，会删掉所有行程" }' /* v6：按钮挪到使用说明最下面 */
   ].forEach((l) => assert.ok(tl.indexOf(l) !== -1, l));
   /* 文案里提到的按钮名、行为都真实存在 */
@@ -50,7 +55,11 @@ check("help: 3 tiers as cards; only tier 1 on first open; privacy line; 常用 g
   assert.ok(/<details class="help-faq">/.test(tl), "FAQ uses collapsed <details>");
   assert.ok(/openHelp\("first"\)/.test(tl) && /\.help-sheet\.help-first \.help-tier-2,\s*\.help-sheet\.help-first \.help-tier-3 \{ display: none; \}/.test(css));
   assert.ok(/scroll-snap-type: x mandatory/.test(css), "swipeable cards");
-  assert.ok(tl.indexOf('aria-label="插图占位"') !== -1, "self-drawn placeholder illustrations");
+  assert.ok(tl.indexOf("HELP_ILLU_PLACEHOLDER") !== -1 && tl.indexOf('viewBox="0 0 160 96"') !== -1 && tl.indexOf("#0F9D8A") !== -1, "160x96 official #0F9D8A illustrations");
+  assert.ok(tl.indexOf('rect x="8" y="6" width="54" height="84"') !== -1, "card 1 official add.svg inlined");
+  assert.ok(tl.indexOf('rect x="4" y="14" width="40" height="64"') !== -1, "card 2 official ai.svg inlined");
+  assert.ok(tl.indexOf('rect x="6" y="12" width="88" height="40"') !== -1, "card 3 official go.svg inlined");
+  assert.ok(/\.help-card-illu \{[^}]*width:\s*160px;[^}]*height:\s*96px;/.test(css), "illu stays 160×96 at 360");
   assert.ok(tl.indexOf("删错了，马上点底部的『撤销』就能恢复") !== -1);
 });
 
@@ -108,7 +117,7 @@ check("v5.4 nav: one 带我去 round button on the card; 看位置 stays in the 
   assert.ok(tl.indexOf("function cardGoBtnHtml") !== -1 && tl.indexOf("function cardLookHtml") !== -1);
   assert.ok(/extra\.push\(cardLookHtml\(item\)\)/.test(tl), "expanded body keeps 看位置 / 补上地址");
   assert.ok(tl.indexOf("function cardNavHtml") === -1 && !/extra\.push\(cardNavHtml\(/.test(tl), "no second 带我去 in the expanded body");
-  assert.ok(/class="card-go-btn"/.test(tl) && /function locArrowSvg/.test(tl), "round current-location button");
+  assert.ok((/class="card-go-btn"/.test(tl) || tl.indexOf('mapLinkAttrs("card-go-btn"') !== -1) && /function locArrowSvg/.test(tl), "round current-location button");
   assert.ok(!/\.card\.is-open \.card-go-btn \{ display: none/.test(css), "button stays visible when expanded");
   assert.ok(!/legPillHtml\(Legs\.firstOfDayPill/.test(tl), "no pill before the first stop");
   assert.ok(/legPillHtml\(Legs\.navPillSpec/.test(tl), "pills between stops");

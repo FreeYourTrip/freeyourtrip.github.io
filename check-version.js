@@ -28,9 +28,9 @@ function tapOk(store) {
   store[V.LAST_SEEN_KEY] = V.APP_VERSION;
 }
 
-check("version is v6.1, defined once", function () {
-  assert.strictEqual(V.APP_VERSION, "v6.1");
-  assert.strictEqual(V.versionLabel(), "当前版本 v6.1 · 2026-11-16");
+check("version is v6.1.1, defined once", function () {
+  assert.strictEqual(V.APP_VERSION, "v6.1.1");
+  assert.strictEqual(V.versionLabel(), "当前版本 v6.1.1 · 2026-11-16");
   const files = ["timeline.js", "index.html", "update-banner.js", "item-edit.js", "app.js"];
   files.forEach((f) => {
     const s = fs.readFileSync(__dirname + "/" + f, "utf8");
@@ -52,7 +52,7 @@ check("compareVersion", function () {
 check("first-time user → help only, version recorded silently, never the card", function () {
   const store = {};
   assert.strictEqual(openApp(store, { hasTrips: false }), "help");
-  assert.strictEqual(store[V.LAST_SEEN_KEY], "v6.1");
+  assert.strictEqual(store[V.LAST_SEEN_KEY], "v6.1.1");
   assert.strictEqual(openApp(store, { hasTrips: true }), "help", "next open: still help (until 不再自动弹出), no card");
   assert.strictEqual(openApp(store, { hasTrips: true, helpHidden: true }), "none");
 });
@@ -78,33 +78,42 @@ check("v4 user with no trips but 不再自动弹出 ticked → card (not first-t
   assert.strictEqual(openApp({}, { hasTrips: false, helpHidden: true }), "announce");
 });
 
-check("someone who already saw v5 … v6.0 gets the v6.1 card once", function () {
+check("someone who already saw v5 … v6.1 gets the v6.1.1 card once", function () {
   const store = { [V.LAST_SEEN_KEY]: "v5" };
   assert.strictEqual(openApp(store, { hasTrips: true, helpHidden: true }), "announce");
   tapOk(store);
-  assert.strictEqual(store[V.LAST_SEEN_KEY], "v6.1");
+  assert.strictEqual(store[V.LAST_SEEN_KEY], "v6.1.1");
   assert.strictEqual(openApp(store, { hasTrips: true, helpHidden: true }), "none");
   assert.strictEqual(openApp({ [V.LAST_SEEN_KEY]: "v5" }, { hasTrips: false, helpHidden: false }), "announce", "even without trips, a v5 viewer is a returning user");
   assert.strictEqual(openApp({ [V.LAST_SEEN_KEY]: "v5.1" }, { hasTrips: true, helpHidden: true }), "announce", "v5.1 viewer gets the v6 card");
   assert.strictEqual(openApp({ [V.LAST_SEEN_KEY]: "v5.2" }, { hasTrips: true, helpHidden: true }), "announce", "v5.2 viewer gets the v6 card");
   assert.strictEqual(openApp({ [V.LAST_SEEN_KEY]: "v5.3" }, { hasTrips: true, helpHidden: true }), "announce", "v5.3 viewer gets the v6 card");
   assert.strictEqual(openApp({ [V.LAST_SEEN_KEY]: "v5.4" }, { hasTrips: true, helpHidden: true }), "announce", "v5.4 viewer gets the v6 card");
-  assert.strictEqual(openApp({ [V.LAST_SEEN_KEY]: "v6.0" }, { hasTrips: true, helpHidden: true }), "announce", "v6.0 viewer gets the v6.1 card");
+  assert.strictEqual(openApp({ [V.LAST_SEEN_KEY]: "v6.0" }, { hasTrips: true, helpHidden: true }), "announce", "v6.0 viewer gets the new card");
+  assert.strictEqual(openApp({ [V.LAST_SEEN_KEY]: "v6.1" }, { hasTrips: true, helpHidden: true }), "announce", "v6.1 viewer gets the v6.1.1 card");
 });
 
-check("v6.1 announcement is signed off; v6.0 / v5.4 / v5.3 / v5.2 / v5.1 entries untouched", function () {
-  assert.strictEqual(V.ANNOUNCEMENT.title, "v6.1 更新");
-  assert.ok(!V.ANNOUNCEMENT.draft, "v6.1 announcement is signed off");
-  assert.strictEqual(V.CHANGELOG[0].version, "v6.1");
-  assert.ok(!V.CHANGELOG[0].draft, "v6.1 changelog is signed off");
+check("v6.1.1 announcement is signed off; earlier changelog entries untouched", function () {
+  assert.strictEqual(V.ANNOUNCEMENT.title, "v6.1.1 更新");
+  assert.ok(!V.ANNOUNCEMENT.draft, "v6.1.1 announcement is signed off");
+  assert.strictEqual(V.CHANGELOG[0].version, "v6.1.1");
+  assert.ok(!V.CHANGELOG[0].draft, "v6.1.1 changelog is signed off");
   assert.deepStrictEqual(V.ANNOUNCEMENT.bullets, [
-    "好几张截图一起丢给 AI，导入时按地址自动放上地图，基本不用再确认",
-    "没定时间的安排排在当天最后，地图上也看得到",
-    "底部按钮点一下，地图和列表来回切换",
-    "机票、火车卡片上也有『带我去』，直接导航到机场或车站",
-    "点『＋ 新行程』再建一趟，添加和导入都进正在看的这趟"
+    "国内的店名和地址，现在用高德搜，搜得更准",
+    "『地图』按钮挪到『添加』旁边，看底部就能找到",
+    "国内地点点『带我去』，直接打开高德 App"
   ]);
   assert.deepStrictEqual(V.CHANGELOG[0].lines, [
+    "新增：搜国内地点改用高德，搜得更准",
+    "调整：『地图』按钮挪到『添加』左边",
+    "修复：导入成功后，输入框会自动清空",
+    "修复：长按卡片和按钮不会再选中文字",
+    "优化：屏幕下方的提示，点一下就能关掉",
+    "优化：国内地点打开地图，直接跳到高德 App，不再卡在网页"
+  ]);
+  const v61 = V.CHANGELOG.find((e) => e.version === "v6.1");
+  assert.ok(v61 && !v61.draft, "v6.1 changelog remains signed off");
+  assert.deepStrictEqual(v61.lines, [
     "新增：导入时按地址和邮编自动找位置，找不到也不打断，卡片上留「位置待确认 ›」",
     "新增：没定时间的排在当天「没定时间」下面，没日期的在「全部」最下面；「共 N 项」和列表、地图上的数一致",
     "新增：底部一个按钮切换地图和列表；『＋ 新行程』一直显示，行程名旁边写「共 N 趟」",
@@ -121,7 +130,7 @@ check("v6.1 announcement is signed off; v6.0 / v5.4 / v5.3 / v5.2 / v5.1 entries
   V.ANNOUNCEMENT.bullets.concat(V.CHANGELOG[0].lines).forEach((b) => assert.ok(!/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/u.test(b), "no emoji: " + b));
   ["一屏", "保证", "永不丢失"].forEach((w) => V.ANNOUNCEMENT.bullets.concat(V.CHANGELOG[0].lines).forEach((b) => assert.ok(b.indexOf(w) === -1, "no over-promise: " + w)));
   assert.ok(V.ANNOUNCEMENT.bullets.length >= 1 && V.ANNOUNCEMENT.bullets.length <= 5);
-  assert.deepStrictEqual(V.CHANGELOG[2], {
+  assert.deepStrictEqual(V.CHANGELOG.find((e) => e.version === "v5.4"), {
     version: "v5.4",
     date: "2026-11-16",
     lines: [
@@ -144,7 +153,7 @@ check("v6.1 announcement is signed off; v6.0 / v5.4 / v5.3 / v5.2 / v5.1 entries
   });
   const css = fs.readFileSync(__dirname + "/styles.css", "utf8");
   assert.ok(/\.announce-list li::before \{[^}]*background: #0F9D8A;/.test(css) && /\.announce-ok \{[^}]*background: #0F9D8A;/.test(css), "teal bullets and button");
-  assert.deepStrictEqual(V.CHANGELOG[4], {
+  assert.deepStrictEqual(V.CHANGELOG.find((e) => e.version === "v5.2"), {
     version: "v5.2",
     date: "2026-11-16",
     lines: [
@@ -156,7 +165,7 @@ check("v6.1 announcement is signed off; v6.0 / v5.4 / v5.3 / v5.2 / v5.1 entries
   assert.strictEqual(V.ANNOUNCEMENT.tip, "看到的还是旧版，就把网页彻底关掉再打开");
   const tl = fs.readFileSync(__dirname + "/timeline.js", "utf8");
   assert.ok(tl.indexOf("a.bullets.slice(0, 5)") !== -1, "all bullets rendered");
-  assert.deepStrictEqual(V.CHANGELOG[5].lines, [
+  assert.deepStrictEqual(V.CHANGELOG.find((e) => e.version === "v5.1").lines, [
     "日期写法不标准也能自动认，认不出的标黄让你确认",
     "地图新增定位按钮；设置里分成「分享我的行程」和「推荐这个工具」",
     "窄屏排版和日期条标签优化，补齐各款 iPhone 的启动画面"
@@ -164,7 +173,7 @@ check("v6.1 announcement is signed off; v6.0 / v5.4 / v5.3 / v5.2 / v5.1 entries
 });
 
 check("next release re-announces", function () {
-  const d = V.decideOnOpen({ lastSeen: "v6.0", hasTrips: true, helpHidden: true, current: "v6.1" });
+  const d = V.decideOnOpen({ lastSeen: "v6.1", hasTrips: true, helpHidden: true, current: "v6.1.1" });
   assert.strictEqual(d.show, "announce");
 });
 
@@ -193,16 +202,16 @@ check("v6.0 changelog lines remain the signed-off copy (incl. bus lock + date st
     "修复：长按卡片不再选中文字；退房卡的文字不再被『带我去』挡住",
     "修复：往返中间没订酒店时，误显示成转机"
   ]);
-  assert.ok(V.ANNOUNCEMENT.bullets[0].indexOf("导入") !== -1);
+  assert.ok(V.ANNOUNCEMENT.bullets[0].indexOf("高德") !== -1);
   assert.ok(V.ANNOUNCEMENT.bullets.length >= 1 && V.ANNOUNCEMENT.bullets.length <= 5);
 });
 
-check("changelog v1–v6.1, newest first = APP_VERSION, no hashes or private data", function () {
-  assert.deepStrictEqual(V.CHANGELOG.map((v) => v.version), ["v6.1", "v6.0", "v5.4", "v5.3", "v5.2", "v5.1", "v5", "v4", "v3", "v2", "v1"]);
+check("changelog v1–v6.1.1, newest first = APP_VERSION, no hashes or private data", function () {
+  assert.deepStrictEqual(V.CHANGELOG.map((v) => v.version), ["v6.1.1", "v6.1", "v6.0", "v5.4", "v5.3", "v5.2", "v5.1", "v5", "v4", "v3", "v2", "v1"]);
   assert.strictEqual(V.CHANGELOG[0].version, V.APP_VERSION);
-  assert.strictEqual(V.CHANGELOG[2].lines.length, 5, "v5.4 copywriter copy is 5 lines");
+  assert.strictEqual(V.CHANGELOG.find((e) => e.version === "v5.4").lines.length, 5, "v5.4 copywriter copy is 5 lines");
   V.CHANGELOG.forEach((v) => {
-    const max = (v.version === "v6.0" || v.version === "v6.1") ? 12 : 5;
+    const max = (v.version === "v6.0" || v.version === "v6.1" || v.version === "v6.1.1") ? 12 : 5;
     assert.ok(v.lines.length >= 1 && v.lines.length <= max, v.version + " has " + v.lines.length + " lines");
     v.lines.forEach((l) => {
       assert.ok(!/\b[0-9a-f]{7,40}\b/.test(l), "no commit hash: " + l);
@@ -220,7 +229,7 @@ check("settings shows version label and 更新记录 row; sw caches version.js",
   assert.ok(settings.indexOf("更新记录") !== -1);
   assert.ok(tl.indexOf("AppVersion.versionLabel()") !== -1);
   assert.ok(html.indexOf('src="./version.js"') !== -1 && html.indexOf('src="./version.js"') < html.indexOf('src="./timeline.js"'));
-  assert.ok(sw.indexOf('"./version.js"') !== -1 && sw.indexOf('"xingcheng-map-shell-v19"') !== -1);
+  assert.ok(sw.indexOf('"./version.js"') !== -1 && sw.indexOf('"xingcheng-map-shell-v20"') !== -1);
   assert.ok(V.LAST_SEEN_KEY.indexOf("wishlist-map") === 0, "清空本机数据 resets it");
 });
 

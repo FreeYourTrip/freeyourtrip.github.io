@@ -112,8 +112,8 @@ check("locks: hotel 入住 + 退房 → 「跟着入住日期走，不能拖」;
   assert.ok(/\(lockText \? flightLockSvg\(lockText\) : ""\)/.test(tl));
 });
 
-check("说明书 line: 「长按卡片拖动，能换顺序，也能拖到别的日子」", function () {
-  assert.ok(tl.indexOf('line: "长按卡片拖动，能换顺序，也能拖到别的日子" }') !== -1);
+check("说明书 line: 「长按卡片拖动，能换顺序或换日子」", function () {
+  assert.ok(tl.indexOf('line: "长按卡片拖动，能换顺序或换日子"') !== -1);
 });
 
 check("confirm box: checkbox and third button really hidden when not used (display:flex used to override [hidden])", function () {

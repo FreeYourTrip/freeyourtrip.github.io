@@ -2,9 +2,9 @@
 <html lang="zh-Hans">
 <head>
   <meta charset="UTF-8">
-  <meta name="shell-cache" content="xingcheng-map-shell-v19">
+  <meta name="shell-cache" content="xingcheng-map-shell-v20">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.tile.openstreetmap.org https://*.is.autonavi.com; connect-src 'self' https://nominatim.openstreetmap.org https://api.postcodes.io https://webapi.amap.com; media-src 'self'; font-src 'self'; worker-src 'self'; manifest-src 'self'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-eval' https://webapi.amap.com https://restapi.amap.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.tile.openstreetmap.org https://*.is.autonavi.com; connect-src 'self' https://nominatim.openstreetmap.org https://api.postcodes.io https://webapi.amap.com https://restapi.amap.com; media-src 'self'; font-src 'self'; worker-src 'self'; manifest-src 'self'">
   <meta name="theme-color" content="#FFFFFF">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -88,6 +88,14 @@
       </div>
     </div>
 
+    <div class="update-mask" id="amap-install" role="dialog" aria-modal="true" aria-labelledby="amap-install-title" hidden>
+      <div class="update-card amap-install-card">
+        <h2 class="update-title" id="amap-install-title">这台手机还没装高德地图</h2>
+        <button type="button" class="amap-install-go" id="amap-install-go">去装高德</button>
+        <button type="button" class="amap-install-web" id="amap-install-web">先用网页版</button>
+      </div>
+    </div>
+
     <div class="day-chips" id="day-chips" hidden role="tablist" aria-label="日期条：按天查看"></div>
     <div class="install-banner" id="install-banner" hidden>
       <button type="button" class="install-banner-go" id="install-banner-go"></button>
@@ -109,8 +117,10 @@
       </section>
     </main>
 
-    <button type="button" class="view-fab" id="view-fab">地图</button>
     <div class="add-dock">
+      <button type="button" class="view-toggle" id="view-fab" aria-label="查看地图">
+        <span class="view-toggle-label">地图</span>
+      </button>
       <button type="button" class="add-bar" id="add-fab" aria-haspopup="dialog" aria-controls="add-sheet">＋ 添加</button>
     </div>
   </div>
@@ -197,7 +207,7 @@
             <div class="ai-fallback" id="ai-fallback" hidden>
               <label class="sr-only" for="add-text">粘贴 AI 整理的行程</label>
               <textarea id="add-text" rows="5" spellcheck="false" placeholder="长按这里，选『粘贴』，再点『添加』"></textarea>
-              <button type="button" class="primary-btn" id="add-go">添加</button>
+              <button type="button" class="secondary-btn" id="add-go">添加</button>
             </div>
             <div class="add-status" id="add-status" role="status"></div>
             <div class="add-pick" id="add-pick" hidden></div>
@@ -300,7 +310,7 @@
         <input type="file" id="backup-file" accept="application/json,.json" hidden>
         <button type="button" class="more-btn" id="backup-export-full" title="含确认号和座位，仅自己保存">完整备份</button>
       </div>
-      <p class="settings-note">行程只存在你手机里，没有账号，我们看不到。看地图、找位置和导航时，看的区域、地址和邮编会发给地图和邮编查询服务</p>
+      <p class="settings-note">行程只存在你手机里，没有账号，我们看不到。看地图、找位置和导航时，看的区域、地址和邮编会发给地图和邮编查询服务。在国内搜地点时，搜的字会发给高德</p>
       <div class="version-block">
         <p class="version-label" id="version-label">当前版本</p>
         <button type="button" class="changelog-row" id="changelog-open">
